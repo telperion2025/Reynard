@@ -49,7 +49,7 @@ reynard-harness: tests/harness.c license_text.c $(CORE)
 
 test: all
 	./reynard-harness selftest
-	./reynard-harness conformance tests/conformance ./reynard testdata/gen .test-work
+	./reynard-harness conformance tests/conformance $(CURDIR)/reynard testdata/gen .test-work
 
 install: reynard
 	install -d $(DESTDIR)/usr/local/bin $(DESTDIR)/usr/local/share/man/man1

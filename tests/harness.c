@@ -271,6 +271,19 @@ static int filter_prg(const struct dirent *d)
 
 static int conformance(const char *dir, const char *bin, const char *fixtures, const char *workroot)
 {
+    /* the child chdir()s into its sandbox, so the binary path must be absolute */
+    char absbin[1200];
+    if (bin[0] == '/') {
+        snprintf(absbin, sizeof(absbin), "%s", bin);
+    } else {
+        char cwd[600];
+        if (!getcwd(cwd, sizeof(cwd))) {
+            perror("getcwd");
+            return 1;
+        }
+        snprintf(absbin, sizeof(absbin), "%s/%s", cwd, bin);
+    }
+    bin = absbin;
     char absroot[1000];
     if (workroot[0] == '/') {
         snprintf(absroot, sizeof(absroot), "%s", workroot);
