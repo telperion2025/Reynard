@@ -59,7 +59,7 @@ int rx_memvar_set(rx_ctx *ctx, const char *name, const rval *v)
     rx_rval_free(&mv->val);
     /* deep copy so callers keep ownership of their value */
     mv->val = *v;
-    if (v->t == RX_T_C || v->t == RX_T_M) {
+    if (v->t == RX_T_C) {
         if (v->u.c.utf8) {
             mv->val.u.c.utf8 = rx_strdup(v->u.c.utf8);
             mv->val.u.c.n = v->u.c.n;
@@ -67,8 +67,17 @@ int rx_memvar_set(rx_ctx *ctx, const char *name, const rval *v)
             mv->val.u.c.utf8 = NULL;
             mv->val.u.c.n = 0;
         }
-        if (v->t == RX_T_M) {
-            mv->val.u.memo.loaded = NULL;
+    } else if (v->t == RX_T_M) {
+        mv->val.u.memo.blk = v->u.memo.blk;
+        mv->val.u.memo.loaded = NULL;
+        if (v->u.memo.loaded) {
+            r_str *c = malloc(sizeof(r_str));
+            if (!c) {
+                RX_FATAL("out of memory");
+            }
+            c->n = v->u.memo.loaded->n;
+            c->utf8 = rx_strdup(v->u.memo.loaded->utf8 ? v->u.memo.loaded->utf8 : "");
+            mv->val.u.memo.loaded = c;
         }
     } else if (v->t == RX_T_G) {
         mv->val.u.g.bytes = NULL;

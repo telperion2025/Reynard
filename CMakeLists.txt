@@ -37,9 +37,16 @@ set(RX_CORE_SOURCES
     src/term/term_script.c
     src/term/mouse.c
     src/data/dbf.c
+    src/data/dbf_create.c
     src/data/field.c
+    src/data/memo_fpt.c
+    src/data/memo_dbt.c
     src/data/codepage.c
     src/data/workarea.c
+    src/data/rlock.c
+    src/data/journal.c
+    src/data/scope.c
+    src/data/copyto.c
     src/lang/lexer.c
     src/lang/parser.c
     src/lang/expr_compile.c
@@ -120,6 +127,13 @@ add_test(NAME conformance
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/conformance
         $<TARGET_FILE:reynard>
         ${CMAKE_CURRENT_SOURCE_DIR}/testdata/gen
+        ${CMAKE_CURRENT_BINARY_DIR}/test-work)
+add_test(NAME dbf_roundtrip
+    COMMAND reynard-harness roundtrip
+        ${CMAKE_CURRENT_SOURCE_DIR}/testdata/gen
+        ${CMAKE_CURRENT_BINARY_DIR}/test-work)
+add_test(NAME lock_race
+    COMMAND reynard-harness lockrace
         ${CMAKE_CURRENT_BINARY_DIR}/test-work)
 
 if(ENABLE_FUZZ)

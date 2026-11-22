@@ -6,6 +6,7 @@
  */
 #include "data/data.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -171,6 +172,187 @@ int rx_field_decode(const rx_dbf *dbf, size_t fldidx, const uint8_t *raw, rval *
         }
         return R_OK;
     }
+    default:
+        return R_ERR_DBF_FIELDS;
+    }
+}
+
+/* ============================ encode (M2 write path) ============================ */
+
+static double rval_num_or(const rval *v, int *ok)
+{
+    switch (v->t) {
+    case RX_T_N:
+        *ok = 1;
+        return v->u.n.d;
+    case RX_T_I:
+        *ok = 1;
+        return v->u.i;
+    case RX_T_Y:
+        *ok = 1;
+        return v->u.y / 10000.0;
+    case RX_T_B:
+        *ok = 1;
+        return v->u.b;
+    case RX_T_C: {
+        int blank;
+        double d = rx_parse_num(v->u.c.utf8 ? v->u.c.utf8 : "", v->u.c.n, &blank);
+        *ok = !blank;
+        return d;
+    }
+    default:
+        *ok = 0;
+        return 0;
+    }
+}
+
+int rx_field_encode(rx_dbf *dbf, size_t fldidx, const rval *in, uint8_t *raw)
+{
+    const rx_fielddef *f = &dbf->fields[fldidx];
+    memset(raw, ' ', f->len);
+    switch (f->type) {
+    case RFT_C: {
+        const char *s = "";
+        size_t n = 0;
+        if (in->t == RX_T_C) {
+            s = in->u.c.utf8 ? in->u.c.utf8 : "";
+            n = in->u.c.n;
+        } else if (in->t == RX_T_M && in->u.memo.loaded) {
+            s = in->u.memo.loaded->utf8 ? in->u.memo.loaded->utf8 : "";
+            n = in->u.memo.loaded->n;
+        } else if (in->t != RX_T_U) {
+            return R_ERR_TYPE;
+        }
+        if (dbf->codepage > 0) {
+            uint8_t *cp = malloc(n ? n : 1); /* UTF-8 -> single byte never expands */
+            if (!cp) {
+                RX_FATAL("out of memory");
+            }
+            size_t cn = 0;
+            int rc = utf8_to_cp(dbf->codepage, s, n, cp, &cn);
+            if (rc != R_OK) {
+                free(cp);
+                return rc;
+            }
+            if (cn > f->len) {
+                cn = f->len; /* character fields truncate (FoxPro behavior) */
+            }
+            memcpy(raw, cp, cn);
+            free(cp);
+        } else {
+            if (n > f->len) {
+                n = f->len;
+            }
+            memcpy(raw, s, n);
+        }
+        return R_OK;
+    }
+    case RFT_N:
+    case RFT_F: {
+        int ok = 0;
+        double d = rval_num_or(in, &ok);
+        if (in->t == RX_T_U) {
+            return R_OK; /* stays blank */
+        }
+        if (!ok) {
+            return R_ERR_TYPE;
+        }
+        char tmp[64];
+        snprintf(tmp, sizeof(tmp), "%.*f", f->dec, d);
+        size_t nl = strlen(tmp);
+        if (nl > f->len) {
+            memset(raw, '*', f->len); /* numeric overflow: asterisks */
+        } else {
+            memcpy(raw + (f->len - nl), tmp, nl);
+        }
+        return R_OK;
+    }
+    case RFT_I: {
+        int ok = 0;
+        double d = rval_num_or(in, &ok);
+        if (in->t == RX_T_U) {
+            memset(raw, 0, 4);
+            return R_OK;
+        }
+        if (!ok || f->len < 4) {
+            return R_ERR_TYPE;
+        }
+        int32_t v = (int32_t)d;
+        memcpy(raw, &v, 4);
+        return R_OK;
+    }
+    case RFT_Y: {
+        int ok = 0;
+        double d = rval_num_or(in, &ok);
+        if (in->t == RX_T_U) {
+            memset(raw, 0, 8);
+            return R_OK;
+        }
+        if (!ok || f->len < 8) {
+            return R_ERR_TYPE;
+        }
+        int64_t v = (int64_t)(d * 10000.0 + (d < 0 ? -0.5 : 0.5));
+        memcpy(raw, &v, 8);
+        return R_OK;
+    }
+    case RFT_B: {
+        int ok = 0;
+        double d = rval_num_or(in, &ok);
+        if (in->t == RX_T_U) {
+            memset(raw, 0, 8);
+            return R_OK;
+        }
+        if (!ok || f->len < 8) {
+            return R_ERR_TYPE;
+        }
+        memcpy(raw, &d, 8);
+        return R_OK;
+    }
+    case RFT_D: {
+        if (in->t == RX_T_U) {
+            return R_OK; /* 8 spaces = empty date */
+        }
+        if (in->t != RX_T_D) {
+            return R_ERR_TYPE;
+        }
+        if (in->u.d.y == 0) {
+            return R_OK;
+        }
+        char tmp[32];
+        snprintf(tmp, sizeof(tmp), "%04d%02d%02d", (int)in->u.d.y, (int)in->u.d.m, (int)in->u.d.d);
+        memcpy(raw, tmp, 8);
+        return R_OK;
+    }
+    case RFT_T: {
+        if (in->t == RX_T_U) {
+            memset(raw, 0, 8);
+            return R_OK;
+        }
+        if (in->t != RX_T_T || f->len < 8) {
+            return R_ERR_TYPE;
+        }
+        long j = rx_julian(in->u.tm.d.y, in->u.tm.d.m, in->u.tm.d.d) + 2440588L - 1;
+        int32_t jul = (int32_t)j;
+        memcpy(raw, &jul, 4);
+        memcpy(raw + 4, &in->u.tm.ms, 4);
+        return R_OK;
+    }
+    case RFT_L: {
+        if (in->t == RX_T_U) {
+            raw[0] = '?';
+            return R_OK;
+        }
+        if (in->t != RX_T_L) {
+            return R_ERR_TYPE;
+        }
+        raw[0] = in->u.l == L_T ? 'T' : in->u.l == L_F ? 'F' : '?';
+        return R_OK;
+    }
+    case RFT_M:
+    case RFT_G:
+    case RFT_P:
+        /* M is handled by the caller via the memo sidecar; G/P read-only */
+        return R_ERR_DBF_UNSUPPORTED;
     default:
         return R_ERR_DBF_FIELDS;
     }

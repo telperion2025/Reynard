@@ -55,6 +55,10 @@ char *rx_strdup(const char *s);
 int rx_mkdtemp(char *tmpl);
 /** Portable mkstemp(3) replacement; see rx_mkdtemp. */
 int rx_mkstemp(char *tmpl);
+/** Truncate an open file (util owns the platform call, spec \u00a72.2). */
+int rx_ftruncate(int fd, long len);
+/** Remove a file (util owns the platform call, spec \u00a72.2). */
+int rx_unlink(const char *path);
 
 /* ---- utf8.c ---- */
 /** Decode one codepoint at s; returns bytes consumed (1..4), *cp set. */

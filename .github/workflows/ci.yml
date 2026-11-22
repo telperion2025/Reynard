@@ -38,6 +38,8 @@ jobs:
           make -f Makefile.simple
           ./reynard-harness selftest
           ./reynard-harness conformance tests/conformance "$PWD/reynard" testdata/gen .test-work
+          ./reynard-harness roundtrip testdata/gen .test-work
+          ./reynard-harness lockrace .test-work
 
   conformance-index:
     name: Conformance index freshness

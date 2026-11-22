@@ -614,6 +614,11 @@ static const kw keywords[] = {
     { "GO", ST_GO },         { "SKIP", ST_SKIP },     { "STORE", ST_STORE },
     { "SET", ST_SET },       { "QUIT", ST_QUIT },     { "CLEAR", ST_CLEAR },
     { "BROWSE", ST_BROWSE }, { "BROW", ST_BROWSE },
+    { "APPEND", ST_APPEND }, { "REPLACE", ST_REPLACE }, { "DELETE", ST_DELETE },
+    { "RECALL", ST_RECALL }, { "PACK", ST_PACK },     { "ZAP", ST_ZAP },
+    { "LOCATE", ST_LOCATE }, { "CONTINUE", ST_CONTINUE }, { "COPY", ST_COPY },
+    { "CREATE", ST_CREATE }, { "FLUSH", ST_FLUSH },   { "TYPE", ST_TYPE },
+    { "UNLOCK", ST_UNLOCK },
 };
 
 static int kw_match(const char *w, st_kind *kind)
@@ -682,6 +687,91 @@ static void skip_to_eol(parser *p)
     while (!pk_is(p, TK_NEWLINE) && !pk_is(p, TK_EOF)) {
         pk_adv(p);
     }
+}
+
+/* gather a path-like token sequence (WORD . WORD / WORD NUM...) into an
+   owned string, stopping at any stop keyword or end of line */
+static char *parse_path_until(parser *p, const char **stopkw)
+{
+    strbuf path;
+    sb_init(&path);
+    for (;;) {
+        rx_tok *t = pk_cur(p);
+        if (t->kind == TK_WORD) {
+            int is_kw = 0;
+            for (int k = 0; stopkw && stopkw[k]; k++) {
+                if (rx_strcasecmp(t->text, stopkw[k]) == 0) {
+                    is_kw = 1;
+                    break;
+                }
+            }
+            if (is_kw && path.len > 0) {
+                break;
+            }
+            if (is_kw && path.len == 0) {
+                break; /* clause keyword where a path was expected */
+            }
+            sb_puts(&path, t->text);
+            pk_adv(p);
+        } else if (pk_op(p, OP_DIV) || pk_op(p, OP_DOT)) {
+            sb_putc(&path, pk_cur(p)->ival == OP_DIV ? '/' : '.');
+            pk_adv(p);
+        } else if (t->kind == TK_NUM) {
+            sb_puts(&path, t->text);
+            pk_adv(p);
+        } else {
+            break;
+        }
+    }
+    if (!path.buf) {
+        sb_putc(&path, '\0');
+        path.len = 0;
+    }
+    return path.buf; /* owned */
+}
+
+/* scope + FOR/WHILE clauses shared by LIST/DISPLAY/DELETE/RECALL/REPLACE/
+   LOCATE/COPY */
+static int parse_scope_fw(parser *p, rx_stmt *s)
+{
+    parse_scope(p, s);
+    while (!end_of_line(p)) {
+        if (pk_word_is(p, "FOR") || pk_word_is(p, "WHILE")) {
+            const char *key = pk_cur(p)->text;
+            pk_adv(p);
+            rx_expr *e = NULL;
+            int rc = parse_expr(p, &e);
+            if (rc != R_OK) {
+                return rc;
+            }
+            st_add_clause(s, key, "", e);
+        } else {
+            break;
+        }
+    }
+    return R_OK;
+}
+
+/* FIELDS f1, f2, ... -> one "FIELD" clause per name */
+static int parse_fields(parser *p, rx_stmt *s)
+{
+    if (!pk_word_is(p, "FIELDS")) {
+        return 0;
+    }
+    pk_adv(p);
+    for (;;) {
+        if (pk_cur(p)->kind != TK_WORD) {
+            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected field name");
+        }
+        st_add_clause(s, "FIELD", pk_cur(p)->text, NULL);
+        pk_adv(p);
+        if (pk_op(p, OP_COMMA)) {
+            pk_adv(p);
+            continue;
+        }
+        break;
+    }
+    return 1;
 }
 
 static int parse_stmt(parser *p)
@@ -824,13 +914,20 @@ static int parse_stmt(parser *p)
                 if (end_of_line(p)) {
                     return pk_fail(p, s.line, s.col, "SELECT requires an argument");
                 }
-                rx_expr *e = NULL;
-                rc = parse_expr(p, &e);
-                if (rc == R_OK) {
-                    st_add_expr(&s, e);
-                }
-                if (rc != R_OK) {
-                    return rc;
+                if (pk_cur(p)->kind == TK_WORD && !pk_op_ahead_is(p, 1, OP_LP) &&
+                    !pk_op_ahead_is(p, 1, OP_EQ)) {
+                    /* bare word: alias name or area number as text */
+                    st_add_str(&s, pk_cur(p)->text);
+                    pk_adv(p);
+                } else {
+                    rx_expr *e = NULL;
+                    rc = parse_expr(p, &e);
+                    if (rc == R_OK) {
+                        st_add_expr(&s, e);
+                    }
+                    if (rc != R_OK) {
+                        return rc;
+                    }
                 }
                 if (!end_of_line(p)) {
                     return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in SELECT");
@@ -838,11 +935,20 @@ static int parse_stmt(parser *p)
                 break;
             case ST_LIST:
             case ST_DISPLAY: {
-                int has = parse_scope(p, &s);
-                (void)has;
-                if (!end_of_line(p)) {
-                    /* FOR/WHILE/FIELDS/OFF etc. land at M2+; skip */
-                    skip_to_eol(p);
+                rc = parse_scope_fw(p, &s);
+                if (rc != R_OK) {
+                    return rc;
+                }
+                while (!end_of_line(p)) {
+                    if (pk_word_is(p, "OFF")) {
+                        st_add_str(&s, "OFF");
+                        pk_adv(p);
+                    } else if (parse_fields(p, &s)) {
+                        /* FIELDS clause consumed */
+                    } else {
+                        skip_to_eol(p); /* unknown clauses tolerated for now */
+                        break;
+                    }
                 }
                 break;
             }
@@ -915,6 +1021,29 @@ static int parse_stmt(parser *p)
                 break;
             }
             case ST_SET:
+                if (pk_word_is(p, "FILTER")) {
+                    /* SET FILTER TO [expr] — the expr is compiled at runtime */
+                    pk_adv(p);
+                    if (!pk_word_is(p, "TO")) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected TO after SET FILTER");
+                    }
+                    pk_adv(p);
+                    if (end_of_line(p)) {
+                        st_add_clause(&s, "FILTER", "", NULL); /* clear the filter */
+                    } else {
+                        rx_expr *e = NULL;
+                        rc = parse_expr(p, &e);
+                        if (rc != R_OK) {
+                            return rc;
+                        }
+                        st_add_clause(&s, "FILTER", "", e);
+                    }
+                    if (!end_of_line(p)) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                       "Syntax error in SET FILTER");
+                    }
+                    break;
+                }
                 while (!end_of_line(p)) {
                     rx_tok *t = pk_cur(p);
                     if (t->kind == TK_STR) {
@@ -930,11 +1059,214 @@ static int parse_stmt(parser *p)
             case ST_QUIT:
             case ST_CLEAR:
             case ST_BROWSE:
+            case ST_FLUSH:
+            case ST_PACK:
+            case ST_ZAP:
+            case ST_UNLOCK:
                 while (!end_of_line(p)) {
                     st_add_str(&s, pk_cur(p)->text);
                     pk_adv(p);
                 }
                 break;
+            case ST_APPEND: {
+                if (pk_word_is(p, "BLANK")) {
+                    st_add_str(&s, "BLANK");
+                    pk_adv(p);
+                } else if (pk_word_is(p, "FROM")) {
+                    pk_adv(p);
+                    static const char *stop[] = { "TYPE", "SDF", "DELIMITED", "WITH", "FIELDS",
+                                                  NULL };
+                    char *path = parse_path_until(p, stop);
+                    st_add_str(&s, path);
+                    free(path);
+                    while (!end_of_line(p)) {
+                        if (pk_word_is(p, "TYPE")) {
+                            pk_adv(p);
+                            if (pk_cur(p)->kind != TK_WORD) {
+                                return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                               "Expected SDF or DELIMITED");
+                            }
+                            st_add_clause(&s, "TYPE", pk_cur(p)->text, NULL);
+                            pk_adv(p);
+                        } else if (pk_word_is(p, "SDF") || pk_word_is(p, "DELIMITED")) {
+                            st_add_clause(&s, "TYPE", pk_cur(p)->text, NULL);
+                            pk_adv(p);
+                        } else if (pk_word_is(p, "WITH")) {
+                            pk_adv(p);
+                            if (pk_cur(p)->kind != TK_STR && pk_cur(p)->kind != TK_WORD) {
+                                return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                               "Expected delimiter in WITH");
+                            }
+                            st_add_clause(&s, "WITH", pk_cur(p)->text, NULL);
+                            pk_adv(p);
+                        } else if (parse_fields(p, &s)) {
+                            /* FIELDS clause consumed */
+                        } else {
+                            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                           "Syntax error in APPEND FROM");
+                        }
+                    }
+                } else {
+                    st_add_str(&s, "APPEND"); /* bare APPEND: interactive at M3+ */
+                    skip_to_eol(p);
+                }
+                break;
+            }
+            case ST_REPLACE: {
+                rc = parse_scope_fw(p, &s);
+                if (rc != R_OK) {
+                    return rc;
+                }
+                int npairs = 0;
+                while (!end_of_line(p)) {
+                    if (pk_cur(p)->kind != TK_WORD) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                       "Expected field name in REPLACE");
+                    }
+                    char fname[140];
+                    snprintf(fname, sizeof(fname), "%s", pk_cur(p)->text);
+                    pk_adv(p);
+                    if (pk_op(p, OP_ARROW) && pk_ahead(p, 1)->kind == TK_WORD) {
+                        size_t fl = strlen(fname);
+                        snprintf(fname + fl, sizeof(fname) - fl, "->%s", pk_ahead(p, 1)->text);
+                        pk_adv(p);
+                        pk_adv(p);
+                    }
+                    for (char *c = fname; *c; c++) {
+                        *c = (char)toupper((unsigned char)*c);
+                    }
+                    if (!pk_word_is(p, "WITH")) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                       "Expected WITH in REPLACE");
+                    }
+                    pk_adv(p);
+                    rx_expr *e = NULL;
+                    rc = parse_expr(p, &e);
+                    if (rc != R_OK) {
+                        return rc;
+                    }
+                    st_add_clause(&s, "REPL", fname, e);
+                    npairs++;
+                    if (pk_op(p, OP_COMMA)) {
+                        pk_adv(p);
+                        continue;
+                    }
+                    break;
+                }
+                if (!npairs) {
+                    return pk_fail(p, s.line, s.col, "REPLACE requires field WITH expression");
+                }
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in REPLACE");
+                }
+                break;
+            }
+            case ST_DELETE:
+            case ST_RECALL:
+                rc = parse_scope_fw(p, &s);
+                if (rc != R_OK) {
+                    return rc;
+                }
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error");
+                }
+                break;
+            case ST_LOCATE:
+                rc = parse_scope_fw(p, &s);
+                if (rc != R_OK) {
+                    return rc;
+                }
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in LOCATE");
+                }
+                break;
+            case ST_CONTINUE:
+                skip_to_eol(p);
+                break;
+            case ST_COPY: {
+                if (pk_word_is(p, "STRUCTURE")) {
+                    st_add_str(&s, "STRUCTURE");
+                    pk_adv(p);
+                }
+                if (!pk_word_is(p, "TO")) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "COPY expects TO");
+                }
+                pk_adv(p);
+                static const char *stop[] = { "FIELDS", "ALL",  "REST",   "NEXT", "RECORD",
+                                              "FOR",    "WHILE", "TYPE",   "SDF",  "DELIMITED",
+                                              "WITH",   "EXTENDED", NULL };
+                char *path = parse_path_until(p, stop);
+                st_add_str(&s, path);
+                free(path);
+                while (!end_of_line(p)) {
+                    if (parse_fields(p, &s)) {
+                        continue;
+                    }
+                    if (pk_word_is(p, "EXTENDED")) {
+                        st_add_str(&s, "EXTENDED");
+                        pk_adv(p);
+                        continue;
+                    }
+                    if (pk_word_is(p, "TYPE")) {
+                        pk_adv(p);
+                        if (pk_cur(p)->kind != TK_WORD) {
+                            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                           "Expected SDF or DELIMITED");
+                        }
+                        st_add_clause(&s, "TYPE", pk_cur(p)->text, NULL);
+                        pk_adv(p);
+                        continue;
+                    }
+                    if (pk_word_is(p, "SDF") || pk_word_is(p, "DELIMITED")) {
+                        st_add_clause(&s, "TYPE", pk_cur(p)->text, NULL);
+                        pk_adv(p);
+                        continue;
+                    }
+                    if (pk_word_is(p, "WITH")) {
+                        pk_adv(p);
+                        if (pk_cur(p)->kind != TK_STR && pk_cur(p)->kind != TK_WORD) {
+                            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                           "Expected delimiter in WITH");
+                        }
+                        st_add_clause(&s, "WITH", pk_cur(p)->text, NULL);
+                        pk_adv(p);
+                        continue;
+                    }
+                    if (pk_word_is(p, "ALL") || pk_word_is(p, "REST") || pk_word_is(p, "NEXT") ||
+                        pk_word_is(p, "RECORD") || pk_word_is(p, "FOR") || pk_word_is(p, "WHILE")) {
+                        rc = parse_scope_fw(p, &s);
+                        if (rc != R_OK) {
+                            return rc;
+                        }
+                        continue;
+                    }
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in COPY");
+                }
+                break;
+            }
+            case ST_CREATE: {
+                static const char *stop[] = { "FROM", NULL };
+                char *path = parse_path_until(p, stop);
+                st_add_str(&s, path);
+                free(path);
+                if (pk_word_is(p, "FROM")) {
+                    pk_adv(p);
+                    char *p2 = parse_path_until(p, NULL);
+                    st_add_str(&s, p2);
+                    free(p2);
+                }
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in CREATE");
+                }
+                break;
+            }
+            case ST_TYPE: {
+                char *path = parse_path_until(p, NULL);
+                st_add_str(&s, path);
+                free(path);
+                skip_to_eol(p); /* TO PRINT etc. at their milestone */
+                break;
+            }
             default:
                 break;
             }

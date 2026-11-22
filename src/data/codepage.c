@@ -37,3 +37,21 @@ int rx_mark_known_no_table(uint8_t mark)
 {
     return mark == 0x64; /* CP852 table not yet shipped */
 }
+
+uint8_t rx_cp_to_mark(int cp)
+{
+    switch (cp) {
+    case RX_CP437:
+        return 0x01;
+    case RX_CP850:
+        return 0x02;
+    case RX_CP1252:
+        return 0x03;
+    case RX_CP852:
+        return 0x64;
+    case RX_CP866:
+        return 0x65;
+    default:
+        return 0; /* no conversion */
+    }
+}

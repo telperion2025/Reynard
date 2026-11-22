@@ -34,3 +34,22 @@ by CI (`.github/workflows/ci.yml` conformance-index job).
 | 27_date_arith | §7.3 date arithmetic, SET CENTURY |
 | 28_set_path_default | §10.3 SET PATH/DEFAULT, SET() query |
 | 29_use_path | §7.1 USE with path-like names (./people, people.dbf) |
+| 30_append_replace | §7.1 APPEND BLANK, REPLACE ... WITH, §8.2 write path |
+| 31_delete_recall_pack | §7.1 DELETE/RECALL/PACK, delete flag, memo-safe PACK |
+| 32_locate_continue | §7.1 LOCATE/CONTINUE, FOUND(), §8.7 REST/ALL scopes |
+| 33_set_filter | §8.7 SET FILTER TO, FIELDS clause, LIST NEXT |
+| 34_copy_sdf_type | §8.8 COPY TO ... SDF, TYPE, CRLF fixed-width layout |
+| 35_append_from_sdf | §8.8 APPEND FROM ... SDF round trip |
+| 36_copy_delimited | §8.8 COPY TO/APPEND FROM DELIMITED (quoted C, trimmed N) |
+| 37_delimited_with | §8.8 DELIMITED WITH <char> custom separator |
+| 38_for_while | §8.7 FOR/WHILE on LIST/DELETE, default scope = ALL with FOR |
+| 39_memo_fpt | §8.3 FPT memo read/rewrite, multi-block, persistence |
+| 40_memo_dbt | §8.3 DBT memo read (0x83) |
+| 41_workarea_write | §8.1 work areas, alias->field REPLACE, USED/ALIAS/SELECT |
+| 42_zap | §7.1 ZAP, APPEND FROM <dbf>, empty-table BOF/EOF |
+| 43_copy_structure | §8.8 COPY STRUCTURE [EXTENDED], CREATE ... FROM |
+| 44_err_readonly | App. D 108, USE NOUPDATE read-only writes |
+| 45_err_continue | App. D 606 CONTINUE without LOCATE |
+| 46_locks | §8.5 FLOCK()/RLOCK()/UNLOCK, SET EXCLUSIVE, USE SHARED |
+| 47_copy_to_dbf | §8.8 COPY TO <dbf> record copy, SAFETY overwrite guard |
+| 48_err_append_nofile | App. D 107 APPEND FROM missing file |

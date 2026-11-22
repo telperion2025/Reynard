@@ -48,16 +48,47 @@ Character data converts at the DBF boundary; UTF-8 internally.
 
 ## 2. FPT memo (§8.3)
 
-512-byte header block: bytes 0-3 next-free block number (BE), bytes 4-5
-block size (BE, power of two 32-65536, default 64), rest reserved.
+512-byte header block: bytes 0-3 next-free block number (BE), bytes 6-7
+block size (BE, power of two 32-65536, default 64), rest reserved. Block
+number n occupies bytes [n*bs, (n+1)*bs); the header occupies blocks
+0..ceil(512/bs)-1, so the first memo block is ceil(512/bs).
 Each block: 4-byte BE type signature (0 text, 1 picture, 2 object),
-4-byte BE payload length, payload. Writes update in place when the new
-memo fits the old block, else extend from the free list.
+4-byte BE payload length, payload, zero padding to the block boundary.
+Writes update in place when the new memo fits the old allocation, else
+extend from the free list (next-free bumped in the header). PACK rewrites
+the sidecar from scratch with only live memos. Memo text is stored in the
+DBF code page and converted to UTF-8 on read (lazy, on first access).
 
 ## 3. DBT memo (§8.3)
 
-512-byte blocks; writer is append-per-write for compatibility; reader
-infers the format.
+512-byte blocks; block 0 is the header with a 4-byte LE next-free block
+at offset 0. Reader: payload runs from blk*512 to the first 0x1A
+terminator (trailing NUL/0x1A padding stripped when absent). Writer:
+append-per-write for compatibility — data + 0x1A, zero-padded to the
+512-byte boundary, next-free updated. PACK rewrites the sidecar.
+
+## 3a. RJN transaction journal (§8.6)
+
+`<dbfstem>.RJN`, created by BEGIN TRANSACTION: magic `RJN1`, then entries
+of 1 tag byte + payload: `R` u32le recno + rec_size raw bytes (record
+before-image), `H` 32 raw header bytes, `A` u32le recno (appended record),
+`M` u32le blk + u32le has_payload + u32le oldn + oldn bytes + i64le old
+memo file size, `C` commit marker. DBF header byte 30 is the
+incomplete-transaction stamp: set at BEGIN, cleared at COMMIT; on open,
+a set stamp with an existing sidecar triggers automatic rollback
+(complete-or-rollback, §8.6). PACK/ZAP are refused inside a transaction.
+
+## 5a. SDF / DELIMITED text export (§8.8)
+
+SDF: fixed-width fields concatenated in field order, CRLF record
+terminator; memo/G/B/P fields skipped. DELIMITED: separator `,` (default),
+custom char with `WITH c`, space with `WITH BLANK` (unquoted, trailing
+blanks trimmed), tab with `WITH TAB`; character fields are double-quoted
+with embedded quotes doubled (except WITH BLANK); numeric fields export
+trimmed; dates as `YYYYMMDD`; logicals as `T`/`F`; memo fields skipped.
+Files are written in the DBF code page. Default extension: `.txt`.
+APPEND FROM parses the same layouts back; default extension lookup tries
+the name as given, then `.txt` (text) / `.dbf` (tables).
 
 ## 4. CDX compound index (§8.4)
 

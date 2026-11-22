@@ -94,9 +94,12 @@ static inline void rx_rval_undef(rval *v)
 /** Free owned members of @p v and reset it to undefined. */
 static inline void rx_rval_free(rval *v)
 {
-    if (v->t == RX_T_C || v->t == RX_T_M) {
+    if (v->t == RX_T_C) {
         free(v->u.c.utf8);
-        if (v->t == RX_T_M) {
+    } else if (v->t == RX_T_M) {
+        /* u.memo.loaded overlaps u.c.utf8 in the union: free via memo only */
+        if (v->u.memo.loaded) {
+            free(v->u.memo.loaded->utf8);
             free(v->u.memo.loaded);
         }
     } else if (v->t == RX_T_G) {

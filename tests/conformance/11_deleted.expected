@@ -8,4 +8,4 @@ Record# NAME                 AGE BORN     MARRIED SCORE
       5 Eve                   28 01/01/97 T        99.99
 Record# NAME                 AGE BORN     MARRIED SCORE 
 ------- -------------------- --- -------- ------- ------
-      4 Dave                  35 11/30/89 F        60.00
+*     4 Dave                  35 11/30/89 F        60.00

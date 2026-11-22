@@ -1,0 +1,15 @@
+5 records copied.
+"Alice               ",30,19950312,T,87.50
+"Bob                 ",25,20000229,F,92.00
+"Carol               ",41,19830704,T,78.25
+"Dave                ",35,19891130,F,60.00
+"Eve                 ",28,19970101,T,99.99
+5 records added.
+5
+Record# NAME                 AGE
+------- -------------------- ---
+      1 Alice                 30
+      2 Bob                   25
+      3 Carol                 41
+      4 Dave                  35
+      5 Eve                   28

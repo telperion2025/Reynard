@@ -99,6 +99,19 @@ typedef enum {
     ST_CLEAR,
     ST_EXPR,
     ST_BROWSE,
+    ST_APPEND,    /**< APPEND [BLANK | FROM file [TYPE] SDF|DELIMITED ...] */
+    ST_REPLACE,   /**< REPLACE [scope] [FOR/WHILE] f WITH e, ... */
+    ST_DELETE,    /**< DELETE [scope] [FOR/WHILE] */
+    ST_RECALL,    /**< RECALL [scope] [FOR/WHILE] */
+    ST_PACK,
+    ST_ZAP,
+    ST_LOCATE,    /**< LOCATE [scope] FOR e [WHILE e] */
+    ST_CONTINUE,
+    ST_COPY,      /**< COPY TO f [FIELDS..] [scope] [TYPE SDF|DELIMITED..] | COPY STRUCTURE TO f */
+    ST_CREATE,    /**< CREATE f [FROM structure-dbf] */
+    ST_FLUSH,
+    ST_TYPE,      /**< TYPE file */
+    ST_UNLOCK,    /**< UNLOCK [ALL] */
     ST_EMPTY     /**< comment-only line */
 } st_kind;
 
@@ -180,6 +193,9 @@ typedef struct rx_set {
     int mouse;      /**< SET MOUSE, default ON */
     int decimals;   /**< SET DECIMALS, default 2 */
     int date_fmt;   /**< SET DATE, 0=AMERICAN */
+    int exclusive;  /**< SET EXCLUSIVE, default ON */
+    int reprocess;  /**< SET REPROCESS, 0 = no retry, <0 = AUTOMATIC */
+    int multilocks; /**< SET MULTILOCKS, default OFF */
     char defdir[260];
     char path[1024];
 } rx_set;
@@ -196,8 +212,15 @@ struct rx_ctx {
     int abort;          /**< set when batch must stop */
     int quit;           /**< QUIT seen: stop cleanly with exit 0 */
     char prog[260];     /**< current source file name for diagnostics */
-    const char *src;    /**< whole source buffer (for §6.6 caret lines) */
+    const char *src;    /**< whole source buffer (for caret lines) */
+    rx_code filter;     /**< SET FILTER TO compiled expression */
+    int filter_on;      /**< SET FILTER active */
+    rx_expr *locate_expr; /**< LOCATE ... FOR expression, reused by CONTINUE */
+    int locate_kind;    /**< scope kind of the active LOCATE */
+    uint32_t locate_n;  /**< scope count of the active LOCATE */
+    int locate_active;  /**< LOCATE issued, chain still open */
 };
+
 
 void rx_ctx_init(rx_ctx *ctx, FILE *out, int test_mode);
 void rx_ctx_free(rx_ctx *ctx);
@@ -245,6 +268,17 @@ int rx_cmd_assign(rx_ctx *ctx, rx_stmt *s);
 int rx_cmd_store(rx_ctx *ctx, rx_stmt *s);
 int rx_cmd_set(rx_ctx *ctx, rx_stmt *s);
 int rx_cmd_browse(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_append(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_replace(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_delete(rx_ctx *ctx, rx_stmt *s, int recall);
+int rx_cmd_pack(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_zap(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_locate(rx_ctx *ctx, rx_stmt *s, int cont);
+int rx_cmd_copy(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_create(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_flush(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_type(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_unlock(rx_ctx *ctx, rx_stmt *s);
 
 #ifdef __cplusplus
 }

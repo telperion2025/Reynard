@@ -60,6 +60,20 @@ int rx_dbf_create(const char *path, const rx_fielddef *fields, size_t n, rx_dbf 
 int rx_dbf_close(rx_dbf *dbf);
 /** Reopen in a new mode, e.g. downgrade EXCLUSIVE to SHARED. */
 int rx_dbf_reopen(rx_dbf *dbf, int newmode);
+/** True when opened RD_EXCLUSIVE (writes need no fcntl locks, spec \u00a78.5). */
+int rx_dbf_is_exclusive(const rx_dbf *dbf);
+/** True when opened RD_READONLY (NOUPDATE). */
+int rx_dbf_is_readonly(const rx_dbf *dbf);
+/** Raw header version byte and code page mark (for COPY STRUCTURE fidelity). */
+int rx_dbf_version_mark(const rx_dbf *dbf, uint8_t *version, uint8_t *mark);
+/** FOUND() state of the last LOCATE/CONTINUE (SEEK at M6). */
+int rx_dbf_found(const rx_dbf *dbf);
+/** Set the FOUND() flag (LOCATE/CONTINUE land here). */
+void rx_dbf_set_found(rx_dbf *dbf, int found);
+/** Header last-update date as civil y/m/d. */
+int rx_dbf_lupdate(const rx_dbf *dbf, int *y, int *m, int *d);
+/** RX_CP* id -> FoxPro code page mark byte (header byte 29); 0 = none. */
+uint8_t rx_cp_to_mark(int cp);
 
 /* Positioning & values */
 int rx_dbf_goto(rx_dbf *dbf, uint32_t recno);
@@ -88,8 +102,51 @@ int rx_dbf_codepage(const rx_dbf *dbf, int *out);
 /* Locks */
 int rx_rlock(rx_dbf *dbf, uint32_t recno);
 int rx_flock(rx_dbf *dbf);
+int rx_funlock(rx_dbf *dbf);                 /* release the file lock only */
 void rx_unlock(rx_dbf *dbf, uint32_t recno); /* recno 0 = all locks held */
 int rx_rlock_query(const rx_dbf *dbf, uint32_t recno);
+
+/* ---- M2 write operations (spec §8.2/§8.5) ---- */
+/** Append a blank record; *recno receives the new 1-based record number. */
+int rx_dbf_append(rx_dbf *dbf, uint32_t *recno);
+/** Stage raw record bytes into the current record (buffered until flush). */
+int rx_dbf_put_raw(rx_dbf *dbf, const uint8_t *raw);
+/** Read a raw record by number (round-trip suite). */
+int rx_dbf_read_raw(const rx_dbf *dbf, uint32_t recno, uint8_t *buf);
+/** Set/clear the delete flag of the current record (written immediately). */
+int rx_dbf_set_deleted(rx_dbf *dbf, int del);
+/** Physically remove deleted records and compact the memo file (exclusive). */
+int rx_dbf_pack(rx_dbf *dbf);
+/** Remove all records (exclusive). */
+int rx_dbf_zap(rx_dbf *dbf);
+/** Current record buffer/size accessors for import/export serializers. */
+const uint8_t *rx_dbf_recbuf(const rx_dbf *dbf);
+int rx_dbf_recsize(const rx_dbf *dbf, uint16_t *out);
+/** Full-control create with explicit version/mark/date (COPY fidelity). */
+int rx_dbf_create_full(const char *path, const rx_fielddef *fields, size_t n,
+                       uint8_t version, uint8_t cp_mark, int yy, int mm, int dd,
+                       rx_dbf **out);
+/** SET REPROCESS retry count (n, <0 = AUTOMATIC default policy). */
+void rx_data_set_reprocess(int n);
+
+/* ---- scopes (spec §8.7) ---- */
+typedef struct rx_scope {
+    int kind;     /**< 0 none, 1 ALL, 2 REST, 3 NEXT, 4 RECORD */
+    uint32_t n;
+} rx_scope;
+/** Resolve a scope to an inclusive record range; *restore set for RECORD n. */
+int rx_scope_range(const rx_dbf *dbf, const rx_scope *sc, uint32_t *start, uint32_t *end,
+                   int *restore);
+
+/* ---- SDF / DELIMITED serializers (spec §8.8) ---- */
+int rx_sdf_write_line(const rx_dbf *dbf, const size_t *flds, size_t nf, const uint8_t *rec,
+                      char *out, size_t outsz, size_t *outn);
+int rx_sdf_parse_line(const rx_dbf *dbf, const size_t *flds, size_t nf, const char *line,
+                      size_t n, uint8_t *rec);
+int rx_delim_write_line(const rx_dbf *dbf, const size_t *flds, size_t nf, const uint8_t *rec,
+                        char delim, int quote, char *out, size_t outsz, size_t *outn);
+int rx_delim_parse_line(const rx_dbf *dbf, const size_t *flds, size_t nf, const char *line,
+                        size_t n, char delim, int quote, uint8_t *rec);
 
 /* Transactions */
 int rx_begin(rx_dbf *dbf);
@@ -111,6 +168,12 @@ int rx_wa_current(void);
 int rx_wa_open(int area, const char *path, int mode, const char *alias);
 int rx_wa_close(int area);
 int rx_wa_dbf(int area, rx_dbf **out);
+
+/* Session configuration (called once from main; the work-area table is the
+   only other module state). test_mode freezes the header last-update date
+   at 2000-01-01 for deterministic output; cp_mark is the default code page
+   mark (header byte 29) written by rx_dbf_create. */
+void rx_data_session(int test_mode, int cp_mark);
 
 #ifdef __cplusplus
 }

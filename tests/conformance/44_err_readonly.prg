@@ -1,0 +1,2 @@
+USE people NOUPDATE
+REPLACE name WITH "x"

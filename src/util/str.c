@@ -124,3 +124,13 @@ int rx_mkstemp(char *tmpl)
     }
     return -1;
 }
+
+int rx_ftruncate(int fd, long len)
+{
+    return ftruncate(fd, (off_t)len);
+}
+
+int rx_unlink(const char *path)
+{
+    return unlink(path);
+}

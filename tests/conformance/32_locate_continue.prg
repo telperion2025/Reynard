@@ -1,0 +1,12 @@
+USE people
+GO TOP
+LOCATE FOR age > 30
+? FOUND(), RECNO(), TRIM(name)
+CONTINUE
+? FOUND(), RECNO(), TRIM(name)
+CONTINUE
+? FOUND(), RECNO(), TRIM(name)
+CONTINUE
+? FOUND(), EOF()
+LOCATE ALL FOR age < 26
+? FOUND(), RECNO(), TRIM(name)

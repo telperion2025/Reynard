@@ -11,9 +11,12 @@ full-screen BROWSE, screen and report builders, and batch mode for shell
 scripts — all file-based, reading and writing real dBase III+/FoxPro/VFP9
 DBF files (including memos and CDX compound indexes).
 
-> Status: milestones **M0** (skeleton + terminal layer) and the **M1 core**
-> (lexer, parser, VM, read-only DBF engine, batch/test modes, 28-case
-> conformance suite) are implemented. Interactive UI lands at M3; see
+> Status: milestones **M0** (skeleton + terminal layer), **M1** (lexer,
+> parser, VM, read-only DBF engine, batch/test modes) and **M2** (data
+> engine v1: DBF create/read/write, FPT/DBT memos, scopes + FOR/WHILE +
+> SET FILTER, LOCATE, locking with a forked-process race test, COPY/APPEND
+> SDF/DELIMITED, 48-case conformance suite + byte-identical round-trip
+> gate) are implemented. Interactive UI lands at M3; see
 > [docs/DEVIATIONS.md](docs/DEVIATIONS.md) for the deviation log and
 > [CHANGELOG.md](CHANGELOG.md) for progress. The full specification this
 > project implements is summarized in [docs/language.md](docs/language.md)

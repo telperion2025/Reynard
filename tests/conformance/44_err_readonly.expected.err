@@ -1,0 +1,3 @@
+Error in line 2 col 1 of case.prg: REPLACE: file is read only or already exists
+REPLACE name WITH "x"
+^

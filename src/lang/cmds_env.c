@@ -11,6 +11,7 @@
 #include <string.h>
 #include <strings.h>
 
+#include "reynard/dbf.h"
 #include "util/util.h"
 
 int rx_cmd_print(rx_ctx *ctx, rx_stmt *s, int newline)
@@ -111,8 +112,34 @@ static int parse_on_off(const char *w, int *out)
 
 int rx_cmd_set(rx_ctx *ctx, rx_stmt *s)
 {
-    if (s->nstrs == 0) {
+    int has_filter_clause = 0;
+    for (size_t i = 0; i < s->nclause; i++) {
+        if (strcmp(s->clauses[i].key, "FILTER") == 0) {
+            has_filter_clause = 1;
+        }
+    }
+    if (s->nstrs == 0 && !has_filter_clause) {
         return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "SET requires an option");
+    }
+    if (has_filter_clause) {
+        /* SET FILTER TO [expr]: parser stored the expr as a FILTER clause */
+        for (size_t i = 0; i < s->nclause; i++) {
+            if (strcmp(s->clauses[i].key, "FILTER") == 0) {
+                if (ctx->filter_on || ctx->filter.ops) {
+                    rx_code_free(&ctx->filter);
+                    memset(&ctx->filter, 0, sizeof(ctx->filter));
+                    ctx->filter_on = 0;
+                }
+                if (s->clauses[i].e) {
+                    int rc = rx_compile_expr(s->clauses[i].e, &ctx->filter, &ctx->err);
+                    if (rc != R_OK) {
+                        return rc;
+                    }
+                    ctx->filter_on = 1;
+                }
+            }
+        }
+        return R_OK;
     }
     const char *opt = s->strs[0];
     if (!set_known_p(opt)) {
@@ -169,6 +196,17 @@ int rx_cmd_set(rx_ctx *ctx, rx_stmt *s)
         snprintf(ctx->set.path, sizeof(ctx->set.path), "%s", toval);
     } else if (rx_strcasecmp(opt, "DATE") == 0 && toval) {
         ctx->set.date_fmt = 0; /* AMERICAN; other formats at M5 */
+    } else if (rx_strcasecmp(opt, "EXCLUSIVE") == 0 && val >= 0) {
+        ctx->set.exclusive = val;
+    } else if (rx_strcasecmp(opt, "MULTILOCKS") == 0 && val >= 0) {
+        ctx->set.multilocks = val;
+    } else if (rx_strcasecmp(opt, "REPROCESS") == 0 && toval) {
+        long v = strtol(toval, NULL, 10);
+        if (rx_strcasecmp(toval, "AUTOMATIC") == 0) {
+            v = -1;
+        }
+        ctx->set.reprocess = (int)v;
+        rx_data_set_reprocess((int)v);
     }
     /* other Appendix B options are accepted and stored for their milestone */
     return R_OK;

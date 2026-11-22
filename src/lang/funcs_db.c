@@ -373,9 +373,62 @@ static int f_found(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
         return err->code;
     }
     (void)argv;
-    /* M1: no LOCATE yet; FOUND() is false unless a seek landed (M6) */
-    f_logic(out, L_F);
-    (void)c;
+    rx_dbf *dbf;
+    int rc = cur_dbf(c, &dbf, err);
+    if (rc != R_OK) {
+        f_logic(out, L_F);
+        return R_OK;
+    }
+    f_logic(out, rx_dbf_found(dbf) ? L_T : L_F);
+    return R_OK;
+}
+
+static int f_flock(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
+{
+    if (argc > 0) {
+        err->code = R_ERR_TYPE;
+        snprintf(err->msg, sizeof(err->msg), "FLOCK() expects no arguments");
+        return err->code;
+    }
+    (void)argv;
+    rx_dbf *dbf;
+    int rc = cur_dbf(c, &dbf, err);
+    if (rc != R_OK) {
+        f_logic(out, L_F);
+        return R_OK;
+    }
+    rc = rx_flock(dbf);
+    f_logic(out, rc == R_OK ? L_T : L_F);
+    return R_OK;
+}
+
+static int f_rlock(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
+{
+    if (argc > 1) {
+        err->code = R_ERR_TYPE;
+        snprintf(err->msg, sizeof(err->msg), "RLOCK() expects 0 or 1 arguments");
+        return err->code;
+    }
+    rx_dbf *dbf;
+    int rc = cur_dbf(c, &dbf, err);
+    if (rc != R_OK) {
+        f_logic(out, L_F);
+        return R_OK;
+    }
+    uint32_t recno;
+    if (argc == 1) {
+        double d;
+        if (!rv_to_num(&argv[0], &d)) {
+            err->code = R_ERR_TYPE;
+            snprintf(err->msg, sizeof(err->msg), "RLOCK() expects a record number");
+            return err->code;
+        }
+        recno = (uint32_t)(d < 1 ? 1 : d);
+    } else {
+        rx_dbf_recno(dbf, &recno);
+    }
+    rc = rx_rlock(dbf, recno);
+    f_logic(out, rc == R_OK ? L_T : L_F);
     return R_OK;
 }
 
@@ -392,10 +445,14 @@ static int f_lupdate(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
     if (rc != R_OK) {
         return rc;
     }
-    /* read-only engine at M1: no updates, report empty date */
-    (void)dbf;
-    r_date d = { 0, 0, 0 };
-    f_date(out, d);
+    int y, m, d;
+    if (rx_dbf_lupdate(dbf, &y, &m, &d) == R_OK) {
+        r_date dt = { (int16_t)y, (int16_t)m, (int16_t)d };
+        f_date(out, dt);
+    } else {
+        r_date dt = { 0, 0, 0 };
+        f_date(out, dt);
+    }
     (void)c;
     return R_OK;
 }
@@ -435,6 +492,7 @@ const rx_funcdef rx_funcs_db[] = {
     { "FCOUNT", f_fcount },   { "FIELD", f_field },       { "FSIZE", f_fsize }, { "HEADER", f_header },
     { "RECSIZE", f_recsize }, { "FOUND", f_found },       { "LUPDATE", f_lupdate },
     { "FILTER", f_filter },   { "ORDER", f_order },       { "TAG", f_tag },
+    { "FLOCK", f_flock },     { "RLOCK", f_rlock },       { "LOCK", f_rlock },
 };
 
 const size_t rx_funcs_db_n = sizeof(rx_funcs_db) / sizeof(rx_funcs_db[0]);

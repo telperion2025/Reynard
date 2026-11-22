@@ -1,0 +1,6 @@
+USE people
+COPY TO c1 SDF
+USE blank
+APPEND FROM c1 SDF
+? RECCOUNT()
+LIST

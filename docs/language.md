@@ -63,17 +63,17 @@ Status legend: ✅ implemented at M1, 🚧 partial, ⏳ planned (milestone).
 | `SELECT n\|alias` | ✅ |
 | `GO\|GOTO TOP\|BOTTOM\|RECORD n\|expr` | ✅ |
 | `SKIP [n]` | ✅ (FoxPro BOF/EOF rules, §7.6) |
-| `LIST [scope] [OFF]` / `DISPLAY [scope]` | ✅ scopes ALL/REST/NEXT n/RECORD n; SET HEADINGS/DELETED honored |
+| `LIST [scope] [FOR/WHILE] [FIELDS ...] [OFF]` / `DISPLAY [scope] ...` | ✅ M2: scopes, FOR/WHILE, FIELDS, OFF, SET FILTER/HEADINGS/DELETED, deleted `*` marker |
 | `BROWSE` | ⏳ M4 (raises R_ERR_NOUI 601 in batch) |
-| `LOCATE/CONTINUE/SEEK/SET ORDER/SET INDEX` | ⏳ M2/M6 |
-| `APPEND/APPEND BLANK/APPEND FROM/REPLACE/DELETE/RECALL/PACK/ZAP/REINDEX/INDEX ON/COPY TO/SORT TO/TOTAL TO/COUNT/SUM/AVERAGE/CALCULATE/SCATTER/GATHER/FLUSH` | ⏳ M2+ |
+| `LOCATE [scope] FOR e [WHILE e]` / `CONTINUE` | ✅ M2 (FOUND(), `Record = n`); SEEK/SET ORDER/SET INDEX ⏳ M6 |
+| `APPEND BLANK` / `APPEND FROM f [TYPE] SDF\|DELIMITED [WITH c\|BLANK\|TAB]` (bare APPEND ⏳ M3) / `REPLACE [scope] [FOR/WHILE] f WITH e, ...` / `DELETE` / `RECALL` / `PACK` / `ZAP` / `COPY TO f [FIELDS..] [scope] [TYPE SDF\|DELIMITED [WITH..]]` / `COPY STRUCTURE TO f [FIELDS..] [EXTENDED]` / `CREATE f FROM struct` / `FLUSH` / `UNLOCK [ALL]` | ✅ M2; INDEX ON/REINDEX/SORT TO/TOTAL TO/COUNT/SUM/AVERAGE/CALCULATE/SCATTER/GATHER ⏳ M4/M5 |
 | alias prefixes `alias->field`, `m.var` | ✅ |
 
 ### Environment
 
 | Command | Status |
 | --- | --- |
-| `SET <option> ON\|OFF\|TO v` | 🚧 implemented: TALK, HEADINGS, EXACT, FIXED, CENTURY, DELETED, ESCAPE, CONSOLE, SAFETY, CLOCK, MOUSE, DECIMALS, DEFAULT, PATH, DATE; all other Appendix B options parse and are accepted (semantics at their milestone) |
+| `SET <option> ON\|OFF\|TO v` | 🚧 implemented: TALK, HEADINGS, EXACT, FIXED, CENTURY, DELETED, ESCAPE, CONSOLE, SAFETY, CLOCK, MOUSE, DECIMALS, DEFAULT, PATH, DATE, EXCLUSIVE, MULTILOCKS, REPROCESS, FILTER; all other Appendix B options parse and are accepted (semantics at their milestone) |
 | `? / ??` | ✅ |
 | `var = expr`, `STORE expr TO v1, v2` | ✅ |
 | `QUIT` | ✅ |
@@ -105,7 +105,8 @@ SET ALTERNATE, & macro, EVALUATE(), GETEXPR.
   TIME()="00:00:00", SECONDS()=0), YEAR, MONTH, DAY, DOW, CDOW, CMONTH,
   DTOS, DTOC, CTOD, GOMONTH, MDY, DMY, QUARTER, WEEK, HOUR, MINUTE, SEC.
 - **Database**: RECNO, RECCOUNT, BOF, EOF, DELETED, ALIAS, SELECT, USED,
-  FCOUNT, FIELD, FSIZE, HEADER, RECSIZE, FOUND, LUPDATE, FILTER, ORDER, TAG.
+  FCOUNT, FIELD, FSIZE, HEADER, RECSIZE, FOUND (M2), LUPDATE (M2),
+  FLOCK, RLOCK/LOCK (M2), FILTER, ORDER, TAG.
 - **System**: OS, VERSION, GETENV, MEMORY, DISKSPACE, SYS, CAPSLOCK,
   NUMLOCK, INSMODE, INKEY, LASTKEY, READKEY, SET, SCOLS, SROWS, CURDIR,
   FILE.

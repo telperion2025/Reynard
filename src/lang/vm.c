@@ -40,6 +40,9 @@ void rx_ctx_init(rx_ctx *ctx, FILE *out, int test_mode)
     ctx->set.mouse = 1;
     ctx->set.decimals = 2;
     ctx->set.date_fmt = 0;
+    ctx->set.exclusive = 1; /* FoxPro default: SET EXCLUSIVE ON */
+    ctx->set.reprocess = 0;
+    ctx->set.multilocks = 0;
     char cwd[260];
     if (getcwd(cwd, sizeof(cwd))) {
         snprintf(ctx->set.defdir, sizeof(ctx->set.defdir), "%s", cwd);
@@ -48,6 +51,10 @@ void rx_ctx_init(rx_ctx *ctx, FILE *out, int test_mode)
 
 void rx_ctx_free(rx_ctx *ctx)
 {
+    if (ctx->filter_on || ctx->filter.ops) {
+        rx_code_free(&ctx->filter);
+    }
+    /* locate_expr is borrowed from the statement list (owned by the caller) */
     rx_memvar_clear(ctx);
 }
 
@@ -284,6 +291,18 @@ static int load_var(rx_ctx *ctx, const char *name, rval *out, r_err *err, int li
         if (mv->val.t == RX_T_C && mv->val.u.c.utf8) {
             out->u.c.utf8 = rx_strdup(mv->val.u.c.utf8);
             out->u.c.n = mv->val.u.c.n;
+        } else if (mv->val.t == RX_T_M) {
+            out->u.memo.blk = mv->val.u.memo.blk;
+            out->u.memo.loaded = NULL;
+            if (mv->val.u.memo.loaded) {
+                r_str *c = malloc(sizeof(r_str));
+                if (!c) {
+                    RX_FATAL("out of memory");
+                }
+                c->n = mv->val.u.memo.loaded->n;
+                c->utf8 = rx_strdup(mv->val.u.memo.loaded->utf8 ? mv->val.u.memo.loaded->utf8 : "");
+                out->u.memo.loaded = c;
+            }
         }
         return R_OK;
     }
@@ -452,10 +471,29 @@ static int bin_arith(rx_ctx *ctx, rval *a, rval *b, int op, rval *out, r_err *er
     return vm_fail(ctx, err, R_ERR_TYPE, line, col, "Operator/operand type mismatch");
 }
 
+
+/* memo values behave as their loaded character text in string contexts */
+static const rval *as_str_view(const rval *v, rval *tmp)
+{
+    if (v->t == RX_T_M) {
+        if (v->u.memo.loaded) {
+            tmp->t = RX_T_C;
+            tmp->u.c = *v->u.memo.loaded;
+            return tmp;
+        }
+        tmp->t = RX_T_C;
+        tmp->u.c.n = 0;
+        tmp->u.c.utf8 = (char *)"";
+        return tmp;
+    }
+    return v;
+}
+
 static int bin_cmp(rx_ctx *ctx, rval *a, rval *b, int op, rval *out, r_err *err, int line, int col)
 {
     int res = 0;
     int ok = 1;
+    rval ta, tb;
     if (is_numlike(a) && is_numlike(b)) {
         double x = as_num(a), y = as_num(b);
         switch (op) {
@@ -468,7 +506,9 @@ static int bin_cmp(rx_ctx *ctx, rval *a, rval *b, int op, rval *out, r_err *err,
         case OP_GE: res = x >= y; break;
         default: ok = 0; break;
         }
-    } else if (a->t == RX_T_C && b->t == RX_T_C) {
+    } else if (as_str_view(a, &ta)->t == RX_T_C && as_str_view(b, &tb)->t == RX_T_C) {
+        a = (rval *)as_str_view(a, &ta);
+        b = (rval *)as_str_view(b, &tb);
         switch (op) {
         case OP_EQ:
             res = str_eq(ctx, &a->u.c, &b->u.c, ctx->set.exact);
@@ -864,6 +904,45 @@ int rx_exec(rx_ctx *ctx, rx_stmt *stmts, size_t n)
             break;
         case ST_BROWSE:
             rc = rx_cmd_browse(ctx, s);
+            break;
+        case ST_APPEND:
+            rc = rx_cmd_append(ctx, s);
+            break;
+        case ST_REPLACE:
+            rc = rx_cmd_replace(ctx, s);
+            break;
+        case ST_DELETE:
+            rc = rx_cmd_delete(ctx, s, 0);
+            break;
+        case ST_RECALL:
+            rc = rx_cmd_delete(ctx, s, 1);
+            break;
+        case ST_PACK:
+            rc = rx_cmd_pack(ctx, s);
+            break;
+        case ST_ZAP:
+            rc = rx_cmd_zap(ctx, s);
+            break;
+        case ST_LOCATE:
+            rc = rx_cmd_locate(ctx, s, 0);
+            break;
+        case ST_CONTINUE:
+            rc = rx_cmd_locate(ctx, s, 1);
+            break;
+        case ST_COPY:
+            rc = rx_cmd_copy(ctx, s);
+            break;
+        case ST_CREATE:
+            rc = rx_cmd_create(ctx, s);
+            break;
+        case ST_FLUSH:
+            rc = rx_cmd_flush(ctx, s);
+            break;
+        case ST_TYPE:
+            rc = rx_cmd_type(ctx, s);
+            break;
+        case ST_UNLOCK:
+            rc = rx_cmd_unlock(ctx, s);
             break;
         case ST_EXPR: {
             rval v;

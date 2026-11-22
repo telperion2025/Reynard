@@ -1,0 +1,17 @@
+Record# NAME                 AGE
+------- -------------------- ---
+      3 Carol                 41
+*     4 Dave                  35
+Record# NAME                 AGE
+------- -------------------- ---
+      1 Alice                 30
+      2 Bob                   25
+3
+1 record deleted.
+Record# NAME                 AGE
+------- -------------------- ---
+      1 Alice                 30
+*     2 Bob                   25
+      3 Carol                 41
+*     4 Dave                  35
+      5 Eve                   28

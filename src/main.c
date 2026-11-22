@@ -173,6 +173,19 @@ int main(int argc, char **argv)
     rx_ctx ctx;
     rx_ctx_init(&ctx, out, test_mode);
     ctx.set.mouse = !no_mouse;
+    /* data-engine session: frozen header date in -t, default code page mark
+       from REYNARD_CODEPAGE or the config file (spec §8.2) */
+    {
+        int cp = 0;
+        const char *env = getenv("REYNARD_CODEPAGE");
+        if (env && *env) {
+            cp = (int)strtol(env, NULL, 10);
+        } else if (cfg.codepage) {
+            cp = cfg.codepage;
+        }
+        int mark = cp ? (int)rx_cp_to_mark(cp) : 0x01;
+        rx_data_session(test_mode, mark);
+    }
 
     int rc = 0;
     if (carg) {

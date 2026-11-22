@@ -25,6 +25,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "reynard/dbf.h"
 #include "term/mouse.h"
 #include "term/term_if.h"
 #include "util/util.h"
@@ -410,6 +411,480 @@ static int conformance(const char *dir, const char *bin, const char *fixtures, c
     return failures ? 1 : 0;
 }
 
+/* ---------------- roundtrip (M2 gate: byte-identical read/write) ---------------- */
+
+static int filter_dbf(const struct dirent *d)
+{
+    size_t n = strlen(d->d_name);
+    return n > 4 && strcmp(d->d_name + n - 4, ".dbf") == 0;
+}
+
+/* read the raw 32-byte header of a dbf file */
+static int read_hdr32(const char *path, uint8_t hdr[32])
+{
+    FILE *f = fopen(path, "r");
+    if (!f) {
+        return -1;
+    }
+    size_t n = fread(hdr, 1, 32, f);
+    fclose(f);
+    return n == 32 ? 0 : -1;
+}
+
+static int roundtrip(const char *fixtures, const char *workroot)
+{
+    rx_data_session(1, 0x01); /* frozen header date: byte-identical output */
+    char absroot[1000];
+    if (workroot[0] == '/') {
+        snprintf(absroot, sizeof(absroot), "%s", workroot);
+    } else {
+        char cwd[600];
+        if (!getcwd(cwd, sizeof(cwd))) {
+            perror("getcwd");
+            return 1;
+        }
+        snprintf(absroot, sizeof(absroot), "%s/%s", cwd, workroot);
+    }
+    mkdir(absroot, 0755);
+    struct dirent **names = NULL;
+    int n = scandir(fixtures, &names, filter_dbf, alphasort);
+    if (n < 0) {
+        perror("scandir");
+        return 1;
+    }
+    int ran = 0;
+    for (int i = 0; i < n; i++) {
+        char src[1400], dst[1400];
+        snprintf(src, sizeof(src), "%s/%s", fixtures, names[i]->d_name);
+        snprintf(dst, sizeof(dst), "%s/rt-%s", absroot, names[i]->d_name);
+        unlink(dst);
+        ran++;
+        uint8_t hdr[32];
+        if (read_hdr32(src, hdr) != 0) {
+            printf("FAIL %s: cannot read header\n", names[i]->d_name);
+            failures++;
+            free(names[i]);
+            continue;
+        }
+        uint8_t version = hdr[0], mark = hdr[29];
+        int yy = 1900 + hdr[1], mm = hdr[2], dd = hdr[3];
+        rx_dbf *in = NULL;
+        int rc = rx_dbf_open(src, RD_READONLY, &in);
+        if (rc != R_OK) {
+            printf("FAIL %s: open %d\n", names[i]->d_name, rc);
+            failures++;
+            free(names[i]);
+            continue;
+        }
+        size_t nf;
+        rx_dbf_field_count(in, &nf);
+        rx_fielddef *defs = calloc(nf, sizeof(rx_fielddef));
+        for (size_t k = 0; k < nf; k++) {
+            rx_dbf_field_def(in, k, &defs[k]);
+        }
+        rx_dbf *out = NULL;
+        rc = rx_dbf_create_full(dst, defs, nf, version, mark, yy, mm, dd, &out);
+        free(defs);
+        if (rc != R_OK) {
+            printf("FAIL %s: create %d\n", names[i]->d_name, rc);
+            failures++;
+            rx_dbf_close(in);
+            free(names[i]);
+            continue;
+        }
+        uint32_t nrec;
+        rx_dbf_recount(in, &nrec);
+        uint16_t rsz;
+        rx_dbf_recsize(in, &rsz);
+        uint8_t *raw = malloc(rsz);
+        for (uint32_t r = 1; r <= nrec; r++) {
+            rc = rx_dbf_read_raw(in, r, raw);
+            if (rc != R_OK) {
+                break;
+            }
+            uint32_t nr;
+            rc = rx_dbf_append(out, &nr);
+            if (rc != R_OK) {
+                break;
+            }
+            rc = rx_dbf_put_raw(out, raw);
+            if (rc != R_OK) {
+                break;
+            }
+            rc = rx_flush(out);
+            if (rc != R_OK) {
+                break;
+            }
+        }
+        free(raw);
+        rx_dbf_close(in);
+        rx_dbf_close(out);
+        if (rc != R_OK) {
+            printf("FAIL %s: copy rc=%d\n", names[i]->d_name, rc);
+            failures++;
+            free(names[i]);
+            continue;
+        }
+        /* byte-identical check */
+        size_t na, nb;
+        char *ca = read_file(src, &na);
+        char *cb = read_file(dst, &nb);
+        int eq = ca && cb && na == nb && memcmp(ca, cb, na) == 0;
+        free(ca);
+        free(cb);
+        /* determinism: write the same content again, must be identical */
+        char dst2[1400];
+        snprintf(dst2, sizeof(dst2), "%s/rt2-%s", absroot, names[i]->d_name);
+        unlink(dst2);
+        rx_dbf *in2 = NULL;
+        rx_dbf_open(src, RD_READONLY, &in2);
+        size_t nf2;
+        rx_dbf_field_count(in2, &nf2);
+        rx_fielddef *defs2 = calloc(nf2, sizeof(rx_fielddef));
+        for (size_t k = 0; k < nf2; k++) {
+            rx_dbf_field_def(in2, k, &defs2[k]);
+        }
+        rx_dbf *out2 = NULL;
+        rx_dbf_create_full(dst2, defs2, nf2, version, mark, yy, mm, dd, &out2);
+        free(defs2);
+        uint32_t nrec2;
+        rx_dbf_recount(in2, &nrec2);
+        uint8_t *raw2 = malloc(rsz);
+        for (uint32_t r = 1; r <= nrec2; r++) {
+            rx_dbf_read_raw(in2, r, raw2);
+            uint32_t nr;
+            rx_dbf_append(out2, &nr);
+            rx_dbf_put_raw(out2, raw2);
+            rx_flush(out2);
+        }
+        free(raw2);
+        rx_dbf_close(in2);
+        rx_dbf_close(out2);
+        size_t nc;
+        char *cc = read_file(dst, &na);
+        char *cd = read_file(dst2, &nc);
+        int det = cc && cd && na == nc && memcmp(cc, cd, na) == 0;
+        free(cc);
+        free(cd);
+        if (eq && det) {
+            printf("PASS %s (byte-identical, deterministic)\n", names[i]->d_name);
+        } else {
+            printf("FAIL %s: byte-identical=%d deterministic=%d\n", names[i]->d_name, eq, det);
+            failures++;
+        }
+        free(names[i]);
+    }
+    free(names);
+
+    /* memo round trip through the public API: create FPT dbf, write memos,
+       reopen, compare text; write twice and require byte-identical files */
+    char wd[1100];
+    snprintf(wd, sizeof(wd), "%s/rt-memo-XXXXXX", absroot);
+    if (rx_mkdtemp(wd) == 0) {
+        ran++;
+        char p1[1200], p2[1200];
+        snprintf(p1, sizeof(p1), "%s/m1.dbf", wd);
+        snprintf(p2, sizeof(p2), "%s/m2.dbf", wd);
+        rx_fielddef mf[2] = { { "ID", RFT_N, 4, 0, 0 }, { "NOTES", RFT_M, 10, 0, 0 } };
+        const char *texts[3] = { "alpha memo", "a much longer memo payload that spans "
+                                         "multiple 64-byte FPT blocks for sure........"
+                                         "..............................................",
+                                 "" };
+        int ok = 1;
+        for (int pass = 0; pass < 2 && ok; pass++) {
+            const char *pp = pass == 0 ? p1 : p2;
+            rx_dbf *d = NULL;
+            int rc = rx_dbf_create(pp, mf, 2, &d);
+            if (rc != R_OK) {
+                ok = 0;
+                break;
+            }
+            for (int i = 0; i < 3; i++) {
+                uint32_t nr;
+                rx_dbf_append(d, &nr);
+                rval v;
+                rx_rval_undef(&v);
+                char num[8];
+                snprintf(num, sizeof(num), "%d", i + 1);
+                rval_set_str(&v, rx_strdup(num), strlen(num));
+                rx_dbf_put(d, 0, &v);
+                rx_rval_free(&v);
+                rx_rval_undef(&v);
+                rval_set_str(&v, rx_strdup(texts[i]), strlen(texts[i]));
+                rx_dbf_put(d, 1, &v);
+                rx_rval_free(&v);
+                rx_flush(d);
+            }
+            rx_dbf_close(d);
+        }
+        if (ok) {
+            /* reopen p1 and verify memo text */
+            rx_dbf *d = NULL;
+            if (rx_dbf_open(p1, RD_READONLY, &d) == R_OK) {
+                for (int i = 0; i < 3; i++) {
+                    rx_dbf_goto(d, (uint32_t)(i + 1));
+                    rval v;
+                    rx_rval_undef(&v);
+                    if (rx_dbf_get(d, 1, &v) == R_OK) {
+                        const char *s = "";
+                        size_t sn = 0;
+                        if (v.t == RX_T_M && v.u.memo.loaded) {
+                            s = v.u.memo.loaded->utf8 ? v.u.memo.loaded->utf8 : "";
+                            sn = v.u.memo.loaded->n;
+                        }
+                        if (sn != strlen(texts[i]) || memcmp(s, texts[i], sn) != 0) {
+                            ok = 0;
+                        }
+                        rx_rval_free(&v);
+                    } else {
+                        ok = 0;
+                    }
+                }
+                rx_dbf_close(d);
+            } else {
+                ok = 0;
+            }
+        }
+        if (ok) {
+            /* byte-identical determinism of dbf + fpt */
+            char f1[1200], f2[1200];
+            snprintf(f1, sizeof(f1), "%s/m1.FPT", wd);
+            snprintf(f2, sizeof(f2), "%s/m2.FPT", wd);
+            size_t n1, n2, n3, n4;
+            char *b1 = read_file(p1, &n1);
+            char *b2 = read_file(p2, &n2);
+            char *g1 = read_file(f1, &n3);
+            char *g2 = read_file(f2, &n4);
+            /* fpt may be created with uppercase ext; find it */
+            if (!g1) {
+                snprintf(f1, sizeof(f1), "%s/m1.fpt", wd);
+                g1 = read_file(f1, &n3);
+            }
+            if (!g2) {
+                snprintf(f2, sizeof(f2), "%s/m2.fpt", wd);
+                g2 = read_file(f2, &n4);
+            }
+            if (!b1 || !b2 || n1 != n2 || memcmp(b1, b2, n1) != 0 || !g1 || !g2 || n3 != n4 ||
+                memcmp(g1, g2, n3) != 0) {
+                ok = 0;
+            }
+            free(b1);
+            free(b2);
+            free(g1);
+            free(g2);
+        }
+        if (ok) {
+            printf("PASS memo-fpt (text round-trip, byte-identical)\n");
+        } else {
+            printf("FAIL memo-fpt\n");
+            failures++;
+        }
+        rm_rf(wd);
+    }
+
+    /* delete/pack round trip: copy people.dbf, delete rec 2, pack, verify */
+    {
+        char src[1400], dst[1400];
+        snprintf(src, sizeof(src), "%s/people.dbf", fixtures);
+        snprintf(dst, sizeof(dst), "%s/rt-pack.dbf", absroot);
+        struct stat st;
+        if (stat(src, &st) == 0) {
+            ran++;
+            copy_file(src, dst);
+            rx_dbf *d = NULL;
+            int ok = 1;
+            if (rx_dbf_open(dst, RD_EXCLUSIVE, &d) == R_OK) {
+                if (rx_dbf_goto(d, 2) != R_OK || rx_dbf_set_deleted(d, 1) != R_OK ||
+                    rx_dbf_pack(d) != R_OK) {
+                    ok = 0;
+                }
+                uint32_t n;
+                rx_dbf_recount(d, &n);
+                if (n != 3) { /* people.dbf has Dave deleted already: 5 - Bob - Dave */
+                    ok = 0;
+                }
+                rx_dbf_close(d);
+            } else {
+                ok = 0;
+            }
+            if (ok && rx_dbf_open(dst, RD_READONLY, &d) == R_OK) {
+                rval v;
+                rx_rval_undef(&v);
+                rx_dbf_goto(d, 2);
+                if (rx_dbf_get(d, 0, &v) == R_OK) {
+                    const char *s = v.t == RX_T_C ? v.u.c.utf8 : "";
+                    if (strncmp(s, "Bob", 3) == 0) {
+                        ok = 0; /* Bob must be gone */
+                    }
+                    rx_rval_free(&v);
+                }
+                rx_dbf_goto(d, 2);
+                rx_rval_undef(&v);
+                if (rx_dbf_get(d, 0, &v) == R_OK) {
+                    const char *s = v.t == RX_T_C ? v.u.c.utf8 : "";
+                    if (strncmp(s, "Carol", 5) != 0) {
+                        ok = 0;
+                    }
+                    rx_rval_free(&v);
+                }
+                rx_dbf_close(d);
+            }
+            if (ok) {
+                printf("PASS pack (delete+pack+reopen)\n");
+            } else {
+                printf("FAIL pack\n");
+                failures++;
+            }
+            unlink(dst);
+        }
+    }
+
+    printf("roundtrip: %d cases, %d failures\n", ran, failures);
+    return failures ? 1 : 0;
+}
+
+/* ---------------- lockrace (M2 gate: forked-process lock race) ---------------- */
+
+#define RACE_ITERS 200
+
+static int lockrace(const char *workroot)
+{
+    rx_data_session(1, 0x01);
+    rx_data_set_reprocess(-1); /* AUTOMATIC: exercise the retry policy (spec §7.4) */
+    char absroot[1000];
+    if (workroot[0] == '/') {
+        snprintf(absroot, sizeof(absroot), "%s", workroot);
+    } else {
+        char cwd[600];
+        if (!getcwd(cwd, sizeof(cwd))) {
+            perror("getcwd");
+            return 1;
+        }
+        snprintf(absroot, sizeof(absroot), "%s/%s", cwd, workroot);
+    }
+    mkdir(absroot, 0755);
+    char path[1200];
+    snprintf(path, sizeof(path), "%s/race.dbf", absroot);
+    unlink(path);
+    rx_fielddef f[1] = { { "N1", RFT_N, 10, 0, 0 } };
+    rx_dbf *d = NULL;
+    int rc = rx_dbf_create(path, f, 1, &d);
+    CHECK(rc == R_OK, "race.dbf created");
+    uint32_t nr;
+    CHECK(rx_dbf_append(d, &nr) == R_OK, "race append");
+    rval v;
+    rx_rval_undef(&v);
+    v.t = RX_T_N;
+    v.u.n.d = 0;
+    v.u.n.dec = 0;
+    CHECK(rx_dbf_put(d, 0, &v) == R_OK, "race put 0");
+    CHECK(rx_flush(d) == R_OK, "race flush");
+    rx_dbf_close(d);
+
+    /* phase 1: mutual exclusion — parent holds rec 1, child must conflict */
+    rx_dbf *pd = NULL;
+    CHECK(rx_dbf_open(path, RD_SHARED, &pd) == R_OK, "parent open shared");
+    CHECK(rx_rlock(pd, 1) == R_OK, "parent rlock 1");
+    CHECK(rx_rlock_query(pd, 1) == 0, "own lock not reported as foreign");
+    pid_t pid = fork();
+    if (pid == 0) {
+        rx_dbf *cd = NULL;
+        if (rx_dbf_open(path, RD_SHARED, &cd) != R_OK) {
+            _exit(10);
+        }
+        if (rx_rlock_query(cd, 1) != 1) {
+            _exit(11); /* foreign lock not visible */
+        }
+        if (rx_rlock(cd, 1) != R_ERR_LOCK_CONFLICT) {
+            _exit(12); /* must conflict */
+        }
+        if (rx_rlock(cd, 2) != R_OK) {
+            _exit(13); /* other record free */
+        }
+        rx_unlock(cd, 2);
+        rx_dbf_close(cd);
+        _exit(0);
+    }
+    int status = 0;
+    waitpid(pid, &status, 0);
+    CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 0, "child conflict detection");
+    if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) {
+        printf("  child exit status=%d\n", status);
+    }
+    rx_unlock(pd, 0);
+    rx_dbf_close(pd);
+
+    /* phase 2: counter race — two children increment rec 1 under RLOCK */
+    for (int c = 0; c < 2; c++) {
+        pid = fork();
+        if (pid == 0) {
+            rx_dbf *cd = NULL;
+            if (rx_dbf_open(path, RD_SHARED, &cd) != R_OK) {
+                _exit(20);
+            }
+            for (int i = 0; i < RACE_ITERS; i++) {
+                if (rx_rlock(cd, 1) != R_OK) {
+                    _exit(21);
+                }
+                if (rx_dbf_goto(cd, 1) != R_OK) {
+                    _exit(22);
+                }
+                rval v;
+                rx_rval_undef(&v);
+                if (rx_dbf_get(cd, 0, &v) != R_OK) {
+                    _exit(23);
+                }
+                double cur = 0;
+                if (v.t == RX_T_N) {
+                    cur = v.u.n.d;
+                }
+                rx_rval_free(&v);
+                v.t = RX_T_N;
+                v.u.n.d = cur + 1;
+                v.u.n.dec = 0;
+                if (rx_dbf_put(cd, 0, &v) != R_OK) {
+                    _exit(24);
+                }
+                if (rx_flush(cd) != R_OK) {
+                    _exit(25);
+                }
+                rx_unlock(cd, 1);
+            }
+            rx_dbf_close(cd);
+            _exit(0);
+        }
+    }
+    int bad = 0;
+    for (int c = 0; c < 2; c++) {
+        waitpid(-1, &status, 0);
+        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) {
+            bad = 1;
+            printf("  race child status=%d\n", status);
+        }
+    }
+    CHECK(!bad, "race children clean");
+    rx_dbf *vd = NULL;
+    CHECK(rx_dbf_open(path, RD_READONLY, &vd) == R_OK, "verify open");
+    rx_dbf_goto(vd, 1);
+    rval vv;
+    rx_rval_undef(&vv);
+    CHECK(rx_dbf_get(vd, 0, &vv) == R_OK, "verify get");
+    double final = vv.u.n.d;
+    rx_rval_free(&vv);
+    rx_dbf_close(vd);
+    CHECK(final == 2.0 * RACE_ITERS, "no lost updates under RLOCK");
+    if (final != 2.0 * RACE_ITERS) {
+        printf("  counter final=%f expected=%d\n", final, 2 * RACE_ITERS);
+    }
+    unlink(path);
+    if (failures == 0) {
+        printf("lockrace: PASS\n");
+        return 0;
+    }
+    printf("lockrace: %d failures\n", failures);
+    return 1;
+}
+
 int main(int argc, char **argv)
 {
     rx_log_init();
@@ -427,7 +902,14 @@ int main(int argc, char **argv)
     if (argc >= 6 && strcmp(argv[1], "conformance") == 0) {
         return conformance(argv[2], argv[3], argv[4], argv[5]);
     }
-    fprintf(stderr, "usage: %s selftest | conformance <dir> <reynard> <fixtures> <workroot>\n",
+    if (argc >= 4 && strcmp(argv[1], "roundtrip") == 0) {
+        return roundtrip(argv[2], argv[3]);
+    }
+    if (argc >= 3 && strcmp(argv[1], "lockrace") == 0) {
+        return lockrace(argv[2]);
+    }
+    fprintf(stderr, "usage: %s selftest | conformance <dir> <reynard> <fixtures> <workroot>"
+                    " | roundtrip <fixtures> <workroot> | lockrace <workroot>\n",
             argv[0]);
     return 2;
 }
