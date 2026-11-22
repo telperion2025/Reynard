@@ -733,11 +733,47 @@ static int parse_stmt(parser *p)
             case ST_USE:
                 if (!end_of_line(p)) {
                     rx_expr *e = NULL;
-                    if (pk_cur(p)->kind == TK_WORD && !pk_op_ahead_is(p, 1, OP_LP)) {
-                        /* bare table name: USE people == USE "people" */
+                    if ((pk_cur(p)->kind == TK_WORD || pk_op(p, OP_DOT) || pk_op(p, OP_DIV)) &&
+                        !pk_op_ahead_is(p, 1, OP_LP)) {
+                        /* bare table name or path: USE people, USE people.dbf,
+                           USE sub/dir/people — gather WORD/DOT/DIV tokens until
+                           a clause keyword or EOL */
+                        static const char *clause_kw[] = { "IN", "ALIAS", "AGAIN", "EXCLUSIVE",
+                                                           "SHARED", "NOUPDATE", "INDEX", "ORDER",
+                                                           "ASCENDING", "DESCENDING", NULL };
+                        strbuf path;
+                        sb_init(&path);
+                        for (;;) {
+                            rx_tok *t = pk_cur(p);
+                            if (t->kind == TK_WORD) {
+                                int is_kw = 0;
+                                for (int k = 0; clause_kw[k]; k++) {
+                                    if (rx_strcasecmp(t->text, clause_kw[k]) == 0) {
+                                        is_kw = 1;
+                                        break;
+                                    }
+                                }
+                                if (is_kw && path.len > 0) {
+                                    break;
+                                }
+                                sb_puts(&path, t->text);
+                                pk_adv(p);
+                            } else if (pk_op(p, OP_DIV) || pk_op(p, OP_DOT)) {
+                                sb_putc(&path, pk_cur(p)->ival == OP_DIV ? '/' : '.');
+                                pk_adv(p);
+                            } else if (t->kind == TK_NUM) {
+                                sb_puts(&path, t->text);
+                                pk_adv(p);
+                            } else {
+                                break;
+                            }
+                        }
+                        if (!path.buf) {
+                            sb_putc(&path, '\0');
+                            path.len = 0;
+                        }
                         e = ex_new(p, EX_STR);
-                        rval_set_str(&e->lit, rx_strdup(pk_cur(p)->text), strlen(pk_cur(p)->text));
-                        pk_adv(p);
+                        rval_set_str(&e->lit, path.buf, path.len);
                     } else {
                         rc = parse_expr(p, &e);
                         if (rc != R_OK) {

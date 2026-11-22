@@ -33,3 +33,4 @@ by CI (`.github/workflows/ci.yml` conformance-index job).
 | 26_string_compare_detail | §7.6 padding rules, EXACT |
 | 27_date_arith | §7.3 date arithmetic, SET CENTURY |
 | 28_set_path_default | §10.3 SET PATH/DEFAULT, SET() query |
+| 29_use_path | §7.1 USE with path-like names (./people, people.dbf) |
