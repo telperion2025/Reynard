@@ -1,0 +1,2 @@
+? RAND(), RAND(), RAND()
+? TIME(), SECONDS()

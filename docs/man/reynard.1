@@ -1,0 +1,110 @@
+.TH REYNARD 1 "2025-11-22" "Reynard 0.1.0" "User Commands"
+.SH NAME
+reynard \- terminal-based xBase/FoxPro 2.x environment (the clever fox of terminals)
+.SH SYNOPSIS
+.B reynard
+.RI [ options ]
+.RI [ script.prg ]
+.SH DESCRIPTION
+Reynard is a cross-platform, terminal-based reimplementation of the FoxPro
+2.x/xBase environment for Linux, BSD, and macOS. With no arguments it opens
+the full-screen interactive environment (System menu bar, Command window,
+status line). With a script argument, or
+.BR \-c ,
+it runs the same interpreter in batch mode; with
+.B \-t
+the batch is deterministic (DATE(), TIME(), RAND() frozen to a session
+seed) for use in test harnesses.
+.SH OPTIONS
+.TP
+.BR \-c " \fIcmd; cmd\fR"
+Run commands then exit (batch). Semicolons split commands in this argument
+only.
+.TP
+.B \-t
+Test mode: deterministic batch.
+.TP
+.BI \-o " file"
+Redirect batch stdout to
+.IR file .
+.TP
+.BI --run " app.rpp"
+Run a packaged application (milestone M9).
+.TP
+.BI --cfg " file"
+Use an alternate config file.
+.TP
+.B \-\-no\-mouse
+Disable all mouse backends.
+.TP
+.BI --mouse= auto|sgr|u1000|1002|1015|gpm|sysmouse
+Force a mouse backend.
+.TP
+.BI --utf8= on|off
+Force wide-character mode.
+.TP
+.BR \-\-version ", " \-V
+Print version and exit.
+.TP
+.BR \-\-help ", " \-h
+Print usage and exit.
+.TP
+.B \-\-dump\-license
+Print the 2-clause BSD license and exit.
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/reynard/reynard.cfg
+Configuration file (override with \fBREYNARD_CFG\fR or \fB--cfg\fR).
+.TP
+.I $XDG_CACHE_HOME/reynard/history
+Command history (interactive mode).
+.SH ENVIRONMENT
+.TP
+.B REYNARD_CFG
+Config path override.
+.TP
+.B REYNARD_DATAPATH
+Data file search path.
+.TP
+.B REYNARD_CODEPAGE
+Default code page.
+.TP
+.B REYNARD_NOUPDATE
+Open everything read-only (safety flag).
+.TP
+.B RX_LOG
+Trace level: debug, info, warn, error.
+.TP
+.B TERM, COLORTERM, LANG, TMPDIR, TMUX, TERM_PROGRAM
+Standard terminal/locale variables; only *.UTF-8 locales enable UTF-8 mode.
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 1
+Script or runtime error.
+.TP
+.B 2
+Usage or environment error.
+.TP
+.B 3
+Lock conflict.
+.TP
+.B 4
+Internal assertion (bug); writes \fBreynard-crash.log\fR.
+.SH EXAMPLES
+.TP
+.B reynard -c '? "Hello:", 6*7'
+Print a computed line in batch mode.
+.TP
+.B reynard -t demo.prg -o out.txt
+Run a script deterministically, capturing output.
+.TP
+.B reynard -
+Read commands from standard input.
+.SH SEE ALSO
+Full language reference: \fIdocs/language.md\fR; file formats:
+\fIdocs/formats.md\fR; deviations: \fIdocs/DEVIATIONS.md\fR.
+.SH LICENSE
+2-clause BSD. See \fBLICENSE\fR or \fBreynard --dump-license\fR.

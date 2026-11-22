@@ -1,0 +1,3 @@
+USE cp437
+LIST
+? TXT, LEN(TXT)

@@ -1,0 +1,3 @@
+Error in line 1 col 3 of case.prg: No table in use
+? RECNO()
+  ^

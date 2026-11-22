@@ -1,0 +1,19 @@
+Reference fixture provenance (spec §8.9)
+=========================================
+
+This directory is reserved for byte-level reference DBF/CDX/FPT files
+produced by real tools (dBase III+, FoxPro 2.6a DOS, VFP 9 SP2) on
+real-period hardware or reference VMs. Each committed file MUST have an
+entry here listing: producing tool and version, originator, date, and
+redistribution permission. CI refuses compatibility tests when a listed
+file is missing, and files without provenance must never be committed.
+
+Status at M1: no external reference files are committed yet. The
+conformance suite uses the synthetic generated fixtures in
+testdata/gen/ (regenerable via tests/gen_fixtures.py equivalent
+testdata/gen/gen_fixtures.py), which follow docs/formats.md exactly.
+
+Planned entries (to be filled when real fixtures are contributed):
+  # people_fox26.dbf  — FoxPro 2.6a for DOS, CREATE TABLE + APPEND, 2025-xx-xx
+  # people_dbase3.dbf — dBase III+ 1.0, ...
+  # people_vfp9.dbf   — VFP 9 SP2, ...

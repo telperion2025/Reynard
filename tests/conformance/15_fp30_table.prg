@@ -1,0 +1,3 @@
+USE people30
+? RECCOUNT()
+LIST NEXT 2

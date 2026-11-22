@@ -1,0 +1,7 @@
+d1 = {^1999-12-31}
+d2 = {^2000-01-01}
+? d2 - d1, DTOS(d1 + 1), DTOC(d1 + 1)
+? d1 + 365, DTOS(d1 + 365)
+SET CENTURY ON
+? DTOC(d1)
+SET CENTURY OFF

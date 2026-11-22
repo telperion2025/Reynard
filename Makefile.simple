@@ -1,0 +1,56 @@
+# Makefile.simple — plain-make build of Reynard with no external tooling.
+# Intended for BSD ports trees:   make -f Makefile.simple && make -f Makefile.simple install
+# CMake remains the primary build; this wrapper just calls the compiler directly.
+
+CC      ?= cc
+CFLAGS  ?= -O2 -std=c17 -Wall -Wextra -Wpedantic
+CPPFLAGS += -D_POSIX_C_SOURCE=200809L -Iinclude -Isrc
+
+CORE = \
+	src/util/strbuf.c src/util/str.c src/util/utf8.c src/util/cp_tables.c \
+	src/util/ddatecnv.c src/util/numeric.c src/util/errlist.c src/util/log.c src/util/cfg.c \
+	src/term/term_script.c src/term/mouse.c \
+	src/data/dbf.c src/data/field.c src/data/codepage.c src/data/workarea.c \
+	src/lang/lexer.c src/lang/parser.c src/lang/expr_compile.c src/lang/vm.c \
+	src/lang/cmds_data.c src/lang/cmds_env.c src/lang/memvar.c src/lang/errhand.c \
+	src/lang/funcs_str.c src/lang/funcs_num.c src/lang/funcs_date.c \
+	src/lang/funcs_db.c src/lang/funcs_sys.c
+
+# term_ncurses.c is always compiled (self-guarded); headers only add the
+# live backend via -DRX_HAVE_NCURSES.
+CORE += src/term/term_ncurses.c
+HAVE_CURSES := $(shell printf '#include <curses.h>\nint main(void){return 0;}\n' | $(CC) -x c - -o /dev/null 2>/dev/null && echo yes)
+ifeq ($(HAVE_CURSES),yes)
+CPPFLAGS += -DRX_HAVE_NCURSES=1
+LDLIBS += -lncurses
+endif
+LDLIBS += -lm
+
+all: reynard reynard-harness
+
+# Embed LICENSE for --dump-license (generated like CMake does).
+license_text.c: LICENSE
+	printf 'const char rx_license_text[] =\n' > $@
+	sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/$$/\\n"/' -e 's/^/"/' LICENSE >> $@
+	printf ';\n' >> $@
+
+reynard: src/main.c license_text.c $(CORE)
+	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ src/main.c license_text.c $(CORE) $(LDLIBS)
+
+reynard-harness: tests/harness.c license_text.c $(CORE)
+	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ tests/harness.c license_text.c $(CORE) $(LDLIBS)
+
+test: all
+	./reynard-harness selftest
+	./reynard-harness conformance tests/conformance ./reynard testdata/gen .test-work
+
+install: reynard
+	install -d $(DESTDIR)/usr/local/bin $(DESTDIR)/usr/local/share/man/man1
+	install -m 755 reynard $(DESTDIR)/usr/local/bin/reynard
+	install -m 644 docs/man/reynard.1 $(DESTDIR)/usr/local/share/man/man1/reynard.1
+
+clean:
+	rm -f reynard reynard-harness license_text.c
+	rm -rf .test-work
+
+.PHONY: all test install clean

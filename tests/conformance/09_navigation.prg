@@ -1,0 +1,17 @@
+USE people
+? BOF(), EOF(), RECNO()
+GO BOTTOM
+? RECNO(), NAME
+SKIP -1
+? RECNO(), NAME
+GO TOP
+? RECNO(), BOF()
+SKIP -1
+? BOF(), RECNO()
+SKIP
+? BOF(), RECNO()
+SKIP 100
+? EOF(), RECNO()
+SKIP -100
+? BOF(), RECNO()
+DISPLAY
