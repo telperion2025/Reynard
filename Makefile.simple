@@ -20,9 +20,14 @@ CORE = \
 # live backend via -DRX_HAVE_NCURSES.
 CORE += src/term/term_ncurses.c
 HAVE_CURSES := $(shell printf '#include <curses.h>\nint main(void){return 0;}\n' | $(CC) -x c - -o /dev/null 2>/dev/null && echo yes)
+HAVE_CURSESW := $(shell printf '#include <ncursesw/curses.h>\nint main(void){return 0;}\n' | $(CC) -x c - -o /dev/null 2>/dev/null && echo yes)
 ifeq ($(HAVE_CURSES),yes)
 CPPFLAGS += -DRX_HAVE_NCURSES=1
 LDLIBS += -lncurses
+endif
+ifeq ($(HAVE_CURSESW),yes)
+CPPFLAGS += -DRX_HAVE_NCURSESW_H=1
+LDLIBS := -lncursesw $(LDLIBS)
 endif
 LDLIBS += -lm
 

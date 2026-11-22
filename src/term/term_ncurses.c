@@ -10,10 +10,17 @@
  * answers with a legacy 1000 burst the parser pins to that mode for the
  * session. GPM/sysmouse are probed by mouse.c callers on their consoles.
  */
+/* Wide-curses API (cchar_t/setcchar) needs _XOPEN_SOURCE_EXTENDED and must
+   be requested before any system header. */
+#if defined(RX_HAVE_NCURSES) && !defined(_XOPEN_SOURCE_EXTENDED)
+#define _XOPEN_SOURCE_EXTENDED 1
+#endif
+
 #include "term/term_if.h"
 
 #if defined(RX_HAVE_NCURSES)
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -77,7 +84,7 @@ static int nc_blit(rcell *cells, size_t w, size_t h, struct rrect *damage, size_
                 if (ch < 0x80) {
                     mvaddch((int)y, (int)x, (chtype)(a | (uint8_t)ch));
                 } else {
-#if defined(NCURSES_VERSION) && defined(OK)
+#if defined(RX_HAVE_NCURSESW_H)
                     cchar_t cc;
                     wchar_t wch[2] = { (wchar_t)ch, 0 };
                     setcchar(&cc, wch, a, (short)(c.attr & 0x3F), NULL);
