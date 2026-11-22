@@ -5,8 +5,8 @@ license_text.c
 .test-work/
 *.o
 *.a
-reynard
-reynard-harness
+/reynard
+/reynard-harness
 reynard-crash.log
 compile_commands.json
 CMakeCache.txt
