@@ -50,6 +50,11 @@ int rx_strcasecmp(const char *a, const char *b);
 void rx_strtoupper(char *s);
 /** Duplicate a C string (NULL-safe). */
 char *rx_strdup(const char *s);
+/** Portable mkdtemp(3) replacement (macOS hides mkdtemp under strict
+ *  _POSIX_C_SOURCE): replaces the trailing XXXXXX with pid+counter. */
+int rx_mkdtemp(char *tmpl);
+/** Portable mkstemp(3) replacement; see rx_mkdtemp. */
+int rx_mkstemp(char *tmpl);
 
 /* ---- utf8.c ---- */
 /** Decode one codepoint at s; returns bytes consumed (1..4), *cp set. */

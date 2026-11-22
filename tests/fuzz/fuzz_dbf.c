@@ -14,12 +14,13 @@
 
 #include "reynard/dbf.h"
 #include "reynard/status.h"
+#include "util/util.h"
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
     /* write to a temp file and open read-only; never trust the bytes */
     char path[] = "/tmp/rx-fuzz-XXXXXX";
-    int fd = mkstemp(path);
+    int fd = rx_mkstemp(path);
     if (fd < 0) {
         return 0;
     }

@@ -4,11 +4,17 @@
  * @file str.c
  * @brief r_str helpers and small C-string utilities.
  */
-#include "util/util.h"
-
+/* POSIX system headers come before project headers here: <unistd.h>
+   defines R_OK for access(2), and reynard/status.h must own R_OK (=0). */
 #include <ctype.h>
+#include <fcntl.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include "util/util.h" 
 
 int rstr_dup(r_str *dst, const char *utf8, size_t n)
 {
@@ -82,4 +88,39 @@ char *rx_strdup(const char *s)
     }
     memcpy(copy, s, n + 1);
     return copy;
+}
+
+int rx_mkdtemp(char *tmpl)
+{
+    size_t n = strlen(tmpl);
+    if (n < 6 || strcmp(tmpl + n - 6, "XXXXXX") != 0) {
+        return -1;
+    }
+    static unsigned counter = 0;
+    for (unsigned i = 0; i < 10000; i++) {
+        snprintf(tmpl + n - 6, 7, "%05u%u", (unsigned)(getpid() % 100000),
+                 (unsigned)(counter++ % 10));
+        if (mkdir(tmpl, 0700) == 0) {
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int rx_mkstemp(char *tmpl)
+{
+    size_t n = strlen(tmpl);
+    if (n < 6 || strcmp(tmpl + n - 6, "XXXXXX") != 0) {
+        return -1;
+    }
+    static unsigned counter = 0;
+    for (unsigned i = 0; i < 10000; i++) {
+        snprintf(tmpl + n - 6, 7, "%05u%u", (unsigned)(getpid() % 100000),
+                 (unsigned)(counter++ % 10));
+        int fd = open(tmpl, O_CREAT | O_EXCL | O_RDWR, 0600);
+        if (fd >= 0) {
+            return fd;
+        }
+    }
+    return -1;
 }

@@ -89,7 +89,7 @@ static char *read_file(const char *path, size_t *n)
 static int selftest_term(void)
 {
     char dir[] = "/tmp/rx-selftest-XXXXXX";
-    if (!mkdtemp(dir)) {
+    if (rx_mkdtemp(dir) != 0) {
         perror("mkdtemp");
         return 1;
     }
@@ -310,7 +310,7 @@ static int conformance(const char *dir, const char *bin, const char *fixtures, c
 
         char wd[1100];
         snprintf(wd, sizeof(wd), "%s/case-XXXXXX", absroot);
-        if (!mkdtemp(wd)) {
+        if (rx_mkdtemp(wd) != 0) {
             perror("mkdtemp");
             failures++;
             continue;
