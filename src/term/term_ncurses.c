@@ -163,7 +163,11 @@ static int nc_poll(revent *out, uint32_t timeout_ms)
                 out->u.m.dc = 1;
             } else if (ev.bstate & BUTTON4_PRESSED) {
                 out->u.m.kind = RM_WHEEL_UP;
-            } else if (ev.bstate & BUTTON5_PRESSED || ev.bstate & BUTTON2_PRESSED) {
+            } else if (
+#ifdef BUTTON5_PRESSED
+                (ev.bstate & BUTTON5_PRESSED) ||
+#endif
+                (ev.bstate & BUTTON2_PRESSED)) {
                 out->u.m.kind = RM_WHEEL_DN;
             } else {
                 out->u.m.kind = RM_MOVE;
