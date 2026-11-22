@@ -19,8 +19,10 @@ CORE = \
 # term_ncurses.c is always compiled (self-guarded); headers only add the
 # live backend via -DRX_HAVE_NCURSES.
 CORE += src/term/term_ncurses.c
-HAVE_CURSES := $(shell printf '#include <curses.h>\nint main(void){return 0;}\n' | $(CC) -x c - -o /dev/null 2>/dev/null && echo yes)
-HAVE_CURSESW := $(shell printf '#include <ncursesw/curses.h>\nint main(void){return 0;}\n' | $(CC) -x c - -o /dev/null 2>/dev/null && echo yes)
+# Header probes avoid '#include' in the makefile itself ('#' is a make
+# comment); -include pulls the header into an empty translation unit.
+HAVE_CURSES := $(shell $(CC) -x c -fsyntax-only -include curses.h /dev/null 2>/dev/null && echo yes)
+HAVE_CURSESW := $(shell $(CC) -x c -fsyntax-only -include ncursesw/curses.h /dev/null 2>/dev/null && echo yes)
 ifeq ($(HAVE_CURSES),yes)
 CPPFLAGS += -DRX_HAVE_NCURSES=1
 LDLIBS += -lncurses
