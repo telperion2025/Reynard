@@ -1,0 +1,10 @@
+# §6.2/§6.3: text is clipped at the window interior — a 200-char Command
+# output line must not spill over the Command window border, and the wide
+# ASCII Chart grid (52-cell rows) must fit inside its dialog.
+text ? REPLICATE("x", 200)
+key enter
+mouse press 2 0 1
+mouse release 2 0 1
+mouse press 3 9 1
+mouse release 3 9 1
+eof

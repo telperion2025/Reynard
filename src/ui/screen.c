@@ -128,8 +128,12 @@ void scr_put(rx_screen *s, int x, int y, uint32_t ch, uint16_t attr)
     mark(s, x, y, 1, 1);
 }
 
-void scr_textn(rx_screen *s, int x, int y, const char *utf8, size_t n, uint16_t attr)
+void scr_textn_clip(rx_screen *s, int x, int y, const char *utf8, size_t n, uint16_t attr,
+                    int maxw)
 {
+    if (maxw <= 0) {
+        return;
+    }
     size_t i = 0;
     int cx = x;
     while (i < n) {
@@ -142,9 +146,18 @@ void scr_textn(rx_screen *s, int x, int y, const char *utf8, size_t n, uint16_t 
         if (cp == '\n') {
             continue;
         }
+        int cw = utf8_cp_width(cp) > 0 ? utf8_cp_width(cp) : 1;
+        if (cx + cw > x + maxw) {
+            break; /* would cross the right edge (e.g. a window border) */
+        }
         scr_put(s, cx, y, cp, attr);
-        cx += utf8_cp_width(cp) > 0 ? utf8_cp_width(cp) : 1;
+        cx += cw;
     }
+}
+
+void scr_textn(rx_screen *s, int x, int y, const char *utf8, size_t n, uint16_t attr)
+{
+    scr_textn_clip(s, x, y, utf8, n, attr, x < s->w ? s->w - x : 0);
 }
 
 void scr_text(rx_screen *s, int x, int y, const char *utf8, uint16_t attr)
@@ -201,7 +214,7 @@ void scr_box(rx_screen *s, int x, int y, int w, int h, const char *title, uint16
     if (title && *title) {
         char t[128];
         snprintf(t, sizeof(t), " %s ", title);
-        scr_textn(s, x + 2, y, t, strlen(t), attr);
+        scr_textn_clip(s, x + 2, y, t, strlen(t), attr, w - 4);
     }
 }
 

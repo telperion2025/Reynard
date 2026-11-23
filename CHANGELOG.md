@@ -160,3 +160,10 @@ Reynard is pre-1.0, versions are milestone tags M0..M10 then v1.0.0.
   on the window background (RXA_CMD_BORDER black/bcyan, RXA_DLG_BORDER
   black/white). Golden 08 regenerated — it had encoded the see-through
   dialog (Command window border showing through the Calculator).
+- Text clipping: new scr_textn_clip() stops drawing at a column limit; the
+  Command window scrollback, dialog lines, the getsay input line, window
+  titles and the status-line message are all clipped to their container, so
+  long lines can no longer spill over a window border. ASCII Chart dialog
+  widened to 56x21 and Calendar/Diary to 34x13 so their own content fits.
+  New golden 10_text_clipping locks this in (200-char output clipped at the
+  Command border; ASCII grid fully inside its dialog).

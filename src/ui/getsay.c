@@ -359,7 +359,7 @@ void gs_render(getsay *g, rx_screen *s, int x, int y, int w, uint16_t attr)
         g->buf = calloc(1, 1);
         g->cap = 1;
     }
-    scr_textn(s, x, y, g->buf, g->len, attr);
+    scr_textn_clip(s, x, y, g->buf, g->len, attr, w);
     /* cursor: inverse cell at the cursor position (no cursor API in the
        term vtable; §5.2 renders the caret as an attr-swapped cell) */
     int cx = x;

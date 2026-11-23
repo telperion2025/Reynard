@@ -98,7 +98,7 @@ static void cmdwin_render(struct rx_ui *ui, rx_win *w)
             continue;
         }
         const char *line = c->lines[(c->head + (size_t)li) % c->caplines];
-        scr_textn(&ui->scr, ix, iy + r, line, strlen(line), RXA_CMD);
+        scr_textn_clip(&ui->scr, ix, iy + r, line, strlen(line), RXA_CMD, iw);
     }
     gs_render(&c->ed, &ui->scr, ix, input_row, iw, RXA_CMD);
 }

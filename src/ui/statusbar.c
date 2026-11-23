@@ -123,7 +123,6 @@ void statusbar_render(struct rx_ui *ui)
         maxw = 0;
     }
     if (ui->msg[0]) {
-        scr_textn(s, 0, row, ui->msg, strlen(ui->msg) > (size_t)maxw ? (size_t)maxw : strlen(ui->msg),
-                  ui->msg[0] ? RXA_MSG : RXA_STATUS);
+        scr_textn_clip(s, 0, row, ui->msg, strlen(ui->msg), RXA_MSG, maxw);
     }
 }

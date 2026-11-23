@@ -69,7 +69,7 @@ static void dlg_render(struct rx_ui *ui, rx_win *w)
         if (li < 0 || li >= (long)d->nlines) {
             continue;
         }
-        scr_textn(&ui->scr, ix, iy + r, d->lines[li], strlen(d->lines[li]), RXA_DLG);
+        scr_textn_clip(&ui->scr, ix, iy + r, d->lines[li], strlen(d->lines[li]), RXA_DLG, iw);
     }
     if (d->has_ed) {
         gs_render(&d->ed, &ui->scr, ix, iy + ih - 1, iw, RXA_DLG);
@@ -401,7 +401,7 @@ void dlg_calendar(struct rx_ui *ui)
     static const char *const mnames[] = { "",     "January", "February", "March",   "April",
                                            "May",  "June",    "July",     "August",  "September",
                                            "October", "November", "December" };
-    rx_win *w = dlg_new(ui, "Calendar/Diary", 34, 12);
+    rx_win *w = dlg_new(ui, "Calendar/Diary", 34, 13);
     rx_dlg *d = w->ud;
     char line[80];
     snprintf(line, sizeof(line), "%s %d", m > 0 && m <= 12 ? mnames[m] : "?", y);
@@ -440,7 +440,7 @@ void dlg_calendar(struct rx_ui *ui)
 
 void dlg_ascii(struct rx_ui *ui)
 {
-    rx_win *w = dlg_new(ui, "ASCII Chart", 40, 20);
+    rx_win *w = dlg_new(ui, "ASCII Chart", 56, 21); /* grid rows are 52 cells wide */
     rx_dlg *d = w->ud;
     char head[80];
     snprintf(head, sizeof(head), "    ");

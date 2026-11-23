@@ -31,3 +31,4 @@ Regenerate after an intentional UI change (then review the diff by eye):
 | 08_calc | §6.3 System > Calculator: dialog input line evaluates via the VM (`= 14`) |
 | 06 (extended) | corner drag resizes the window in the same scenario |
 | 09_close_button | §6.2: the title-bar × closes a dialog and hides the Command window |
+| 10_text_clipping | §6.2/§6.3: long Command output is clipped at the window border; ASCII Chart dialog fits its 52-cell grid |

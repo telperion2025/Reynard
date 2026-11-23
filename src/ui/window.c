@@ -74,7 +74,8 @@ void win_box(struct rx_ui *ui, const rx_win *w, uint16_t border, uint16_t title_
     if (w->title[0]) {
         char t[80];
         snprintf(t, sizeof(t), " %s ", w->title);
-        scr_textn(&ui->scr, w->x + 2, w->y, t, strlen(t), title_attr);
+        scr_textn_clip(&ui->scr, w->x + 2, w->y, t, strlen(t), title_attr,
+                       w->w - 4); /* keep clear of the x button cell */
     }
     if (w->w >= 5) {
         /* close button: × on the top-right border cell */

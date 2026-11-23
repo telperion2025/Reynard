@@ -69,6 +69,8 @@ void scr_resize(rx_screen *s, int w, int h);
 void scr_put(rx_screen *s, int x, int y, uint32_t ch, uint16_t attr);
 void scr_text(rx_screen *s, int x, int y, const char *utf8, uint16_t attr);
 void scr_textn(rx_screen *s, int x, int y, const char *utf8, size_t n, uint16_t attr);
+void scr_textn_clip(rx_screen *s, int x, int y, const char *utf8, size_t n, uint16_t attr,
+                    int maxw); /**< stop before x+maxw so text never crosses a window border */
 void scr_fill(rx_screen *s, int x, int y, int w, int h, uint32_t ch, uint16_t attr);
 void scr_hline(rx_screen *s, int x, int y, int w, uint32_t ch, uint16_t attr);
 void scr_box(rx_screen *s, int x, int y, int w, int h, const char *title, uint16_t attr);
