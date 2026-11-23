@@ -121,3 +121,4 @@ Reynard is pre-1.0, versions are milestone tags M0..M10 then v1.0.0.
   (/opt/homebrew/opt/ncurses, /usr/local/opt/ncurses) for native wide
   glyphs; setlocale(LC_ALL, "") at backend init. Golden suite now 9
   scenarios (close button; corner-resize drag in 06).
+  MacPorts' /opt/local prefix is searched too (`sudo port install ncurses`).

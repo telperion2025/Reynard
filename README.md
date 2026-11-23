@@ -41,7 +41,8 @@ DBF files (including memos and CDX compound indexes).
 
 Requirements: a C17 compiler (GCC 11+ or Clang 14+), CMake >= 3.16, and
 ncurses/ncursesw >= 6.1 for the interactive backend. On macOS the system
-ncurses is narrow-only (5.7): `brew install ncurses` gives ncursesw and is
+ncurses is narrow-only (5.7): `brew install ncurses` or
+`sudo port install ncurses` (MacPorts, /opt/local) gives ncursesw and is
 picked up automatically (CMake prefix path and Makefile.simple probe);
 without ncursesw the UI falls back to ACS line-drawing and ASCII
 transliteration. Without ncurses headers the build
@@ -129,7 +130,8 @@ backend (`RX_EVENTS`/`RX_DUMP`) for the golden-screen tests.
 
 Mouse reporting is negotiated per spec §5.4: SGR 1006 is enabled first, with
 1002 (button drag) / 1003 (motion) alongside; legacy 1000 bursts are
-auto-detected by the ncurses parser. The mode sequences are written with
+auto-detected by the ncurses parser. For native wide glyphs on macOS use
+`brew install ncurses` or `sudo port install ncurses` (MacPorts). The mode sequences are written with
 `write(2)` before `initscr()` / after `endwin()` so they never interleave
 with curses output. If your terminal swallows mouse events entirely, run with
 `--no-mouse` (or `SET MOUSE OFF`) — every menu action is also reachable by
