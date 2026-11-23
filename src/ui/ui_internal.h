@@ -59,7 +59,7 @@ typedef struct rx_screen {
     int w, h;
     struct rrect *dmg;
     size_t ndmg, capdmg;
-    uint8_t pal[64][2];
+    uint8_t pal[256][2]; /**< slot = fg | bg<<4 */
 } rx_screen;
 
 void scr_init(rx_screen *s, int w, int h);

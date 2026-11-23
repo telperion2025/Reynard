@@ -147,7 +147,7 @@ static int selftest_term(void)
     CHECK(rx_term_script_blit_count() == 1, "blit counted");
 
     CHECK(tb->palette(count_pair) == R_OK, "palette callback");
-    CHECK(pairs_seen == 64, "palette has 64 slots");
+    CHECK(pairs_seen == 256, "palette has 256 slots (16 fg x 16 bg)");
 
     tb->shutdown();
     size_t n;

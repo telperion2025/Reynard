@@ -20,10 +20,12 @@
 extern "C" {
 #endif
 
-/** One virtual cell: Unicode codepoint + palette pair index (§5.2). */
+/** One virtual cell: Unicode codepoint + palette slot (§5.2).
+ *  attr = fg | bg<<4, i.e. the slot index into the 256-entry (16x16)
+ *  (fg,bg) palette. */
 typedef struct rcell {
     uint32_t ch;   /**< Unicode codepoint */
-    uint16_t attr; /**< palette pair index (§5.2) */
+    uint16_t attr; /**< palette slot: fg | bg<<4 (§5.2) */
 } rcell;
 
 /** Rectangle in cell coordinates. */

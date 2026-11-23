@@ -54,10 +54,6 @@ static int nc_init(void)
         return R_ERR_NOUI;
     }
     setlocale(LC_ALL, "");
-    /* Mouse (spec §5.4): SGR 1006 primary, 1002 button-drag, 1003
-       any-motion; legacy 1000 is auto-detected by the ncurses parser.
-       Emitted before initscr() so the bytes cannot interleave with curses. */
-    raw_write("\x1B[?1006h\x1B[?1002h\x1B[?1003h");
     WINDOW *w = initscr();
     if (!w) {
         return R_ERR_NOUI;
@@ -70,6 +66,11 @@ static int nc_init(void)
     if (has_colors()) {
         start_color();
     }
+    /* ncurses emits its own XM mouse modes on the first refresh; emit ours
+       after it so SGR 1006 + 1002 + 1003 actually stick (write(2), never
+       printf, so the bytes cannot interleave with curses output) */
+    refresh();
+    raw_write("\x1B[?1006h\x1B[?1002h\x1B[?1003h");
     return R_OK;
 }
 
@@ -123,14 +124,15 @@ static char ascii_fallback(uint32_t ch)
 static void nc_draw(int y, int x, rcell c)
 {
     uint32_t ch = c.ch ? c.ch : ' ';
-    attr_t a = COLOR_PAIR(c.attr & 0x3F);
+    short pair = (short)((c.attr & 0xFF) + 1); /* curses pairs are 1-based */
+    attr_t a = COLOR_PAIR(pair);
 #if defined(RX_HAVE_NCURSESW_H) || defined(RX_HAVE_NCURSESW_FLAT)
     if (ch < 0x80) {
         mvaddch(y, x, (chtype)(a | (uint8_t)ch));
     } else {
         cchar_t cc;
         wchar_t wch[2] = { (wchar_t)ch, 0 };
-        setcchar(&cc, wch, a, (short)(c.attr & 0x3F), NULL);
+        setcchar(&cc, wch, a, pair, NULL);
         mvadd_wch(y, x, &cc);
     }
 #else
@@ -179,13 +181,17 @@ static int nc_palette(void (*set_pair)(int idx, uint8_t fg, uint8_t bg))
     if (!has_colors()) {
         return R_OK;
     }
-    /* attr nibbles are FoxPro/CGA palette indices; map to curses colors with
-       the same table term_script.c uses so both backends agree */
+    /* attr = fg | bg<<4 (FoxPro/CGA palette indices); map to curses colors
+       with the same table term_script.c uses so both backends agree.
+       Curses pairs are 1-based, so slot i gets pair i+1. */
     static const short cga2curses[16] = { COLOR_BLACK,       COLOR_BLUE,  COLOR_GREEN,  COLOR_CYAN,
                                           COLOR_RED,         COLOR_MAGENTA, COLOR_YELLOW, COLOR_WHITE,
                                           COLOR_BLACK + 8,   COLOR_BLUE + 8, COLOR_GREEN + 8, COLOR_CYAN + 8,
                                           COLOR_RED + 8,     COLOR_MAGENTA + 8, COLOR_YELLOW + 8, COLOR_WHITE + 8 };
-    for (int i = 0; i < 64; i++) {
+    for (int i = 0; i < 256; i++) {
+        if (i + 1 >= COLOR_PAIRS) {
+            break; /* pair 0 is reserved; some terminals cap at 256 pairs */
+        }
         short fg = cga2curses[i % 16];
         short bg = cga2curses[(i / 16) % 16];
         init_pair((short)(i + 1), fg, bg);

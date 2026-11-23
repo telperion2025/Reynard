@@ -149,7 +149,8 @@ static const uint8_t foxpro16[16] = { 0, 4, 2, 6, 1, 5, 3, 7, 8, 12, 10, 14, 9, 
 
 static int sc_palette(void (*set_pair)(int idx, uint8_t fg, uint8_t bg))
 {
-    for (int i = 0; i < 64; i++) {
+    /* attr = fg | bg<<4, so slot i is (fg = i%16, bg = i/16): 16x16 = 256 */
+    for (int i = 0; i < 256; i++) {
         set_pair(i, foxpro16[i % 16], foxpro16[(i / 16) % 16]);
     }
     return R_OK;

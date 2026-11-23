@@ -27,7 +27,7 @@ void scr_init(rx_screen *s, int w, int h)
     if (!s->dmg) {
         RX_FATAL("out of memory");
     }
-    for (int i = 0; i < 64; i++) {
+    for (int i = 0; i < 256; i++) {
         s->pal[i][0] = (uint8_t)(i % 16);
         s->pal[i][1] = (uint8_t)(i / 16);
     }
@@ -207,7 +207,7 @@ void scr_box(rx_screen *s, int x, int y, int w, int h, const char *title, uint16
 
 void scr_set_pair(rx_screen *s, int idx, uint8_t fg, uint8_t bg)
 {
-    if (idx < 0 || idx >= 64) {
+    if (idx < 0 || idx >= 256) {
         return;
     }
     s->pal[idx][0] = fg;
