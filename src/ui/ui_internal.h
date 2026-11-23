@@ -21,28 +21,36 @@
 extern "C" {
 #endif
 
-/* FoxPro 16-color palette indices (§5.2); attr = fg | bg<<4 into 64 pairs. */
+/* FoxPro 16-color palette indices in FoxPro/CGA numeric order (§5.2);
+   attr = fg | bg<<4 into 64 pairs. Both term backends map these to curses
+   colors through the same CGA->curses table. */
 enum {
-    RXC_BLACK = 0, RXC_RED,   RXC_GREEN,  RXC_YELLOW, RXC_BLUE,  RXC_MAGENTA, RXC_CYAN,
-    RXC_WHITE,     RXC_GRAY,  RXC_BRED,   RXC_BGREEN, RXC_BYELLOW, RXC_BBLUE,  RXC_BMAGENTA,
-    RXC_BCYAN,     RXC_BWHITE
+    RXC_BLACK = 0, RXC_BLUE,  RXC_GREEN, RXC_CYAN,  RXC_RED,   RXC_MAGENTA, RXC_YELLOW,
+    RXC_WHITE,     RXC_GRAY,  RXC_BBLUE, RXC_BGREEN, RXC_BCYAN, RXC_BRED,   RXC_BMAGENTA,
+    RXC_BYELLOW,   RXC_BWHITE
 };
 #define RXA(fg, bg) ((uint16_t)((((bg) & 15) << 4) | ((fg) & 15)))
 
-/* common attrs */
+/* FoxPro 2.x for DOS look (reference screenshots): blue desktop, silver
+   menubar/pulldowns/status with black text and white hotkeys, bright-cyan
+   active title / selected item, cyan Command window, silver dialogs with
+   white border and blue title bar. */
 #define RXA_DESKTOP RXA(RXC_WHITE, RXC_BLUE)
 #define RXA_MENU RXA(RXC_BLACK, RXC_WHITE)
-#define RXA_MENU_HOT RXA(RXC_BRED, RXC_WHITE)
-#define RXA_MENU_OPEN RXA(RXC_BLACK, RXC_CYAN)
-#define RXA_MENU_DIS RXA(RXC_GRAY, RXC_WHITE)
+#define RXA_MENU_HOT RXA(RXC_BWHITE, RXC_WHITE)
+#define RXA_MENU_OPEN RXA(RXC_BLACK, RXC_BCYAN)
 #define RXA_PULL RXA(RXC_BLACK, RXC_WHITE)
-#define RXA_PULL_SEL RXA(RXC_WHITE, RXC_BLUE)
+#define RXA_PULL_SEL RXA(RXC_BLACK, RXC_BCYAN)
 #define RXA_PULL_DIS RXA(RXC_GRAY, RXC_WHITE)
-#define RXA_STATUS RXA(RXC_BLACK, RXC_CYAN)
-#define RXA_WIN RXA(RXC_BLACK, RXC_WHITE)
-#define RXA_WIN_BORDER RXA(RXC_BLACK, RXC_WHITE)
-#define RXA_WIN_TITLE RXA(RXC_BRED, RXC_WHITE)
-#define RXA_MSG RXA(RXC_BRED, RXC_CYAN)
+#define RXA_PULL_HOT RXA(RXC_BYELLOW, RXC_WHITE)
+#define RXA_STATUS RXA(RXC_BLACK, RXC_WHITE)
+#define RXA_MSG RXA(RXC_BRED, RXC_WHITE)
+#define RXA_DLG RXA(RXC_BLACK, RXC_WHITE)
+#define RXA_DLG_BORDER RXA(RXC_BWHITE, RXC_WHITE)
+#define RXA_DLG_TITLE RXA(RXC_BWHITE, RXC_BLUE)
+#define RXA_CMD RXA(RXC_BLACK, RXC_BCYAN)
+#define RXA_CMD_BORDER RXA(RXC_BWHITE, RXC_BCYAN)
+#define RXA_CMD_TITLE RXA(RXC_BLACK, RXC_BCYAN)
 
 /* ============================ screen (screen.c) ============================ */
 
@@ -97,6 +105,7 @@ rx_win *win_top(struct rx_ui *ui);
 rx_win *win_at(struct rx_ui *ui, int x, int y);
 int win_border_zone(const rx_win *w, int x, int y);
 void win_box(struct rx_ui *ui, const rx_win *w, uint16_t border, uint16_t title_attr);
+int win_close_hit(const rx_win *w, int x, int y); /**< title-bar × button */
 void win_clamp(struct rx_ui *ui, rx_win *w);
 
 /* ============================ getsay (getsay.c) ============================ */

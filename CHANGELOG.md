@@ -86,6 +86,20 @@ Reynard is pre-1.0, versions are milestone tags M0..M10 then v1.0.0.
   selected when RX_EVENTS is set (CI golden runs use `reynard -t`).
 - Mouse capture: the window that consumes RM_PRESS keeps the drag until
   RM_RELEASE; release never triggers an action (§5.4).
+- FoxPro 2.x for DOS color scheme (reference screenshots): attr nibbles are
+  FoxPro/CGA palette indices (fg | bg<<4) mapped through one CGA->curses
+  table shared by both term backends — blue desktop, silver menubar/
+  pulldowns/status (black text, white menubar hotkeys, yellow pulldown
+  hotkeys, bright-cyan active title and selected item), bright-cyan
+  Command window with white border, silver dialogs with white border and
+  blue title bar.
+- Fixes: ncurses poll left the event uninitialized on timeout, so the UI
+  loop re-handled the previous event (repeating keypresses); and with
+  SGR-1002 button tracking, drags arrive as repeated BUTTON1_PRESSED —
+  now translated to RM_DRAG, so window/menubar dragging works on real
+  terminals, not just in the scripted tests. Every window gets a ×
+  close button on its title bar (Command window hides instead).
+  Fixed a use-after-free when a captured window closed mid-drag.
 - Bug fix: bare expression statements starting with a non-word token
   (e.g. `2+3*4`) previously looped the parser forever; the ST_EXPR
   fallthrough now applies to every leading token kind, with a

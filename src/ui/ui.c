@@ -70,6 +70,9 @@ static void sweep_closed(rx_ui *ui)
     while (w) {
         rx_win *next = w->next;
         if (w->want_close) {
+            if (ui->mouse_cap == w) {
+                ui->mouse_cap = NULL;
+            }
             win_remove(ui, w);
             if (w->free_fn) {
                 w->free_fn(w);
@@ -217,6 +220,8 @@ int rx_ui_run(rx_ctx *ctx, const term_backend *tb)
 
     for (;;) {
         revent ev;
+        memset(&ev, 0, sizeof(ev));
+        ev.kind = EV_ERR;
         int rc = tb->poll(&ev, 250);
         if (rc != R_OK) {
             break;

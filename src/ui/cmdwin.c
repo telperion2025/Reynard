@@ -83,7 +83,7 @@ void cmdwin_layout(struct rx_ui *ui, rx_cmdwin *c)
 static void cmdwin_render(struct rx_ui *ui, rx_win *w)
 {
     rx_cmdwin *c = w->ud;
-    win_box(ui, w, RXA_WIN_BORDER, RXA_WIN_TITLE);
+    win_box(ui, w, RXA_CMD_BORDER, RXA_CMD_TITLE);
     int ix = w->x + 1, iy = w->y + 1;
     int iw = w->w - 2, ih = w->h - 2;
     if (iw <= 0 || ih <= 0) {
@@ -97,9 +97,9 @@ static void cmdwin_render(struct rx_ui *ui, rx_win *w)
             continue;
         }
         const char *line = c->lines[(c->head + (size_t)li) % c->caplines];
-        scr_textn(&ui->scr, ix, iy + r, line, strlen(line), RXA_WIN);
+        scr_textn(&ui->scr, ix, iy + r, line, strlen(line), RXA_CMD);
     }
-    gs_render(&c->ed, &ui->scr, ix, input_row, iw, RXA_WIN);
+    gs_render(&c->ed, &ui->scr, ix, input_row, iw, RXA_CMD);
 }
 
 static int cmdwin_key(struct rx_ui *ui, rx_win *w, const rkey *k)
@@ -201,7 +201,9 @@ static int cmdwin_mouse(struct rx_ui *ui, rx_win *w, const rmouse *m)
     switch (m->kind) {
     case RM_PRESS:
         win_bring_top(ui, w);
-        if (m->button == 1 && zone != WIN_ZONE_NONE) {
+        if (m->button == 1 && win_close_hit(w, m->x, m->y)) {
+            w->visible = 0; /* Command window hides; Ctrl+F2 / Window menu bring it back */
+        } else if (m->button == 1 && zone != WIN_ZONE_NONE) {
             c->drag = zone;
             c->ddx = m->x - w->x;
             c->ddy = m->y - w->y;

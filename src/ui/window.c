@@ -76,6 +76,15 @@ void win_box(struct rx_ui *ui, const rx_win *w, uint16_t border, uint16_t title_
         snprintf(t, sizeof(t), " %s ", w->title);
         scr_textn(&ui->scr, w->x + 2, w->y, t, strlen(t), title_attr);
     }
+    if (w->w >= 5) {
+        /* close button: × on the top-right border cell */
+        scr_put(&ui->scr, w->x + w->w - 2, w->y, 0x00D7, border);
+    }
+}
+
+int win_close_hit(const rx_win *w, int x, int y)
+{
+    return w->w >= 5 && y == w->y && x == w->x + w->w - 2;
 }
 
 void win_clamp(struct rx_ui *ui, rx_win *w)

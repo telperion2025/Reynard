@@ -93,8 +93,7 @@ static void render_pulldown(struct rx_ui *ui)
             for (const char *p = lp; *p && cx < x + w - 1; p++) {
                 uint16_t a = attr;
                 if (it->hotkey && !hot_done && toupper((unsigned char)*p) == it->hotkey) {
-                    a = (int)i == ui->menu_sel ? RXA(RXC_YELLOW, RXC_BLUE)
-                                                : RXA(RXC_RED, RXC_WHITE);
+                    a = (int)i == ui->menu_sel ? attr : RXA_PULL_HOT;
                     hot_done = 1;
                 }
                 scr_put(&ui->scr, cx, row, (uint32_t)(unsigned char)*p, a);
@@ -117,7 +116,7 @@ void menubar_render(struct rx_ui *ui)
         for (const char *p = t; *p && cx < ui->scr.w; p++, cx++) {
             uint16_t a = attr;
             if (toupper((unsigned char)*p) == rx_menus[i].hotkey) {
-                a = i == ui->menu_open ? RXA(RXC_BLACK, RXC_CYAN) : RXA_MENU_HOT;
+                a = i == ui->menu_open ? attr : RXA_MENU_HOT;
             }
             scr_put(&ui->scr, cx, 0, (uint32_t)(unsigned char)*p, a);
         }

@@ -11,14 +11,14 @@
 
 
 
-    ┌─ Command ────────────────────────────────────────────────────────────────┐
-    │                                                                          │
-    │                                                                          │
-    │                                                                          │
-    │Reynard 0.1.0 — the clever fox of terminals                               │
-    │F10 or Alt opens the menubar. Type a command below.                       │
-    │                                                                          │
-    └──────────────────────────────────────────────────────────────────────────┘
+    ┌─ Command ──────────────────────────────────────────────────────×┐
+    │                                                                 │
+    │Reynard 0.1.0 — the clever fox of terminals                      │
+    │F10 or Alt opens the menubar. Type a command below.              │
+    │                                                                 │
+    └─────────────────────────────────────────────────────────────────┘
+
+
 
 
 Welcome to Reynard                                                        NUM 1

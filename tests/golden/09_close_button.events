@@ -1,0 +1,12 @@
+# Window close button: open System > About (dialog at x=14 y=7 w=52 h=9,
+# its × is at (64,7)), click the × to close it, then click the Command
+# window's × at (76,15) to hide it (Ctrl+F2 / Window > Command reopens).
+mouse press 2 0 1
+mouse release 2 0 1
+mouse press 3 2 1
+mouse release 3 2 1
+mouse press 64 7 1
+mouse release 64 7 1
+mouse press 76 15 1
+mouse release 76 15 1
+eof

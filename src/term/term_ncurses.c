@@ -128,25 +128,31 @@ static int nc_palette(void (*set_pair)(int idx, uint8_t fg, uint8_t bg))
     if (!has_colors()) {
         return R_OK;
     }
-    static const short ansi16[16] = { COLOR_BLACK,   COLOR_RED,     COLOR_GREEN, COLOR_YELLOW,
-                                       COLOR_BLUE,    COLOR_MAGENTA, COLOR_CYAN,  COLOR_WHITE,
-                                       COLOR_BLACK + 8, COLOR_RED + 8, COLOR_GREEN + 8, COLOR_YELLOW + 8,
-                                       COLOR_BLUE + 8, COLOR_MAGENTA + 8, COLOR_CYAN + 8, COLOR_WHITE + 8 };
+    /* attr nibbles are FoxPro/CGA palette indices; map to curses colors with
+       the same table term_script.c uses so both backends agree */
+    static const short cga2curses[16] = { COLOR_BLACK,       COLOR_BLUE,  COLOR_GREEN,  COLOR_CYAN,
+                                          COLOR_RED,         COLOR_MAGENTA, COLOR_YELLOW, COLOR_WHITE,
+                                          COLOR_BLACK + 8,   COLOR_BLUE + 8, COLOR_GREEN + 8, COLOR_CYAN + 8,
+                                          COLOR_RED + 8,     COLOR_MAGENTA + 8, COLOR_YELLOW + 8, COLOR_WHITE + 8 };
     for (int i = 0; i < 64; i++) {
-        short fg = ansi16[i % 16];
-        short bg = ansi16[(i / 16) % 16];
+        short fg = cga2curses[i % 16];
+        short bg = cga2curses[(i / 16) % 16];
         init_pair((short)(i + 1), fg, bg);
         set_pair(i, (uint8_t)fg, (uint8_t)bg);
     }
     return R_OK;
 }
 
+static int nc_btn_down = 0; /**< button-1 held: press repeats become drags */
+
 static int nc_poll(revent *out, uint32_t timeout_ms)
 {
+    memset(out, 0, sizeof(*out));
     timeout((int)timeout_ms);
     int ch = getch();
     if (ch == ERR) {
-        return R_OK; /* timeout: caller polls again */
+        out->kind = EV_ERR; /* timeout: no event, caller polls again */
+        return R_OK;
     }
     if (ch == KEY_MOUSE) {
         MEVENT ev;
@@ -157,12 +163,17 @@ static int nc_poll(revent *out, uint32_t timeout_ms)
             out->u.m.button = 1;
             out->u.m.dc = 0;
             if (ev.bstate & BUTTON1_PRESSED) {
-                out->u.m.kind = RM_PRESS;
+                /* with button-event tracking (1002) a drag arrives as a
+                   repeated BUTTON1_PRESSED; translate to RM_DRAG */
+                out->u.m.kind = nc_btn_down ? RM_DRAG : RM_PRESS;
+                nc_btn_down = 1;
             } else if (ev.bstate & BUTTON1_RELEASED) {
                 out->u.m.kind = RM_RELEASE;
+                nc_btn_down = 0;
             } else if (ev.bstate & BUTTON1_CLICKED) {
                 out->u.m.kind = RM_PRESS;
                 out->u.m.dc = 1;
+                nc_btn_down = 0;
             } else if (ev.bstate & BUTTON4_PRESSED) {
                 out->u.m.kind = RM_WHEEL_UP;
             } else if (

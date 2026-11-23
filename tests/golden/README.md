@@ -29,3 +29,5 @@ Regenerate after an intentional UI change (then review the diff by eye):
 | 06_window_drag | §6.2 + §5.4: border drag moves a window; release never triggers |
 | 07_keyboard_menu | Appendix C: F10/arrows/Enter menubar path, Alt+H pulldown |
 | 08_calc | §6.3 System > Calculator: dialog input line evaluates via the VM (`= 14`) |
+| 06 (extended) | corner drag resizes the window in the same scenario |
+| 09_close_button | §6.2: the title-bar × closes a dialog and hides the Command window |

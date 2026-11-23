@@ -143,7 +143,8 @@ static int sc_blit(rcell *cells, size_t w, size_t h, struct rrect *damage, size_
     return R_OK;
 }
 
-/* FoxPro 16-color base palette (ANSI order). */
+/* attr nibbles are FoxPro/CGA palette indices; this maps them to curses
+   color numbers (same table as term_ncurses.c) */
 static const uint8_t foxpro16[16] = { 0, 4, 2, 6, 1, 5, 3, 7, 8, 12, 10, 14, 9, 13, 11, 15 };
 
 static int sc_palette(void (*set_pair)(int idx, uint8_t fg, uint8_t bg))

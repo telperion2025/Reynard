@@ -25,5 +25,9 @@ until RM_RELEASE, which never triggers an action (§5.4). Resize
 (EV_RESIZE / SIGWINCH) re-lays out and full-repaints; golden scenario
 `04_resize` covers it.
 
+Color scheme: FoxPro 2.x for DOS look (blue desktop, silver menubar and
+status, bright-cyan Command window and active menu items, silver dialogs
+with blue title bars); palette indices are FoxPro/CGA numeric order.
+
 CI determinism: `tests/golden/*.events` are replayed through the script
 backend (`term_script.c`); see `tests/golden/README.md`.

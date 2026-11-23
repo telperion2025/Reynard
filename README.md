@@ -107,11 +107,16 @@ arrows navigate, Enter selects, Esc backs out; the mouse clicks titles to
 open and drags across them to sweep), a floating Command window at the
 bottom (type a command, Enter runs it into the window's scrollback;
 Ctrl+Up/Down walk the persisted history, Tab completes command names,
-Ctrl+Y kills to end of line, Ctrl+S pauses, Esc aborts per SET ESCAPE;
-drag the border to move, the corner to resize), and a status line showing
+Ctrl+Y kills to end of line, Ctrl+S pauses, Esc aborts per SET ESCAPE).
+Every window has a × close button on its title bar; drag a window's
+border to move it and a corner to resize it (the Command window hides
+on close — Ctrl+F2 or Window > Command brings it back)., and a status line showing
 the last message plus work area/alias/record pointer. System-menu dialogs
 (About, Filer, Calculator, Calendar/Diary, ASCII Chart, Help) are on the
-same window stack. QUIT or File > Quit exits with code 0.
+same window stack. QUIT or File > Quit exits with code 0. The color
+scheme is the FoxPro 2.x for DOS look: blue desktop, silver menubar,
+status line and dialogs, bright-cyan Command window and active menu
+items (16-color CGA palette).
 
 `reynard -t` with no script is the same interactive shell with
 DATE()/TIME()/RAND() frozen — the harness drives it through the script

@@ -56,7 +56,7 @@ static void dlg_add(rx_dlg *d, const char *line)
 static void dlg_render(struct rx_ui *ui, rx_win *w)
 {
     rx_dlg *d = w->ud;
-    win_box(ui, w, RXA_WIN_BORDER, RXA_WIN_TITLE);
+    win_box(ui, w, RXA_DLG_BORDER, RXA_DLG_TITLE);
     int ix = w->x + 1, iy = w->y + 1;
     int iw = w->w - 2, ih = w->h - 2;
     if (iw <= 0 || ih <= 0) {
@@ -68,10 +68,10 @@ static void dlg_render(struct rx_ui *ui, rx_win *w)
         if (li < 0 || li >= (long)d->nlines) {
             continue;
         }
-        scr_textn(&ui->scr, ix, iy + r, d->lines[li], strlen(d->lines[li]), RXA_WIN);
+        scr_textn(&ui->scr, ix, iy + r, d->lines[li], strlen(d->lines[li]), RXA_DLG);
     }
     if (d->has_ed) {
-        gs_render(&d->ed, &ui->scr, ix, iy + ih - 1, iw, RXA_WIN);
+        gs_render(&d->ed, &ui->scr, ix, iy + ih - 1, iw, RXA_DLG);
     }
 }
 
@@ -199,12 +199,12 @@ static int dlg_mouse(struct rx_ui *ui, rx_win *w, const rmouse *m)
     switch (m->kind) {
     case RM_PRESS:
         win_bring_top(ui, w);
-        if (m->button == 1 && zone != WIN_ZONE_NONE) {
+        if (m->button == 1 && win_close_hit(w, m->x, m->y)) {
+            dlg_close(ui, d);
+        } else if (m->button == 1 && zone != WIN_ZONE_NONE) {
             d->drag = zone;
             d->ddx = m->x - w->x;
             d->ddy = m->y - w->y;
-        } else if (m->button == 1 && m->y == w->y + w->h - 1) {
-            dlg_close(ui, d);
         }
         ui->dirty = 1;
         return 1;
