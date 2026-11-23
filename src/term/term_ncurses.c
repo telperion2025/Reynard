@@ -79,6 +79,7 @@ static void nc_shutdown(void)
     raw_write("\x1B[?1003l\x1B[?1002l\x1B[?1006l");
 }
 
+#if !defined(RX_HAVE_NCURSESW_H)
 /* narrow ncurses (e.g. macOS system 5.7, no ncursesw): draw line-drawing
    via the alternate charset and transliterate the few other glyphs we use */
 static int nc_acs_char(uint32_t ch)
@@ -115,6 +116,7 @@ static char ascii_fallback(uint32_t ch)
         return '?';
     }
 }
+#endif /* !RX_HAVE_NCURSESW_H */
 
 static void nc_draw(int y, int x, rcell c)
 {
