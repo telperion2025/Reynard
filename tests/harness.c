@@ -1160,7 +1160,6 @@ static int browseperf(const char *workroot, const char *bin)
         buf[10] = (uint8_t)(rec_size & 0xFF);
         buf[11] = (uint8_t)(rec_size >> 8);
         uint8_t *fd = buf + 32;
-        int off = 1;
         for (size_t i = 0; i < nf; i++) {
             memset(fd, 0, 32);
             memcpy(fd, fnames[i], strlen(fnames[i]));
@@ -1168,7 +1167,6 @@ static int browseperf(const char *workroot, const char *bin)
             fd[16] = flens[i];
             fd[17] = (uint8_t)(i == 2 ? 2 : 0); /* SCORE dec */
             fd += 32;
-            off += flens[i];
         }
         buf[32 + 32 * nf] = 0x0D;
         uint8_t *rec = buf + hdr_size;
