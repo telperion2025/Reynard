@@ -1,0 +1,13 @@
+# §9.1: PARTITION 30 splits a fixed left pane (NAME, AGE) from a scrollable
+# right pane; FREEZE AGE makes only AGE editable — typing on NAME is ignored.
+text USE people
+key enter
+text BROWSE PARTITION 30 FREEZE AGE
+key enter
+key right
+text 99
+key enter
+key left
+text XX
+key enter
+eof

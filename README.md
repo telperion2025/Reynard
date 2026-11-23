@@ -16,9 +16,13 @@ DBF files (including memos and CDX compound indexes).
 > engine v1: DBF create/read/write, FPT/DBT memos, scopes + FOR/WHILE +
 > SET FILTER, LOCATE, locking with a forked-process race test, COPY/APPEND
 > SDF/DELIMITED, 48-case conformance suite + byte-identical round-trip
-> gate) and **M3** (interactive shell: menubar + pulldowns with mouse and
+> gate), **M3** (interactive shell: menubar + pulldowns with mouse and
 > keyboard, window stack, Command window with persistent history, status
-> line, System-menu dialogs; 8 golden-screen tests) are implemented. See
+> line, System-menu dialogs; 10 golden-screen tests) and **M4** (Browse v1:
+> full-screen grid window with in-cell editing, FREEZE/PARTITION/LEDIT,
+> mouse reorder/resize, Ctrl+T/Ctrl+N, SET RELATION/SET SKIP, shared
+> locking on edits; 60-case conformance suite incl. scripted-BROWSE
+> goldens; §11.3 browse perf gate in CI) are implemented. See
 > [docs/DEVIATIONS.md](docs/DEVIATIONS.md) for the deviation log and
 > [CHANGELOG.md](CHANGELOG.md) for progress. The full specification this
 > project implements is summarized in [docs/language.md](docs/language.md)

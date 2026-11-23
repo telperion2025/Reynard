@@ -121,6 +121,24 @@ typedef struct rx_clause {
     rx_expr *e;     /**< expression value when applicable */
 } rx_clause;
 
+/** One BROWSE FIELDS column spec (spec §9.1, M4). For plain fields is_field
+ *  is set and name holds the uppercased field name; otherwise e is a
+ *  computed display column evaluated per visible row. Ownership of e and
+ *  valid can be stolen by the UI (browse) via rx_stmt_steal_bcols. */
+typedef struct rx_bcol {
+    char name[128];   /**< field name (uppercased) when is_field */
+    rx_expr *e;       /**< computed column expression (NULL for plain fields) */
+    char header[64];  /**< :H = "title" */
+    int width;        /**< :W = n, 0 = auto */
+    rx_expr *valid;   /**< :V = expr (field validation on cell exit) */
+    char verr[160];   /**< :E = "message" for :V failure */
+    int rflag;        /**< :R read-only */
+    int fflag;        /**< :F */
+    int frozen;       /**< set when FREEZE names this column */
+    int is_field;
+    size_t fldidx;    /**< resolved against the table at BROWSE open */
+} rx_bcol;
+
 typedef struct rx_stmt {
     st_kind kind;
     int line, col;
@@ -131,7 +149,15 @@ typedef struct rx_stmt {
     char target[128]; /**< assignment target / raw text */
     char **strs;      /**< misc words (SET args etc.) */
     size_t nstrs;
+    rx_bcol *bcols;   /**< ST_BROWSE FIELDS specs */
+    size_t nbcols, capbcols;
 } rx_stmt;
+
+/** Steal the BROWSE column specs out of a stmt (sets s->bcols = NULL), so a
+ *  long-lived UI object can own the expressions after the stmt is freed. */
+void rx_stmt_steal_bcols(rx_stmt *s, rx_bcol **cols, size_t *ncols);
+/** Append a clause (public wrapper for command handlers synthesizing stmts). */
+void rx_stmt_add_clause(rx_stmt *s, const char *key, const char *word, rx_expr *e);
 
 /** Parse a token stream into statements (one per logical line). */
 int rx_parse(rx_tok *toks, size_t ntok, rx_stmt **out, size_t *nout, r_err *err);
@@ -223,7 +249,22 @@ struct rx_ctx {
     int locate_kind;    /**< scope kind of the active LOCATE */
     uint32_t locate_n;  /**< scope count of the active LOCATE */
     int locate_active;  /**< LOCATE issued, chain still open */
+    /* M4: interactive BROWSE hook + SET RELATION / SET SKIP state */
+    int (*browse_fn)(void *ud, struct rx_stmt *s); /**< NULL in batch -> NOUI 601 */
+    void *browse_ud;
+    struct rx_rel *rels; /**< SET RELATION list (driver -> target) */
+    size_t nrels, caprels;
+    int skip_to[256];    /**< SET SKIP TO alias areas (1-based) */
 };
+
+/** One SET RELATION (spec §8.1, M4): moving the driver work area
+ *  repositions target by evaluating e in the driver. Without an index
+ *  (M6) the key must be numeric and positions the target by record number. */
+typedef struct rx_rel {
+    int driver;   /**< work area whose movement drives the relation */
+    rx_expr *e;   /**< key expression, evaluated with driver selected */
+    int target;   /**< INTO alias work area */
+} rx_rel;
 
 
 void rx_ctx_init(rx_ctx *ctx, FILE *out, int test_mode);
@@ -292,6 +333,18 @@ int rx_cmd_create(rx_ctx *ctx, rx_stmt *s);
 int rx_cmd_flush(rx_ctx *ctx, rx_stmt *s);
 int rx_cmd_type(rx_ctx *ctx, rx_stmt *s);
 int rx_cmd_unlock(rx_ctx *ctx, rx_stmt *s);
+
+/* ---- M4: navigation with relation follow + relations ---- */
+/** GO TO recno in the current work area, then reposition related parents. */
+int rx_nav_goto(rx_ctx *ctx, uint32_t recno);
+/** SKIP delta in the current work area, then reposition related parents
+ *  (SET SKIP TO targets are not repositioned on skips). */
+int rx_nav_skip(rx_ctx *ctx, int32_t delta);
+/** Reposition every relation whose driver is `driver`; via_skip honors
+ *  SET SKIP TO. Evaluates each key expression with the driver selected. */
+void rx_rel_apply(rx_ctx *ctx, int driver, int via_skip);
+/** Work area of an alias, -1 if none. */
+int rx_rel_alias_area(const char *alias);
 
 #ifdef __cplusplus
 }

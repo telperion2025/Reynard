@@ -1,0 +1,11 @@
+# §9.1 / M4 gate: BROWSE opens the grid as a full-workspace window on the pane
+# stack; arrows/PgDn move the record cursor (status line shows N/M).
+text USE people
+key enter
+text BROWSE
+key enter
+key down
+key down
+key right
+key pgdn
+eof

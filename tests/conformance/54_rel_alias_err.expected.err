@@ -1,0 +1,3 @@
+Error in line 1 col 1 of case.prg: Alias not found
+SET RELATION TO RECNO() INTO NOPE
+^

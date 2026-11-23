@@ -54,6 +54,10 @@ void rx_ctx_free(rx_ctx *ctx)
     if (ctx->filter_on || ctx->filter.ops) {
         rx_code_free(&ctx->filter);
     }
+    for (size_t i = 0; i < ctx->nrels; i++) {
+        rx_expr_free(ctx->rels[i].e);
+    }
+    free(ctx->rels);
     /* locate_expr is borrowed from the statement list (owned by the caller) */
     rx_memvar_clear(ctx);
 }

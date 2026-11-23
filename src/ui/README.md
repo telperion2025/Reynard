@@ -1,4 +1,4 @@
-# src/ui — the full-screen UI (spec §6, milestone M3)
+# src/ui — the full-screen UI (spec §6, milestones M3–M4)
 
 Screen layout: menubar row 0, workspace with the uniform pane stack,
 status line on the last row (§6.1). Layering: `ui` includes only `lang`,
@@ -19,6 +19,7 @@ status line on the last row (§6.1). Layering: `ui` includes only `lang`,
 | statusbar.c | status line: message left; CAPS/NUM/clock/workarea+alias/rec N/M/DEL right (§6.5) |
 | dialog.c | modal dialogs on the pane stack: About, Macros, Filer, Calculator, Calendar/Diary, ASCII Chart |
 | helpwin.c | Help contents window |
+| browse.c | M4 §9.1 BROWSE/CHANGE grid: full-workspace window on the pane stack, in-cell editing via getsay, FREEZE/PARTITION/LEDIT/REDIT, mouse reorder/resize/scroll, Ctrl+T/Ctrl+N, record locks on edit in shared mode |
 
 Mouse capture: a window that consumes an RM_PRESS keeps receiving drags
 until RM_RELEASE, which never triggers an action (§5.4). Resize

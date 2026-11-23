@@ -714,6 +714,38 @@ int rx_cmd_list(rx_ctx *ctx, rx_stmt *s, int display)
     return rc;
 }
 
+/* M4: navigation helpers that reposition related parent work areas
+   (SET RELATION) after every record-pointer move */
+int rx_nav_goto(rx_ctx *ctx, uint32_t recno)
+{
+    rx_dbf *dbf;
+    int rc = rx_wa_dbf(0, &dbf);
+    if (rc != R_OK) {
+        return rc;
+    }
+    rc = rx_dbf_goto(dbf, recno);
+    if (rc != R_OK) {
+        return rc;
+    }
+    rx_rel_apply(ctx, rx_wa_current(), 0);
+    return R_OK;
+}
+
+int rx_nav_skip(rx_ctx *ctx, int32_t delta)
+{
+    rx_dbf *dbf;
+    int rc = rx_wa_dbf(0, &dbf);
+    if (rc != R_OK) {
+        return rc;
+    }
+    rc = rx_dbf_skip(dbf, delta);
+    if (rc != R_OK) {
+        return rc;
+    }
+    rx_rel_apply(ctx, rx_wa_current(), 1);
+    return R_OK;
+}
+
 int rx_cmd_go(rx_ctx *ctx, rx_stmt *s)
 {
     rx_dbf *dbf;
@@ -724,14 +756,12 @@ int rx_cmd_go(rx_ctx *ctx, rx_stmt *s)
     for (size_t i = 0; i < s->nclause; i++) {
         if (strcmp(s->clauses[i].key, "TARGET") == 0) {
             if (strcmp(s->clauses[i].word, "TOP") == 0) {
-                uint32_t n;
-                rx_dbf_recount(dbf, &n);
-                return n ? rx_dbf_goto(dbf, 1) : rx_dbf_goto(dbf, 1);
+                return rx_nav_goto(ctx, 1);
             }
             if (strcmp(s->clauses[i].word, "BOTTOM") == 0) {
                 uint32_t n;
                 rx_dbf_recount(dbf, &n);
-                return rx_dbf_goto(dbf, n ? n : 1);
+                return rx_nav_goto(ctx, n ? n : 1);
             }
             rval v;
             rx_rval_undef(&v);
@@ -752,7 +782,7 @@ int rx_cmd_go(rx_ctx *ctx, rx_stmt *s)
                 return rx_raise(ctx, R_ERR_DBF_RECNO, s->line, s->col,
                                 "Record number out of range");
             }
-            return rx_dbf_goto(dbf, (uint32_t)target);
+            return rx_nav_goto(ctx, (uint32_t)target);
         }
     }
     return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "GO requires TOP, BOTTOM or a record");
@@ -778,7 +808,7 @@ int rx_cmd_skip(rx_ctx *ctx, rx_stmt *s)
         rx_rval_free(&v);
         delta = (int32_t)d;
     }
-    return rx_dbf_skip(dbf, delta);
+    return rx_nav_skip(ctx, delta);
 }
 
 /* ============================ M2 write commands ============================ */
@@ -1113,7 +1143,7 @@ int rx_cmd_locate(rx_ctx *ctx, rx_stmt *s, int cont)
         rx_code_free(&while_code);
     }
     if (found) {
-        rx_dbf_goto(dbf, found_rec);
+        rx_nav_goto(ctx, found_rec);
         rx_dbf_set_found(dbf, 1);
         if (ctx->set.talk) {
             rx_outf(ctx, "Record = %u\n", found_rec);
@@ -1370,8 +1400,20 @@ int rx_cmd_append(rx_ctx *ctx, rx_stmt *s)
         return rc;
     }
     if (s->nstrs == 0) {
-        return rx_raise(ctx, R_ERR_NOUI, s->line, s->col,
-                        "APPEND requires the interactive UI (milestone M3+)");
+        /* bare APPEND: interactive opens the append-mode Browse grid (M4) */
+        if (!ctx->browse_fn) {
+            return rx_raise(ctx, R_ERR_NOUI, s->line, s->col,
+                            "APPEND requires the interactive UI");
+        }
+        rx_stmt bs;
+        memset(&bs, 0, sizeof(bs));
+        bs.kind = ST_BROWSE;
+        bs.line = s->line;
+        bs.col = s->col;
+        rx_stmt_add_clause(&bs, "APPENDMODE", "1", NULL);
+        int brc = ctx->browse_fn(ctx->browse_ud, &bs);
+        rx_stmt_free(&bs);
+        return brc;
     }
     if (rx_strcasecmp(s->strs[0], "BLANK") == 0) {
         int exclusive = rx_dbf_is_exclusive(dbf);
@@ -1392,8 +1434,20 @@ int rx_cmd_append(rx_ctx *ctx, rx_stmt *s)
         return R_OK;
     }
     if (rx_strcasecmp(s->strs[0], "APPEND") == 0) {
-        return rx_raise(ctx, R_ERR_NOUI, s->line, s->col,
-                        "APPEND requires the interactive UI (milestone M3+)");
+        /* bare APPEND (parser echoed the keyword): append-mode Browse (M4) */
+        if (!ctx->browse_fn) {
+            return rx_raise(ctx, R_ERR_NOUI, s->line, s->col,
+                            "APPEND requires the interactive UI");
+        }
+        rx_stmt bs;
+        memset(&bs, 0, sizeof(bs));
+        bs.kind = ST_BROWSE;
+        bs.line = s->line;
+        bs.col = s->col;
+        rx_stmt_add_clause(&bs, "APPENDMODE", "1", NULL);
+        int brc = ctx->browse_fn(ctx->browse_ud, &bs);
+        rx_stmt_free(&bs);
+        return brc;
     }
     /* APPEND FROM */
     const char *type = NULL;

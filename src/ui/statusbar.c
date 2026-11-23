@@ -57,6 +57,17 @@ static long call_num(rx_ctx *ctx, const char *name, int *ok)
     return r;
 }
 
+static int call_logic(rx_ctx *ctx, const char *name, int *ok)
+{
+    rval v;
+    *ok = call0(ctx, name, &v) == 0 && v.t == RX_T_L;
+    int r = *ok && v.u.l == L_T;
+    if (v.t != RX_T_U) {
+        rx_rval_free(&v);
+    }
+    return r;
+}
+
 void statusbar_render(struct rx_ui *ui)
 {
     rx_screen *s = &ui->scr;
@@ -68,7 +79,7 @@ void statusbar_render(struct rx_ui *ui)
     char alias[64] = "";
     char clock[16] = "";
     int used_ok = 0;
-    long used = call_num(ui->ctx, "USED", &used_ok);
+    int used = call_logic(ui->ctx, "USED", &used_ok);
     if (used_ok && used) {
         call_str(ui->ctx, "ALIAS", alias, sizeof(alias));
     }

@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 static rx_ui *g_ui;
 
@@ -173,6 +174,15 @@ static void handle_resize(rx_ui *ui)
         if (ui->cmd) {
             cmdwin_layout(ui, ui->cmd);
         }
+        for (rx_win *win = ui->wins; win; win = win->next) {
+            if (win->fullscreen) { /* M4 browse grids track the workspace */
+                win->x = 0;
+                win->y = 1;
+                win->w = w;
+                win->h = h - 2;
+                win_clamp(ui, win);
+            }
+        }
         ui->dirty = 1;
     }
 }
@@ -208,6 +218,8 @@ int rx_ui_run(rx_ctx *ctx, const term_backend *tb)
     ctx->out_ud = ui.cmd;
     ctx->msg_line = ui_msgline_hook;
     ctx->msg_ud = &ui;
+    ctx->browse_fn = ui_browse_open; /* M4: BROWSE / bare APPEND open the grid */
+    ctx->browse_ud = &ui;
 
     cmdwin_out(ui.cmd, "Reynard 0.1.0 — the clever fox of terminals\n",
                strlen("Reynard 0.1.0 — the clever fox of terminals\n"));
@@ -218,6 +230,11 @@ int rx_ui_run(rx_ctx *ctx, const term_backend *tb)
     ui_render(&ui);
     scr_blit(&ui.scr, tb);
 
+    /* RX_PERF=<file>: time each event's handle+render (M4 §11.3 browse gate) */
+    const char *perf_path = getenv("RX_PERF");
+    unsigned long perf_n = 0;
+    double perf_sum = 0, perf_max = 0;
+
     for (;;) {
         revent ev;
         memset(&ev, 0, sizeof(ev));
@@ -225,6 +242,10 @@ int rx_ui_run(rx_ctx *ctx, const term_backend *tb)
         int rc = tb->poll(&ev, 250);
         if (rc != R_OK) {
             break;
+        }
+        struct timespec t0, t1;
+        if (perf_path) {
+            clock_gettime(CLOCK_MONOTONIC, &t0);
         }
         int active = 0;
         switch (ev.kind) {
@@ -254,12 +275,31 @@ int rx_ui_run(rx_ctx *ctx, const term_backend *tb)
             ui.dirty = 0;
             scr_blit(&ui.scr, tb);
         }
+        if (perf_path) {
+            clock_gettime(CLOCK_MONOTONIC, &t1);
+            double ms = (double)(t1.tv_sec - t0.tv_sec) * 1000.0 +
+                        (double)(t1.tv_nsec - t0.tv_nsec) / 1000000.0;
+            perf_n++;
+            perf_sum += ms;
+            if (ms > perf_max) {
+                perf_max = ms;
+            }
+        }
     }
 done:
+    if (perf_path && perf_n) {
+        FILE *pf = fopen(perf_path, "w");
+        if (pf) {
+            fprintf(pf, "n=%lu avg=%.3f max=%.3f\n", perf_n, perf_sum / (double)perf_n, perf_max);
+            fclose(pf);
+        }
+    }
     ctx->out_fn = NULL;
     ctx->out_ud = NULL;
     ctx->msg_line = NULL;
     ctx->msg_ud = NULL;
+    ctx->browse_fn = NULL;
+    ctx->browse_ud = NULL;
     while (ui.wins) {
         rx_win *w = ui.wins;
         win_remove(&ui, w);

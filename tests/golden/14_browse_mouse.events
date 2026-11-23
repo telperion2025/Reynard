@@ -1,0 +1,30 @@
+# §5.4/§9.1 mouse: wheel scrolls rows, click positions the cursor, header
+# drag reorders columns, border drag resizes a column. 60x12 geometry so the
+# 11-record table actually scrolls.
+text USE people
+key enter
+text BROWSE
+key enter
+key ctrl-n
+key esc
+key ctrl-n
+key esc
+key ctrl-n
+key esc
+key ctrl-n
+key esc
+key ctrl-n
+key esc
+key ctrl-n
+key esc
+mouse wheeldn 30 6 1
+mouse wheeldn 30 6 1
+mouse press 10 6 1
+mouse release 10 6 1
+mouse press 3 2 1
+mouse drag 30 2 1
+mouse release 30 2 1
+mouse press 35 2 1
+mouse drag 40 2 1
+mouse release 40 2 1
+eof

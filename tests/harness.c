@@ -1113,6 +1113,167 @@ static int golden(const char *dir, const char *bin, const char *fixtures, const 
     return failures ? 1 : 0;
 }
 
+/* M4 gate (spec §11.3): browse relayout must stay under 16ms/keystroke on a
+   100k-record DBF. Generates large.dbf deterministically, replays a scripted
+   BROWSE + 300 PgDn session through the script backend with RX_PERF timing,
+   and asserts the average per-event handle+render time. */
+static int browseperf(const char *workroot, const char *bin)
+{
+    char absbin[1200], absroot[1000];
+    abs_path(bin, absbin, sizeof(absbin));
+    abs_path(workroot, absroot, sizeof(absroot));
+    mkdir(absroot, 0755);
+    char wd[1100];
+    snprintf(wd, sizeof(wd), "%s/perf-XXXXXX", absroot);
+    if (rx_mkdtemp(wd) != 0) {
+        perror("mkdtemp");
+        return 1;
+    }
+    /* Write a valid 100k-record DBF (v0x03, no memo, CP mark 0) with a few
+       block writes instead of 100k append+flush round-trips. */
+    char dbfpath[1200];
+    snprintf(dbfpath, sizeof(dbfpath), "%s/large.dbf", wd);
+    {
+        static const char *fnames[] = { "ID", "NAME", "SCORE", "BORN", "MARRIED" };
+        static const char ftypes[] = { 'N', 'C', 'N', 'D', 'L' };
+        static const uint8_t flens[] = { 8, 20, 8, 8, 1 };
+        const size_t nf = 5;
+        const uint16_t hdr_size = (uint16_t)(32 + 32 * nf + 1);
+        const uint16_t rec_size = (uint16_t)(1 + 8 + 20 + 8 + 8 + 1);
+        const uint32_t nrec = 100000;
+        uint8_t *buf = malloc((size_t)hdr_size + (size_t)nrec * rec_size + 1);
+        if (!buf) {
+            fprintf(stderr, "browseperf: out of memory\n");
+            return 1;
+        }
+        memset(buf, 0, hdr_size);
+        buf[0] = 0x03;
+        buf[1] = 100; /* 2000-01-01 like test mode */
+        buf[2] = 1;
+        buf[3] = 1;
+        buf[4] = (uint8_t)(nrec & 0xFF);
+        buf[5] = (uint8_t)((nrec >> 8) & 0xFF);
+        buf[6] = (uint8_t)((nrec >> 16) & 0xFF);
+        buf[7] = (uint8_t)((nrec >> 24) & 0xFF);
+        buf[8] = (uint8_t)(hdr_size & 0xFF);
+        buf[9] = (uint8_t)(hdr_size >> 8);
+        buf[10] = (uint8_t)(rec_size & 0xFF);
+        buf[11] = (uint8_t)(rec_size >> 8);
+        uint8_t *fd = buf + 32;
+        int off = 1;
+        for (size_t i = 0; i < nf; i++) {
+            memset(fd, 0, 32);
+            memcpy(fd, fnames[i], strlen(fnames[i]));
+            fd[11] = (uint8_t)ftypes[i];
+            fd[16] = flens[i];
+            fd[17] = (uint8_t)(i == 2 ? 2 : 0); /* SCORE dec */
+            fd += 32;
+            off += flens[i];
+        }
+        buf[32 + 32 * nf] = 0x0D;
+        uint8_t *rec = buf + hdr_size;
+        for (uint32_t i = 1; i <= nrec; i++) {
+            memset(rec, ' ', rec_size);
+            rec[0] = ' ';
+            char tmp[32];
+            snprintf(tmp, sizeof(tmp), "%8u", i);
+            memcpy(rec + 1, tmp, 8);
+            char nm[32];
+            snprintf(nm, sizeof(nm), "name-%u", i);
+            memcpy(rec + 9, nm, strlen(nm) < 20 ? strlen(nm) : 20);
+            snprintf(tmp, sizeof(tmp), "%8.2f", (double)(i % 1000) / 10.0);
+            memcpy(rec + 29, tmp, 8);
+            snprintf(tmp, sizeof(tmp), "%04d%02d%02d", 1990 + (int)(i % 30), 1 + (int)(i % 12),
+                     1 + (int)(i % 28));
+            memcpy(rec + 37, tmp, 8);
+            rec[45] = (i % 2) ? 'T' : 'F';
+            rec += rec_size;
+        }
+        *rec = 0x1A;
+        FILE *df = fopen(dbfpath, "wb");
+        if (!df) {
+            perror("fopen large.dbf");
+            free(buf);
+            return 1;
+        }
+        size_t total = (size_t)hdr_size + (size_t)nrec * rec_size + 1;
+        if (fwrite(buf, 1, total, df) != total) {
+            fprintf(stderr, "browseperf: short write\n");
+            fclose(df);
+            free(buf);
+            return 1;
+        }
+        fclose(df);
+        free(buf);
+    }
+
+    char evp[1200], dump[1200], perf[1200], home[1200], outp[1200], errp[1200];
+    snprintf(evp, sizeof(evp), "%s/ev.events", wd);
+    snprintf(dump, sizeof(dump), "%s/dump.txt", wd);
+    snprintf(perf, sizeof(perf), "%s/perf.txt", wd);
+    snprintf(home, sizeof(home), "%s/home", wd);
+    snprintf(outp, sizeof(outp), "%s/out.txt", wd);
+    snprintf(errp, sizeof(errp), "%s/err.txt", wd);
+    FILE *f = fopen(evp, "w");
+    if (!f) {
+        perror("fopen");
+        return 1;
+    }
+    fprintf(f, "text USE large\nkey enter\ntext BROWSE\nkey enter\n");
+    for (int i = 0; i < 300; i++) {
+        fprintf(f, "key pgdn\n");
+    }
+    fprintf(f, "key down\nkey up\nkey left\nkey right\nkey tab\nkey pgup\neof\n");
+    fclose(f);
+    mkdir(home, 0755);
+
+    char absev[1400];
+    abs_path(evp, absev, sizeof(absev));
+    pid_t pid = fork();
+    if (pid == 0) {
+        if (chdir(wd) != 0) {
+            _exit(99);
+        }
+        FILE *fo = freopen(outp, "w", stdout);
+        FILE *fe = freopen(errp, "w", stderr);
+        (void)fo;
+        (void)fe;
+        setenv("RX_EVENTS", absev, 1);
+        setenv("RX_DUMP", dump, 1);
+        setenv("RX_PERF", perf, 1);
+        setenv("HOME", home, 1);
+        char xdg[1400];
+        snprintf(xdg, sizeof(xdg), "%s/.cache", home);
+        setenv("XDG_CACHE_HOME", xdg, 1);
+        execl(absbin, "reynard", "-t", (char *)NULL);
+        _exit(127);
+    }
+    int status = 0;
+    waitpid(pid, &status, 0);
+    int exitcode = WIFEXITED(status) ? WEXITSTATUS(status) : 128;
+    size_t pn = 0;
+    char *ptxt = read_file(perf, &pn);
+    unsigned long n = 0;
+    double avg = 0, max = 0;
+    if (ptxt) {
+        sscanf(ptxt, "n=%lu avg=%lf max=%lf", &n, &avg, &max);
+        free(ptxt);
+    }
+    int ok = exitcode == 0 && n >= 300 && avg <= 16.0;
+    printf("browseperf: %s (exit=%d, %lu events on 100k-record dbf, avg=%.3fms max=%.3fms, gate 16ms)\n",
+           ok ? "PASS" : "FAIL", exitcode, n, avg, max);
+    if (!ok && exitcode != 0) {
+        size_t en;
+        char *e = read_file(errp, &en);
+        if (e) {
+            fprintf(stderr, "stderr: %s\n", e);
+            free(e);
+        }
+    }
+    rm_rf(wd);
+    return ok ? 0 : 1;
+}
+
 int main(int argc, char **argv)
 {
     rx_log_init();
@@ -1140,9 +1301,13 @@ int main(int argc, char **argv)
         int update = argc >= 7 && strcmp(argv[6], "update") == 0;
         return golden(argv[2], argv[3], argv[4], argv[5], update);
     }
+    if (argc >= 4 && strcmp(argv[1], "browseperf") == 0) {
+        return browseperf(argv[2], argv[3]);
+    }
     fprintf(stderr, "usage: %s selftest | conformance <dir> <reynard> <fixtures> <workroot>"
                     " | roundtrip <fixtures> <workroot> | lockrace <workroot>"
-                    " | golden <dir> <reynard> <fixtures> <workroot> [update]\n",
+                    " | golden <dir> <reynard> <fixtures> <workroot> [update]"
+                    " | browseperf <workroot> <reynard>\n",
             argv[0]);
     return 2;
 }

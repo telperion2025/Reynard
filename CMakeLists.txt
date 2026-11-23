@@ -45,6 +45,7 @@ set(RX_CORE_SOURCES
     src/ui/statusbar.c
     src/ui/dialog.c
     src/ui/helpwin.c
+    src/ui/browse.c
     src/ui/ui.c
     src/data/dbf.c
     src/data/dbf_create.c
@@ -197,6 +198,10 @@ add_test(NAME golden_screens
         $<TARGET_FILE:reynard>
         ${CMAKE_CURRENT_SOURCE_DIR}/testdata/gen
         ${CMAKE_CURRENT_BINARY_DIR}/test-work-golden)
+add_test(NAME browse_perf
+    COMMAND reynard-harness browseperf
+        ${CMAKE_CURRENT_BINARY_DIR}/test-work-perf
+        $<TARGET_FILE:reynard>)
 
 if(ENABLE_FUZZ)
     add_subdirectory(tests/fuzz)

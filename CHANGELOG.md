@@ -3,7 +3,7 @@
 All notable changes per milestone (spec §0.5). Format: Keep a Changelog;
 Reynard is pre-1.0, versions are milestone tags M0..M10 then v1.0.0.
 
-## [Unreleased] — M0..M3
+## [Unreleased] — M0..M4
 
 ### M0 — Skeleton and term layer
 - CMake + Makefile.simple builds, zero warnings under -Wall -Wextra
@@ -167,3 +167,36 @@ Reynard is pre-1.0, versions are milestone tags M0..M10 then v1.0.0.
   widened to 56x21 and Calendar/Diary to 34x13 so their own content fits.
   New golden 10_text_clipping locks this in (200-char output clipped at the
   Command border; ASCII grid fully inside its dialog).
+
+### M4 — Browse v1 (spec §9.1, gate §14)
+- src/ui/browse.c: BROWSE/CHANGE grid as a full-workspace window on the
+  uniform pane stack, bound to one work area (multiple browse windows on
+  different areas supported). Columns default to all fields; BROWSE
+  FIELDS supports :H/:W/:P/:V[:E]/:F/:R plus computed expression columns.
+  FREEZE, PARTITION (fixed left pane + scrollable right), LEDIT/REDIT,
+  LOCK, WIDTH, NOAPPEND/NODELETE/NOEDIT/NOMODIFY, NOWAIT, TITLE, FOR, WHEN,
+  record-level VALID[:E] all parsed (parser.c) and honored.
+- Editing: in-cell typing replaces the cell (FoxPro), Enter/Tab/Up/Down
+  commit + move, arrows edit within the text, Esc cancels; commits parse per
+  field type (C/N/F/I/D via CTOD/L), take an fcntl record lock in shared
+  mode (§8.5 shared locking), evaluate :V then record VALID, revert on
+  failure with the :E message on the message line. Ctrl+T toggles the
+  delete mark, Ctrl+N appends (bare APPEND opens append-mode browse).
+  Memo/G/P cells read-only (DEVIATIONS #27). Mouse: click cell, drag
+  selection range, wheel scroll, header drag reorder, border drag resize,
+  double-click border size-to-widest (§5.4).
+- lang: rx_ctx gains the browse_fn hook (NULL in batch -> R_ERR_NOUI 601);
+  SET RELATION TO/OFF INTO/ADDITIVE and SET SKIP TO implemented
+  (rx_rel_apply fires on GO/SKIP/LOCATE via rx_nav_goto/rx_nav_skip;
+  recno-keyed without indexes, DEVIATIONS #30). menudef Database > Browse
+  and Record > Append now run BROWSE/APPEND.
+- ui: status bar right side shows work area + alias + rec N/M again
+  (USED() is logical; statusbar now reads it as such). RX_PERF=<file>
+  times each UI event's handle+render for the perf gate.
+- Tests: conformance 49 -> 60 cases (relations, SET SKIP, relation
+  errors, BROWSE clause parse errors, bare-APPEND NOUI); golden screens
+  10 -> 16 (browse basic/edit/partition-freeze/mouse/relation/fields);
+  new `browseperf` harness mode = §11.3 gate: 100k-record DBF, 300 PgDn
+  scripted browse, asserts avg handle+render <= 16ms (measured ~0.1ms);
+  wired into ctest (browse_perf) and Makefile.simple test, so CI enforces
+  it on every matrix job.

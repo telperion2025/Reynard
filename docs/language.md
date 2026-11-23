@@ -64,9 +64,9 @@ Status legend: ✅ implemented (milestone noted), 🚧 partial, ⏳ planned (mil
 | `GO\|GOTO TOP\|BOTTOM\|RECORD n\|expr` | ✅ |
 | `SKIP [n]` | ✅ (FoxPro BOF/EOF rules, §7.6) |
 | `LIST [scope] [FOR/WHILE] [FIELDS ...] [OFF]` / `DISPLAY [scope] ...` | ✅ M2: scopes, FOR/WHILE, FIELDS, OFF, SET FILTER/HEADINGS/DELETED, deleted `*` marker |
-| `BROWSE` | ⏳ M4 (raises R_ERR_NOUI 601 in batch) |
+| `BROWSE [FIELDS f[:H="t"][:W=n][:P="p"][:V=e[:E="m"]][:F][:R], ...] [PARTITION n] [LEDIT|REDIT] [FREEZE f] [LOCK n] [WIDTH n] [NOAPPEND] [NODELETE] [NOEDIT|NOMODIFY] [NOWAIT] [TITLE "t"] [FOR e] [WHEN e] [VALID[:F] e[:E="m"]]` / `CHANGE` | ✅ M4 interactive grid (§9.1: nav/edit/:V/FREEZE/PARTITION/LEDIT/REDIT/mouse; raises R_ERR_NOUI 601 in batch); header popover sort/filter ⏳ M6; memo-cell editing ⏳ M7 |
 | `LOCATE [scope] FOR e [WHILE e]` / `CONTINUE` | ✅ M2 (FOUND(), `Record = n`); SEEK/SET ORDER/SET INDEX ⏳ M6 |
-| `APPEND BLANK` / `APPEND FROM f [TYPE] SDF\|DELIMITED [WITH c\|BLANK\|TAB]` (bare APPEND ⏳ M4 BROWSE) / `REPLACE [scope] [FOR/WHILE] f WITH e, ...` / `DELETE` / `RECALL` / `PACK` / `ZAP` / `COPY TO f [FIELDS..] [scope] [TYPE SDF\|DELIMITED [WITH..]]` / `COPY STRUCTURE TO f [FIELDS..] [EXTENDED]` / `CREATE f FROM struct` / `FLUSH` / `UNLOCK [ALL]` | ✅ M2; INDEX ON/REINDEX/SORT TO/TOTAL TO/COUNT/SUM/AVERAGE/CALCULATE/SCATTER/GATHER ⏳ M4/M5 |
+| `APPEND BLANK` / `APPEND FROM f [TYPE] SDF\|DELIMITED [WITH c\|BLANK\|TAB]` (bare APPEND ✅ M4: append-mode BROWSE grid interactively, R_ERR_NOUI 601 in batch) / `REPLACE [scope] [FOR/WHILE] f WITH e, ...` / `DELETE` / `RECALL` / `PACK` / `ZAP` / `COPY TO f [FIELDS..] [scope] [TYPE SDF\|DELIMITED [WITH..]]` / `COPY STRUCTURE TO f [FIELDS..] [EXTENDED]` / `CREATE f FROM struct` / `FLUSH` / `UNLOCK [ALL]` | ✅ M2; INDEX ON/REINDEX/SORT TO/TOTAL TO/COUNT/SUM/AVERAGE/CALCULATE/SCATTER/GATHER ⏳ M4/M5 |
 | alias prefixes `alias->field`, `m.var` | ✅ |
 
 ### Environment
@@ -74,6 +74,7 @@ Status legend: ✅ implemented (milestone noted), 🚧 partial, ⏳ planned (mil
 | Command | Status |
 | --- | --- |
 | `SET <option> ON\|OFF\|TO v` | 🚧 implemented: TALK, HEADINGS, EXACT, FIXED, CENTURY, DELETED, ESCAPE, CONSOLE, SAFETY, CLOCK, MOUSE, DECIMALS, DEFAULT, PATH, DATE, EXCLUSIVE, MULTILOCKS, REPROCESS, FILTER; all other Appendix B options parse and are accepted (semantics at their milestone) |
+| `SET RELATION TO [e INTO alias [, ...]] [ADDITIVE]` / `SET RELATION OFF INTO alias` / `SET SKIP TO [alias [, ...]]` | ✅ M4 (§8.1: driver work area repositions INTO targets on GO/SKIP/LOCATE; without an index the key is numeric = record number; SET SKIP TO holds targets on SKIP; M6 adds index-keyed seeks) |
 | `? / ??` | ✅ |
 | `var = expr`, `STORE expr TO v1, v2` | ✅ |
 | `QUIT` | ✅ |

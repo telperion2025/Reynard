@@ -154,7 +154,18 @@ static int act_edit_replace(rx_ctx *ctx) { (void)ctx; return act_edit_msg("Repla
 
 static int act_db(const char *item, const char *when) { return act_msg(item, when); }
 static int act_db_setup(rx_ctx *ctx) { (void)ctx; return act_db("Setup", "M4"); }
-static int act_db_browse(rx_ctx *ctx) { (void)ctx; return act_db("Browse", "M4"); }
+
+/* run a data command through the interpreter so BROWSE opens the M4 grid */
+static int act_run(rx_ctx *ctx, const char *menu, const char *item, const char *cmd)
+{
+    trace(menu, item);
+    rx_run_source(ctx, cmd, "<menu>");
+    ctx->abort = 0; /* an interactive error must not poison the next command */
+    ctx->err.code = R_OK;
+    ctx->err_printed = 0;
+    return R_OK;
+}
+static int act_db_browse(rx_ctx *ctx) { return act_run(ctx, "Database", "Browse", "BROWSE"); }
 static int act_db_append(rx_ctx *ctx) { (void)ctx; return act_db("Append From", "M4"); }
 static int act_db_copy(rx_ctx *ctx) { (void)ctx; return act_db("Copy To", "M2 (COPY TO)"); }
 static int act_db_sort(rx_ctx *ctx) { (void)ctx; return act_db("Sort", "M5"); }
@@ -174,7 +185,7 @@ static int act_db_pack(rx_ctx *ctx)
 static int act_db_reindex(rx_ctx *ctx) { (void)ctx; return act_db("Reindex", "M6"); }
 
 static int act_rec(const char *item) { return act_msg(item, "M4"); }
-static int act_rec_append(rx_ctx *ctx) { (void)ctx; return act_rec("Append"); }
+static int act_rec_append(rx_ctx *ctx) { return act_run(ctx, "Record", "Append", "APPEND"); }
 static int act_rec_change(rx_ctx *ctx) { (void)ctx; return act_rec("Change"); }
 static int act_rec_goto(rx_ctx *ctx) { (void)ctx; return act_rec("Goto"); }
 static int act_rec_locate(rx_ctx *ctx) { (void)ctx; return act_rec("Locate"); }

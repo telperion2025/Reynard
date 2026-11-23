@@ -138,6 +138,7 @@ static int word_logic(parser *p, const char *w, rx_logic *out)
 /* ============================ expressions ============================ */
 
 static int parse_expr(parser *p, rx_expr **out);
+static int parse_browse(parser *p, rx_stmt *s);
 
 static int parse_primary(parser *p, rx_expr **out)
 {
@@ -582,6 +583,33 @@ static int stmt_push(parser *p, rx_stmt *s)
     return R_OK;
 }
 
+static void st_add_bcol(rx_stmt *s, const rx_bcol *col)
+{
+    if (s->nbcols == s->capbcols) {
+        size_t nc = s->capbcols ? s->capbcols * 2 : 8;
+        rx_bcol *nb = realloc(s->bcols, nc * sizeof(rx_bcol));
+        if (!nb) {
+            RX_FATAL("out of memory");
+        }
+        s->bcols = nb;
+        s->capbcols = nc;
+    }
+    s->bcols[s->nbcols++] = *col;
+}
+
+void rx_stmt_steal_bcols(rx_stmt *s, rx_bcol **cols, size_t *ncols)
+{
+    *cols = s->bcols;
+    *ncols = s->nbcols;
+    s->bcols = NULL;
+    s->nbcols = s->capbcols = 0;
+}
+
+void rx_stmt_add_clause(rx_stmt *s, const char *key, const char *word, rx_expr *e)
+{
+    st_add_clause(s, key, word, e);
+}
+
 /* frees the contents of *s, not the struct itself (stmts are array elements) */
 void rx_stmt_free(rx_stmt *s)
 {
@@ -599,6 +627,11 @@ void rx_stmt_free(rx_stmt *s)
         free(s->strs[i]);
     }
     free(s->strs);
+    for (size_t i = 0; i < s->nbcols; i++) {
+        rx_expr_free(s->bcols[i].e);
+        rx_expr_free(s->bcols[i].valid);
+    }
+    free(s->bcols);
     memset(s, 0, sizeof(*s));
 }
 
@@ -1035,6 +1068,100 @@ static int parse_stmt(parser *p)
                 break;
             }
             case ST_SET:
+                if (pk_word_is(p, "RELATION")) {
+                    /* SET RELATION [TO [e INTO alias [, ...]] [ADDITIVE]] |
+                       SET RELATION OFF INTO alias  (M4) */
+                    pk_adv(p);
+                    if (pk_word_is(p, "OFF")) {
+                        pk_adv(p);
+                        if (!pk_word_is(p, "INTO")) {
+                            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                           "Expected INTO after SET RELATION OFF");
+                        }
+                        pk_adv(p);
+                        if (pk_cur(p)->kind != TK_WORD) {
+                            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                           "Expected an alias after INTO");
+                        }
+                        st_add_clause(&s, "REL_OFF", pk_cur(p)->text, NULL);
+                        pk_adv(p);
+                        if (!end_of_line(p)) {
+                            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                           "Syntax error in SET RELATION");
+                        }
+                        break;
+                    }
+                    if (pk_word_is(p, "TO")) {
+                        pk_adv(p);
+                    }
+                    if (end_of_line(p)) {
+                        st_add_clause(&s, "REL_CLEAR", "", NULL);
+                        break;
+                    }
+                    for (;;) {
+                        rx_expr *e = NULL;
+                        rc = parse_expr(p, &e);
+                        if (rc != R_OK) {
+                            return rc;
+                        }
+                        if (!pk_word_is(p, "INTO")) {
+                            rx_expr_free(e);
+                            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                           "Expected INTO in SET RELATION");
+                        }
+                        pk_adv(p);
+                        if (pk_cur(p)->kind != TK_WORD) {
+                            rx_expr_free(e);
+                            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                           "Expected an alias after INTO");
+                        }
+                        st_add_clause(&s, "REL", pk_cur(p)->text, e);
+                        pk_adv(p);
+                        if (pk_op(p, OP_COMMA)) {
+                            pk_adv(p);
+                            continue;
+                        }
+                        break;
+                    }
+                    if (pk_word_is(p, "ADDITIVE")) {
+                        st_add_clause(&s, "REL_ADD", "1", NULL);
+                        pk_adv(p);
+                    }
+                    if (!end_of_line(p)) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                       "Syntax error in SET RELATION");
+                    }
+                    break;
+                }
+                if (pk_word_is(p, "SKIP")) {
+                    /* SET SKIP TO [alias [, ...]]  (M4) */
+                    pk_adv(p);
+                    if (!pk_word_is(p, "TO")) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected TO after SET SKIP");
+                    }
+                    pk_adv(p);
+                    if (end_of_line(p)) {
+                        st_add_clause(&s, "SKIP_CLEAR", "", NULL);
+                        break;
+                    }
+                    for (;;) {
+                        if (pk_cur(p)->kind != TK_WORD) {
+                            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                           "Expected an alias in SET SKIP TO");
+                        }
+                        st_add_clause(&s, "SKIP", pk_cur(p)->text, NULL);
+                        pk_adv(p);
+                        if (pk_op(p, OP_COMMA)) {
+                            pk_adv(p);
+                            continue;
+                        }
+                        break;
+                    }
+                    if (!end_of_line(p)) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in SET SKIP");
+                    }
+                    break;
+                }
                 if (pk_word_is(p, "FILTER")) {
                     /* SET FILTER TO [expr] — the expr is compiled at runtime */
                     pk_adv(p);
@@ -1070,9 +1197,15 @@ static int parse_stmt(parser *p)
                     pk_adv(p);
                 }
                 break;
+            case ST_BROWSE: {
+                int brc = parse_browse(p, &s);
+                if (brc != R_OK) {
+                    return brc;
+                }
+                break;
+            }
             case ST_QUIT:
             case ST_CLEAR:
-            case ST_BROWSE:
             case ST_FLUSH:
             case ST_PACK:
             case ST_ZAP:
@@ -1342,6 +1475,265 @@ static int parse_stmt(parser *p)
         return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error");
     }
     return stmt_push(p, &s);
+}
+
+/* BROWSE clause grammar (spec §9.1, M4):
+   BROWSE [FIELDS f[:H="t"][:W=n][:P="pic"][:V=e[:E="m"]][:F][:R], ...]
+          [PARTITION n] [LEDIT|REDIT] [FREEZE f] [LOCK n] [WIDTH n]
+          [NOAPPEND] [NODELETE] [NOEDIT|NOMODIFY] [NOWAIT] [NOOPTIMIZE]
+          [TITLE "t"] [FOR e] [WHEN e] [VALID[:F] e[:E="m"]]
+          [IN [WINDOW w] | SCREEN] */
+static int parse_browse_num(parser *p, char *word, size_t wordsz)
+{
+    rx_tok *t = pk_cur(p);
+    if (t->kind != TK_NUM) {
+        return pk_fail(p, t->line, t->col, "Expected a number");
+    }
+    snprintf(word, wordsz, "%d", (int)t->num);
+    pk_adv(p);
+    return R_OK;
+}
+
+static int parse_browse_str(parser *p, char *out, size_t outsz, const char *what)
+{
+    if (!pk_is(p, TK_STR)) {
+        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, what);
+    }
+    snprintf(out, outsz, "%s", pk_cur(p)->text);
+    pk_adv(p);
+    return R_OK;
+}
+
+/* colon options shared by FIELDS items and the record-level VALID clause */
+static int parse_colon_opt(parser *p, char opt, rx_bcol *col, rx_expr **valid_out, char *verr,
+                           size_t verrsz)
+{
+    switch (opt) {
+    case 'H':
+        if (pk_expect_op(p, OP_EQ, "Expected '=' after :H") != R_OK) {
+            return R_ERR_SYNTAX;
+        }
+        return parse_browse_str(p, col ? col->header : verr, col ? sizeof(col->header) : verrsz,
+                                "Expected a quoted title after :H =");
+    case 'P':
+        /* PICTURE: parsed, input masking lands with the M7 forms runtime */
+        if (pk_expect_op(p, OP_EQ, "Expected '=' after :P") != R_OK) {
+            return R_ERR_SYNTAX;
+        }
+        if (!pk_is(p, TK_STR)) {
+            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected a quoted picture after :P =");
+        }
+        pk_adv(p);
+        return R_OK;
+    case 'W': {
+        if (pk_expect_op(p, OP_EQ, "Expected '=' after :W") != R_OK) {
+            return R_ERR_SYNTAX;
+        }
+        rx_tok *w = pk_cur(p);
+        if (w->kind != TK_NUM) {
+            return pk_fail(p, w->line, w->col, "Expected a number after :W =");
+        }
+        if (col) {
+            col->width = (int)w->num;
+        }
+        pk_adv(p);
+        return R_OK;
+    }
+    case 'V': {
+        if (pk_expect_op(p, OP_EQ, "Expected '=' after :V") != R_OK) {
+            return R_ERR_SYNTAX;
+        }
+        rx_expr *v = NULL;
+        int rc = parse_expr(p, &v);
+        if (rc != R_OK) {
+            return rc;
+        }
+        if (col) {
+            col->valid = v;
+        } else if (valid_out) {
+            *valid_out = v;
+        } else {
+            rx_expr_free(v);
+        }
+        return R_OK;
+    }
+    case 'E':
+        if (pk_expect_op(p, OP_EQ, "Expected '=' after :E") != R_OK) {
+            return R_ERR_SYNTAX;
+        }
+        return parse_browse_str(p, verr, verrsz, "Expected a quoted message after :E =");
+    case 'F':
+        if (col) {
+            col->fflag = 1;
+        }
+        return R_OK;
+    case 'R':
+        if (col) {
+            col->rflag = 1;
+        }
+        return R_OK;
+    default:
+        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Unknown BROWSE option letter");
+    }
+}
+
+static int parse_browse(parser *p, rx_stmt *s)
+{
+    while (!end_of_line(p)) {
+        rx_tok *t = pk_cur(p);
+        if (t->kind != TK_WORD) {
+            return pk_fail(p, t->line, t->col, "Syntax error in BROWSE");
+        }
+        if (rx_strcasecmp(t->text, "FIELDS") == 0) {
+            pk_adv(p);
+            for (;;) {
+                rx_bcol col;
+                memset(&col, 0, sizeof(col));
+                rx_expr *e = NULL;
+                int rc = parse_expr(p, &e);
+                if (rc != R_OK) {
+                    return rc;
+                }
+                if (e->kind == EX_VAR) {
+                    col.is_field = 1;
+                    snprintf(col.name, sizeof(col.name), "%.127s", e->name);
+                    snprintf(col.header, sizeof(col.header), "%.63s", e->name);
+                    rx_expr_free(e);
+                } else {
+                    col.e = e;
+                    snprintf(col.header, sizeof(col.header), "Expr");
+                }
+                while (pk_op(p, OP_COLON)) {
+                    pk_adv(p);
+                    rx_tok *o = pk_cur(p);
+                    if (o->kind != TK_WORD || strlen(o->text) != 1) {
+                        return pk_fail(p, o->line, o->col, "Expected an option letter after ':'");
+                    }
+                    char opt = (char)toupper((unsigned char)o->text[0]);
+                    pk_adv(p);
+                    rc = parse_colon_opt(p, opt, &col, NULL, col.verr, sizeof(col.verr));
+                    if (rc != R_OK) {
+                        return rc;
+                    }
+                }
+                st_add_bcol(s, &col);
+                if (pk_op(p, OP_COMMA)) {
+                    pk_adv(p);
+                    continue;
+                }
+                break;
+            }
+        } else if (rx_strcasecmp(t->text, "PARTITION") == 0 ||
+                   rx_strcasecmp(t->text, "LOCK") == 0 || rx_strcasecmp(t->text, "WIDTH") == 0) {
+            char key[16];
+            snprintf(key, sizeof(key), "%s", t->text);
+            for (char *q = key; *q; q++) {
+                *q = (char)toupper((unsigned char)*q);
+            }
+            pk_adv(p);
+            char word[24];
+            int rc = parse_browse_num(p, word, sizeof(word));
+            if (rc != R_OK) {
+                return rc;
+            }
+            st_add_clause(s, key, word, NULL);
+        } else if (rx_strcasecmp(t->text, "FREEZE") == 0) {
+            pk_adv(p);
+            if (pk_cur(p)->kind != TK_WORD) {
+                return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected a field after FREEZE");
+            }
+            st_add_clause(s, "FREEZE", pk_cur(p)->text, NULL);
+            pk_adv(p);
+        } else if (rx_strcasecmp(t->text, "TITLE") == 0) {
+            pk_adv(p);
+            char title[64];
+            int rc = parse_browse_str(p, title, sizeof(title), "Expected a quoted title after TITLE");
+            if (rc != R_OK) {
+                return rc;
+            }
+            st_add_clause(s, "TITLE", title, NULL);
+        } else if (rx_strcasecmp(t->text, "FOR") == 0 || rx_strcasecmp(t->text, "WHEN") == 0) {
+            char key[8];
+            snprintf(key, sizeof(key), "%s", t->text);
+            for (char *q = key; *q; q++) {
+                *q = (char)toupper((unsigned char)*q);
+            }
+            pk_adv(p);
+            rx_expr *e = NULL;
+            int rc = parse_expr(p, &e);
+            if (rc != R_OK) {
+                return rc;
+            }
+            st_add_clause(s, key, "", e);
+        } else if (rx_strcasecmp(t->text, "VALID") == 0) {
+            pk_adv(p);
+            if (pk_op(p, OP_COLON)) { /* VALID:F */
+                pk_adv(p);
+                if (!pk_word_is(p, "F")) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected F after VALID:");
+                }
+                pk_adv(p);
+            }
+            rx_expr *e = NULL;
+            int rc = parse_expr(p, &e);
+            if (rc != R_OK) {
+                return rc;
+            }
+            st_add_clause(s, "VALID", "", e);
+            char verr[160] = "";
+            while (pk_op(p, OP_COLON)) {
+                pk_adv(p);
+                rx_tok *o = pk_cur(p);
+                if (o->kind != TK_WORD || strlen(o->text) != 1) {
+                    return pk_fail(p, o->line, o->col, "Expected an option letter after ':'");
+                }
+                char opt = (char)toupper((unsigned char)o->text[0]);
+                pk_adv(p);
+                rc = parse_colon_opt(p, opt, NULL, NULL, verr, sizeof(verr));
+                if (rc != R_OK) {
+                    return rc;
+                }
+            }
+            if (verr[0]) {
+                st_add_clause(s, "VERR", verr, NULL);
+            }
+        } else if (rx_strcasecmp(t->text, "IN") == 0) {
+            pk_adv(p);
+            if (pk_word_is(p, "WINDOW")) {
+                pk_adv(p);
+                if (pk_cur(p)->kind == TK_WORD) {
+                    pk_adv(p); /* user windows land with M5 DEFINE WINDOW */
+                }
+            } else if (pk_word_is(p, "SCREEN")) {
+                pk_adv(p);
+            } else {
+                return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected WINDOW or SCREEN after IN");
+            }
+        } else {
+            /* flag clauses: LEDIT REDIT NOAPPEND NODELETE NOEDIT NOMODIFY NOWAIT
+               NOOPTIMIZE SCREEN */
+            static const char *flags[] = { "LEDIT",   "REDIT",  "NOAPPEND", "NODELETE", "NOEDIT",
+                                           "NOMODIFY", "NOWAIT", "NOOPTIMIZE", "SCREEN", NULL };
+            int known = 0;
+            for (int k = 0; flags[k]; k++) {
+                if (rx_strcasecmp(t->text, flags[k]) == 0) {
+                    known = 1;
+                    break;
+                }
+            }
+            if (!known) {
+                return pk_fail(p, t->line, t->col, "Syntax error in BROWSE");
+            }
+            char key[16];
+            snprintf(key, sizeof(key), "%s", t->text);
+            for (char *q = key; *q; q++) {
+                *q = (char)toupper((unsigned char)*q);
+            }
+            st_add_clause(s, key, "1", NULL);
+            pk_adv(p);
+        }
+    }
+    return R_OK;
 }
 
 int rx_parse(rx_tok *toks, size_t ntok, rx_stmt **out, size_t *nout, r_err *err)

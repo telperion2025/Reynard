@@ -54,3 +54,14 @@ by CI (`.github/workflows/ci.yml` conformance-index job).
 | 47_copy_to_dbf | §8.8 COPY TO <dbf> record copy, SAFETY overwrite guard |
 | 48_err_append_nofile | App. D 107 APPEND FROM missing file |
 | 49_memo_sdf_demo | §8.3 FPT REPLACE persistence across CLOSE/USE + §8.8 COPY TO SDF → APPEND FROM (.txt default ext) + LOCATE/CONTINUE after append |
+| 50_rel_basic | §8.1 M4 SET RELATION TO RECNO() INTO alias: parent follows GO/SKIP in the driver area |
+| 51_rel_skip | §8.1 M4 SET SKIP TO: skip-listed target is not repositioned on SKIP (one-to-many) |
+| 52_rel_off_clear | §8.1 M4 SET RELATION OFF INTO alias + non-ADDITIVE re-issue clears |
+| 53_rel_additive | §8.1 M4 multiple relations with ADDITIVE across three work areas |
+| 54_rel_alias_err | App. D 503 SET RELATION INTO unknown alias |
+| 55_browse_parse_w | §9.1 M4 BROWSE FIELDS :W without '=' is a parse error (501) |
+| 56_browse_parse_partition | §9.1 M4 BROWSE PARTITION without a number is a parse error (501) |
+| 57_err_append_noui | App. D 601 bare APPEND in batch mode |
+| 58_rel_offset | §8.1 M4 relation key expression (RECNO()+1) |
+| 59_rel_bottom | §8.1 M4 GO BOTTOM drives the parent to the last record |
+| 60_skip_clear | §8.1 M4 SET SKIP TO with no aliases clears the skip list |

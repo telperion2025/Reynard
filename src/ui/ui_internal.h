@@ -52,6 +52,13 @@ enum {
 #define RXA_CMD RXA(RXC_BLACK, RXC_BCYAN)
 #define RXA_CMD_BORDER RXA(RXC_BLACK, RXC_BCYAN)
 #define RXA_CMD_TITLE RXA(RXC_BLACK, RXC_BCYAN)
+/* Browse grid (spec §9.1): blue field area, silver header, black border */
+#define RXA_BROWSE RXA(RXC_WHITE, RXC_BLUE)
+#define RXA_BROWSE_HDR RXA(RXC_BLACK, RXC_WHITE)
+#define RXA_BROWSE_HDR_ACT RXA(RXC_BLACK, RXC_BCYAN)
+#define RXA_BROWSE_BORDER RXA(RXC_BLACK, RXC_BLUE)
+#define RXA_BROWSE_TITLE RXA(RXC_BWHITE, RXC_BLUE)
+#define RXA_BROWSE_SEL RXA(RXC_BLACK, RXC_BYELLOW)
 
 /* ============================ screen (screen.c) ============================ */
 
@@ -89,6 +96,7 @@ struct rx_win {
     int min_w, min_h;
     int visible;
     int want_close; /**< set by a window to ask the loop to remove+free it */
+    int fullscreen; /**< M4 browse: always clamped to the workspace on resize */
     rx_win *next; /**< stack link; the stack head is the front window */
     void (*render)(struct rx_ui *ui, rx_win *w);
     int (*key)(struct rx_ui *ui, rx_win *w, const rkey *k);     /**< 1 = consumed */
@@ -238,6 +246,10 @@ rx_ui *rx_ui_current(void);
 void ui_set_msg(rx_ui *ui, const char *fmt, ...);
 void ui_render(rx_ui *ui);
 void ui_msgline_hook(void *ud, const char *s);
+
+/* ============================ browse (browse.c, M4 §9.1) ============================ */
+/** rx_ctx->browse_fn hook: open a BROWSE/APPEND grid window for the stmt. */
+int ui_browse_open(void *ud, rx_stmt *s);
 
 #ifdef __cplusplus
 }

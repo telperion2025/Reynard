@@ -32,3 +32,9 @@ Regenerate after an intentional UI change (then review the diff by eye):
 | 06 (extended) | corner drag resizes the window in the same scenario |
 | 09_close_button | §6.2: the title-bar × closes a dialog and hides the Command window |
 | 10_text_clipping | §6.2/§6.3: long Command output is clipped at the window border; ASCII Chart dialog fits its 52-cell grid |
+| 11_browse_basic | §9.1 M4: BROWSE grid window, arrow/PgDn navigation, status-line record pointer |
+| 12_browse_edit | §9.1 M4: in-cell edit + commit, Ctrl+T delete mark, Ctrl+N append |
+| 13_browse_partition_freeze | §9.1 M4: PARTITION split panes, FREEZE limits editing to one column |
+| 14_browse_mouse | §5.4/§9.1: wheel scroll, click-to-position, header drag reorder, border drag resize |
+| 15_browse_relation | §8.1 M4: SET RELATION drives the parent work area from the browse cursor |
+| 16_browse_fields | §9.1 M4: FIELDS with :H titles, :W width, computed expression column |

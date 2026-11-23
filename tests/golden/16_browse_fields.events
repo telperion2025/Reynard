@@ -1,0 +1,8 @@
+# §9.1 FIELDS clause: :H titles, :W width override, computed expression
+# column (UPPER(NAME)) evaluated per visible row.
+text USE people
+key enter
+text BROWSE FIELDS NAME:H="Who":W=8, UPPER(NAME):H="UP", SCORE
+key enter
+key down
+eof
