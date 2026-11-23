@@ -131,7 +131,11 @@ backend (`RX_EVENTS`/`RX_DUMP`) for the golden-screen tests.
 Mouse reporting is negotiated per spec §5.4: SGR 1006 is enabled first, with
 1002 (button drag) / 1003 (motion) alongside; legacy 1000 bursts are
 auto-detected by the ncurses parser. For native wide glyphs on macOS use
-`brew install ncurses` or `sudo port install ncurses` (MacPorts). The mode sequences are written with
+`brew install ncurses` or `sudo port install ncurses` (MacPorts, /opt/local).
+Both build files probe `ncursesw/curses.h`, `ncurses/curses.h` and flat
+`curses.h` under those prefixes. If detection misses, check
+`port contents ncurses | grep curses.h` and reconfigure from a clean
+build dir (`rm -rf build`) — CMake caches the probe results. The mode sequences are written with
 `write(2)` before `initscr()` / after `endwin()` so they never interleave
 with curses output. If your terminal swallows mouse events entirely, run with
 `--no-mouse` (or `SET MOUSE OFF`) — every menu action is also reachable by

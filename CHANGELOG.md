@@ -122,3 +122,6 @@ Reynard is pre-1.0, versions are milestone tags M0..M10 then v1.0.0.
   glyphs; setlocale(LC_ALL, "") at backend init. Golden suite now 9
   scenarios (close button; corner-resize drag in 06).
   MacPorts' /opt/local prefix is searched too (`sudo port install ncurses`).
+  Header probing is layout-robust (ncursesw/, ncurses/, flat curses.h under
+  each prefix; wide header wins), and term_ncurses.c's include now matches
+  the RX_HAVE_NCURSESW_H macro CMake actually sets.

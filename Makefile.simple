@@ -27,8 +27,9 @@ CORE += src/term/term_ncurses.c
 # Header probes avoid '#include' in the makefile itself ('#' is a make
 # comment); -include pulls the header into an empty translation unit.
 # On macOS the system ncurses is narrow-only (5.7); a package-manager
-# ncurses (ncursesw) is picked up automatically so wide glyphs render
-# natively — Homebrew (/opt/homebrew, /usr/local) or MacPorts (/opt/local).
+# ncurses is picked up automatically so wide glyphs render natively when
+# available — Homebrew (/opt/homebrew, /usr/local) or MacPorts (/opt/local).
+# Header layouts differ: ncursesw/curses.h, ncurses/curses.h, flat curses.h.
 ifeq ($(shell uname -s 2>/dev/null),Darwin)
     ifneq ($(wildcard /opt/homebrew/opt/ncurses/include/ncursesw/curses.h),)
         CPPFLAGS += -I/opt/homebrew/opt/ncurses/include
@@ -39,17 +40,29 @@ ifeq ($(shell uname -s 2>/dev/null),Darwin)
     else ifneq ($(wildcard /opt/local/include/ncursesw/curses.h),)
         CPPFLAGS += -I/opt/local/include
         PKG_L := -L/opt/local/lib
+    else ifneq ($(wildcard /opt/local/include/ncurses/curses.h),)
+        CPPFLAGS += -I/opt/local/include -I/opt/local/include/ncurses
+        PKG_L := -L/opt/local/lib
+    else ifneq ($(wildcard /opt/local/include/curses.h),)
+        CPPFLAGS += -I/opt/local/include
+        PKG_L := -L/opt/local/lib
     endif
 endif
 HAVE_CURSES := $(shell $(CC) -x c -fsyntax-only $(CPPFLAGS) -include curses.h /dev/null 2>/dev/null && echo yes)
+ifeq ($(HAVE_CURSES),)
+HAVE_CURSES := $(shell $(CC) -x c -fsyntax-only $(CPPFLAGS) -include ncurses/curses.h /dev/null 2>/dev/null && echo yes)
+endif
 HAVE_CURSESW := $(shell $(CC) -x c -fsyntax-only $(CPPFLAGS) -include ncursesw/curses.h /dev/null 2>/dev/null && echo yes)
-ifeq ($(HAVE_CURSES),yes)
+ifeq ($(HAVE_CURSESW),yes)
+CPPFLAGS += -DRX_HAVE_NCURSES=1 -DRX_HAVE_NCURSESW_H=1
+LDLIBS := $(PKG_L) -lncursesw $(LDLIBS)
+else ifeq ($(HAVE_CURSES),yes)
 CPPFLAGS += -DRX_HAVE_NCURSES=1
+ifneq ($(wildcard $(patsubst -L%,%,$(PKG_L))/libncursesw.*),)
+LDLIBS := $(PKG_L) -lncursesw $(LDLIBS)
+else
 LDLIBS += -lncurses
 endif
-ifeq ($(HAVE_CURSESW),yes)
-CPPFLAGS += -DRX_HAVE_NCURSESW_H=1
-LDLIBS := $(PKG_L) -lncursesw $(LDLIBS)
 endif
 LDLIBS += -lm
 

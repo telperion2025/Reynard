@@ -27,9 +27,9 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
-#if defined(HAVE_NCURSESW_CURSES_H)
+#if defined(RX_HAVE_NCURSESW_H) || defined(HAVE_NCURSESW_CURSES_H)
 #include <ncursesw/curses.h>
-#elif defined(HAVE_NCURSES_CURSES_H)
+#elif defined(RX_HAVE_NCURSES_H) || defined(HAVE_NCURSES_CURSES_H)
 #include <ncurses/curses.h>
 #else
 #include <curses.h>
