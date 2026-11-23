@@ -59,6 +59,9 @@ LDLIBS := $(PKG_L) -lncursesw $(LDLIBS)
 else ifeq ($(HAVE_CURSES),yes)
 CPPFLAGS += -DRX_HAVE_NCURSES=1
 ifneq ($(wildcard $(patsubst -L%,%,$(PKG_L))/libncursesw.*),)
+# flat header layout (MacPorts/BSD) but the wide lib is present: ncurses 6's
+# curses.h declares the wide API, so use the wide path via the flat header
+CPPFLAGS += -DRX_HAVE_NCURSESW_FLAT=1
 LDLIBS := $(PKG_L) -lncursesw $(LDLIBS)
 else
 LDLIBS += -lncurses

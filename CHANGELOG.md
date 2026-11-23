@@ -125,3 +125,6 @@ Reynard is pre-1.0, versions are milestone tags M0..M10 then v1.0.0.
   Header probing is layout-robust (ncursesw/, ncurses/, flat curses.h under
   each prefix; wide header wins), and term_ncurses.c's include now matches
   the RX_HAVE_NCURSESW_H macro CMake actually sets.
+  Flat layout (MacPorts/BSD: include/curses.h + lib/libncursesw.*) is
+  treated as wide-capable via new RX_HAVE_NCURSESW_FLAT (ncurses 6 flat
+  headers declare the wide API); the /usr system copy stays narrow.

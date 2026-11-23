@@ -29,6 +29,8 @@
 
 #if defined(RX_HAVE_NCURSESW_H) || defined(HAVE_NCURSESW_CURSES_H)
 #include <ncursesw/curses.h>
+#elif defined(RX_HAVE_NCURSESW_FLAT)
+#include <curses.h> /* flat ncurses 6 header (MacPorts/BSD) + libncursesw */
 #elif defined(RX_HAVE_NCURSES_H) || defined(HAVE_NCURSES_CURSES_H)
 #include <ncurses/curses.h>
 #else
@@ -79,7 +81,7 @@ static void nc_shutdown(void)
     raw_write("\x1B[?1003l\x1B[?1002l\x1B[?1006l");
 }
 
-#if !defined(RX_HAVE_NCURSESW_H)
+#if !defined(RX_HAVE_NCURSESW_H) && !defined(RX_HAVE_NCURSESW_FLAT)
 /* narrow ncurses (e.g. macOS system 5.7, no ncursesw): draw line-drawing
    via the alternate charset and transliterate the few other glyphs we use */
 static int nc_acs_char(uint32_t ch)
@@ -122,7 +124,7 @@ static void nc_draw(int y, int x, rcell c)
 {
     uint32_t ch = c.ch ? c.ch : ' ';
     attr_t a = COLOR_PAIR(c.attr & 0x3F);
-#if defined(RX_HAVE_NCURSESW_H)
+#if defined(RX_HAVE_NCURSESW_H) || defined(RX_HAVE_NCURSESW_FLAT)
     if (ch < 0x80) {
         mvaddch(y, x, (chtype)(a | (uint8_t)ch));
     } else {
