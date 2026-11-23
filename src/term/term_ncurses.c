@@ -48,6 +48,16 @@ static void raw_write(const char *s)
     (void)write(STDOUT_FILENO, s, strlen(s));
 }
 
+static void nc_sync_size(void)
+{
+    struct winsize ws;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 && ws.ws_row > 0) {
+        if ((int)ws.ws_col != COLS || (int)ws.ws_row != LINES) {
+            resizeterm((int)ws.ws_row, (int)ws.ws_col);
+        }
+    }
+}
+
 static int nc_init(void)
 {
     if (!getenv("TERM") || !*getenv("TERM")) {
@@ -58,28 +68,38 @@ static int nc_init(void)
     if (!w) {
         return R_ERR_NOUI;
     }
+    nc_sync_size(); /* make curses' stdscr match the real terminal geometry */
     cbreak();
     noecho();
     keypad(stdscr, TRUE);
     nonl();
-    mousemask(ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION, NULL);
+    int no_mouse = getenv("REYNARD_NO_MOUSE") != NULL;
+    if (!no_mouse) {
+        mousemask(ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION, NULL);
+    }
     if (has_colors()) {
         start_color();
     }
     /* ncurses emits its own XM mouse modes on the first refresh; emit ours
-       after it so SGR 1006 + 1002 + 1003 actually stick (write(2), never
-       printf, so the bytes cannot interleave with curses output) */
+       after it so they actually stick (write(2), never printf, so the bytes
+       cannot interleave with curses output). Enable every protocol tier
+       (spec §5.4): SGR 1006, button-drag 1002, any-motion 1003, legacy
+       1000, urxvt 1015 — the parser pins to whatever arrives first. */
     refresh();
-    raw_write("\x1B[?1006h\x1B[?1002h\x1B[?1003h");
+    if (!no_mouse) {
+        raw_write("\x1B[?1000h\x1B[?1002h\x1B[?1003h\x1B[?1015h\x1B[?1006h");
+    }
     return R_OK;
 }
 
 static void nc_shutdown(void)
 {
-    mousemask(0, NULL);
+    if (!getenv("REYNARD_NO_MOUSE")) {
+        mousemask(0, NULL);
+    }
     endwin();
     /* after endwin(): curses is done writing, so this cannot interleave */
-    raw_write("\x1B[?1003l\x1B[?1002l\x1B[?1006l");
+    raw_write("\x1B[?1006l\x1B[?1015l\x1B[?1003l\x1B[?1002l\x1B[?1000l");
 }
 
 #if !defined(RX_HAVE_NCURSESW_H) && !defined(RX_HAVE_NCURSESW_FLAT)
@@ -247,9 +267,39 @@ static int nc_poll(revent *out, uint32_t timeout_ms)
         return R_OK;
     }
     if (ch == KEY_RESIZE) {
+        nc_sync_size();
         out->kind = EV_RESIZE;
         out->u.m.x = (uint16_t)COLS;
         out->u.m.y = (uint16_t)LINES;
+        return R_OK;
+    }
+    if (ch == 27) {
+        /* Brute-force mouse: a raw SGR/legacy sequence that terminfo's XM
+           doesn't know arrives as ESC + bytes. Grab the rest nonblocking
+           and run the mouse.c decoder; on failure push everything back. */
+        uint8_t buf[40];
+        size_t n = 0;
+        buf[n++] = 27;
+        nodelay(stdscr, TRUE);
+        int c2;
+        while (n < sizeof(buf) && (c2 = getch()) != ERR) {
+            buf[n++] = (uint8_t)c2;
+        }
+        nodelay(stdscr, FALSE);
+        timeout((int)timeout_ms);
+        rmouse m;
+        size_t used = 0;
+        int r = n > 1 ? mouse_decode(buf, n, &m, &used) : -1;
+        if (r == 1 && used >= 4 && used <= n) {
+            out->kind = EV_MOUSE;
+            out->u.m = m;
+            return R_OK;
+        }
+        for (size_t i = n; i-- > 1;) {
+            ungetch(buf[i]);
+        }
+        out->kind = EV_KEY;
+        out->u.k.sym = RXK_ESC;
         return R_OK;
     }
     out->kind = EV_KEY;
