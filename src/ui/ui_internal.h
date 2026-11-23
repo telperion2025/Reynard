@@ -33,8 +33,9 @@ enum {
 
 /* FoxPro 2.x for DOS look (reference screenshots): blue desktop, silver
    menubar/pulldowns/status with black text and white hotkeys, bright-cyan
-   active title / selected item, cyan Command window, silver dialogs with
-   white border and blue title bar. */
+   active title / selected item, cyan Command window, silver dialogs.
+   Window borders and the x close button are black on the window's own
+   background so windows read as opaque boxes. */
 #define RXA_DESKTOP RXA(RXC_WHITE, RXC_BLUE)
 #define RXA_MENU RXA(RXC_BLACK, RXC_WHITE)
 #define RXA_MENU_HOT RXA(RXC_BWHITE, RXC_WHITE)
@@ -46,10 +47,10 @@ enum {
 #define RXA_STATUS RXA(RXC_BLACK, RXC_WHITE)
 #define RXA_MSG RXA(RXC_BRED, RXC_WHITE)
 #define RXA_DLG RXA(RXC_BLACK, RXC_WHITE)
-#define RXA_DLG_BORDER RXA(RXC_BWHITE, RXC_WHITE)
+#define RXA_DLG_BORDER RXA(RXC_BLACK, RXC_WHITE)
 #define RXA_DLG_TITLE RXA(RXC_BWHITE, RXC_BLUE)
 #define RXA_CMD RXA(RXC_BLACK, RXC_BCYAN)
-#define RXA_CMD_BORDER RXA(RXC_BWHITE, RXC_BCYAN)
+#define RXA_CMD_BORDER RXA(RXC_BLACK, RXC_BCYAN)
 #define RXA_CMD_TITLE RXA(RXC_BLACK, RXC_BCYAN)
 
 /* ============================ screen (screen.c) ============================ */

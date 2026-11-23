@@ -186,6 +186,27 @@ static int selftest_mouse(void)
     CHECK(mouse_decode(legacy, sizeof(legacy), &m, &used) == 1 && used == 6 && m.kind == RM_PRESS &&
               m.button == 1 && m.x == 9 && m.y == 4,
           "legacy 1000 decodes");
+    /* SGR drag: motion (32) + button1 (0) -> b=32 */
+    const uint8_t sgr_drag[] = { 0x1B, '[', '<', '3', '2', ';', '1', '1', ';', '6', 'M' };
+    CHECK(mouse_decode(sgr_drag, sizeof(sgr_drag), &m, &used) == 1 && m.kind == RM_DRAG &&
+              m.button == 1 && m.x == 10 && m.y == 5,
+          "sgr drag decodes");
+    /* SGR hover: motion with no button -> b=35 */
+    const uint8_t sgr_move[] = { 0x1B, '[', '<', '3', '5', ';', '1', ';', '1', 'M' };
+    CHECK(mouse_decode(sgr_move, sizeof(sgr_move), &m, &used) == 1 && m.kind == RM_MOVE &&
+              m.button == 0,
+          "sgr hover decodes");
+    /* legacy 1002/1003 drag: b = 32|0 -> byte 64 ('@') */
+    const uint8_t legacy_drag[] = { 0x1B, '[', 'M', (uint8_t)('@'), (uint8_t)(' ' + 10),
+                                    (uint8_t)(' ' + 5) };
+    CHECK(mouse_decode(legacy_drag, sizeof(legacy_drag), &m, &used) == 1 && used == 6 &&
+              m.kind == RM_DRAG && m.button == 1 && m.x == 9 && m.y == 4,
+          "legacy drag decodes");
+    /* legacy X10 release: b = 3 -> byte 35 ('#') */
+    const uint8_t legacy_rel[] = { 0x1B, '[', 'M', (uint8_t)('#'), (uint8_t)(' ' + 10),
+                                   (uint8_t)(' ' + 5) };
+    CHECK(mouse_decode(legacy_rel, sizeof(legacy_rel), &m, &used) == 1 && m.kind == RM_RELEASE,
+          "legacy release decodes");
     /* incomplete: needs more bytes */
     const uint8_t part[] = { 0x1B, '[', '<', '0', ';' };
     CHECK(mouse_decode(part, sizeof(part), &m, &used) == 0, "incomplete returns 0");

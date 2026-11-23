@@ -259,9 +259,16 @@ static int nc_poll(revent *out, uint32_t timeout_ms)
 #endif
                 (ev.bstate & BUTTON2_PRESSED)) {
                 out->u.m.kind = RM_WHEEL_DN;
+            } else if (ev.bstate & REPORT_MOUSE_POSITION) {
+                /* any-motion (1003) terminals report drags as pure motion
+                   events; if button 1 is held, this is a drag, not a hover */
+                out->u.m.kind = nc_btn_down ? RM_DRAG : RM_MOVE;
             } else {
                 out->u.m.kind = RM_MOVE;
             }
+            rx_log(RX_LOG_DEBUG, "nc mouse bstate=%#lx -> kind=%d btn=%d at %d,%d",
+                   (unsigned long)ev.bstate, out->u.m.kind, out->u.m.button, out->u.m.x,
+                   out->u.m.y);
             return R_OK;
         }
         return R_OK;
@@ -293,6 +300,16 @@ static int nc_poll(revent *out, uint32_t timeout_ms)
         if (r == 1 && used >= 4 && used <= n) {
             out->kind = EV_MOUSE;
             out->u.m = m;
+            if (m.kind == RM_PRESS || m.kind == RM_DRAG) {
+                nc_btn_down = 1;
+            } else if (m.kind == RM_RELEASE) {
+                nc_btn_down = 0;
+            }
+            rx_log(RX_LOG_DEBUG, "nc mouse raw -> kind=%d btn=%d at %d,%d", m.kind, m.button, m.x,
+                   m.y);
+            for (size_t i = n; i-- > used;) {
+                ungetch(buf[i]); /* bytes past the decoded event stay queued */
+            }
             return R_OK;
         }
         for (size_t i = n; i-- > 1;) {

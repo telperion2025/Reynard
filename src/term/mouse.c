@@ -37,11 +37,18 @@ static void fill(rmouse *m, long btn, long x, long y, int release)
     if (b & 64) { /* wheel */
         m->kind = (b & 1) ? RM_WHEEL_DN : RM_WHEEL_UP;
         m->button = 0;
-    } else if (b & 32) { /* motion */
-        m->kind = (b & 3) ? RM_DRAG : RM_MOVE;
-        m->button = (uint8_t)((b & 3) + 1);
+    } else if (b & 32) { /* motion: b&3 == 3 means no button held */
+        if ((b & 3) == 3) {
+            m->kind = RM_MOVE;
+        } else {
+            m->kind = RM_DRAG;
+            m->button = (uint8_t)((b & 3) + 1);
+        }
+    } else if (release || (b & 3) == 3) { /* SGR 'm' or legacy X10 release */
+        m->kind = RM_RELEASE;
+        m->button = (b & 3) == 3 ? 0 : (uint8_t)((b & 3) + 1);
     } else {
-        m->kind = release ? RM_RELEASE : RM_PRESS;
+        m->kind = RM_PRESS;
         m->button = (uint8_t)((b & 3) + 1);
     }
     if (x > 0) {

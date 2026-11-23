@@ -142,3 +142,21 @@ Reynard is pre-1.0, versions are milestone tags M0..M10 then v1.0.0.
   decoded by mouse.c in nc_poll (with ungetch pushback), so SGR and legacy
   press/drag/release/wheel work regardless of the terminal's XM entry.
   --no-mouse / REYNARD_NO_MOUSE skips enabling entirely.
+- Mouse drag fix: mouse.c fill() had the motion mapping inverted — in both
+  SGR 1006 and legacy 1002/1003, a button-1 drag is b = 32|0 (b&3 == 0), which
+  decoded as RM_MOVE, while no-button motion (b&3 == 3) decoded as a drag;
+  legacy X10 release (b == 3) also decoded as a press. Fixed: motion with
+  b&3 == 3 is RM_MOVE, otherwise RM_DRAG with button (b&3)+1; release is SGR
+  'm' or X10 b == 3. nc_poll's KEY_MOUSE path now also maps
+  REPORT_MOUSE_POSITION to RM_DRAG while button 1 is held (any-motion
+  terminals report drags as pure motion), and the raw path pushes back any
+  bytes past the decoded event and keeps the button-held state in sync.
+  Both paths log `RX_LOG=debug` traces ("nc mouse ...") for terminal-side
+  diagnosis. Selftest covers SGR/legacy drag, hover and release vectors.
+- UI opacity + border color: window and pulldown interiors are now filled
+  with the window's own background (Command window cyan, dialogs/pulldowns
+  silver), so windows are opaque instead of letting the desktop/borders
+  show through empty cells; window borders and the × close button are black
+  on the window background (RXA_CMD_BORDER black/bcyan, RXA_DLG_BORDER
+  black/white). Golden 08 regenerated — it had encoded the see-through
+  dialog (Command window border showing through the Calculator).

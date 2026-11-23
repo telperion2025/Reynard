@@ -89,6 +89,7 @@ static void cmdwin_render(struct rx_ui *ui, rx_win *w)
     if (iw <= 0 || ih <= 0) {
         return;
     }
+    scr_fill(&ui->scr, ix, iy, iw, ih, ' ', RXA_CMD); /* opaque interior */
     int input_row = iy + ih - 1;
     int nscroll = ih - 1;
     for (int r = 0; r < nscroll; r++) {

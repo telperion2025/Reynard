@@ -70,6 +70,7 @@ static void render_pulldown(struct rx_ui *ui)
     int x, y, w, h;
     menubar_pulldown_geom(ui, &x, &y, &w, &h);
     scr_box(&ui->scr, x, y, w, h, NULL, RXA_PULL);
+    scr_fill(&ui->scr, x + 1, y + 1, w - 2, h - 2, ' ', RXA_PULL); /* opaque over windows */
     for (size_t i = 0; i < md->nitems && (int)i + 1 < h - 1; i++) {
         const menu_item *it = &md->items[i];
         int row = y + 1 + (int)i;

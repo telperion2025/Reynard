@@ -62,6 +62,7 @@ static void dlg_render(struct rx_ui *ui, rx_win *w)
     if (iw <= 0 || ih <= 0) {
         return;
     }
+    scr_fill(&ui->scr, ix, iy, iw, ih, ' ', RXA_DLG); /* opaque interior */
     int rows = d->has_ed ? ih - 1 : ih;
     for (int r = 0; r < rows; r++) {
         long li = (long)d->nlines - rows + r - d->scroll;
