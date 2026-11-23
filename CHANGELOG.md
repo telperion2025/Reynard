@@ -111,3 +111,13 @@ Reynard is pre-1.0, versions are milestone tags M0..M10 then v1.0.0.
   cell-by-cell; wired into ctest (golden_screens) and the Makefile.simple
   + CI plain-make paths. All suites green under ASan/UBSan with leak
   detection.
+- term_ncurses fixes for real terminals (macOS Terminal.app): mouse mode
+  sequences (SGR 1006 + 1002 + 1003) are written with write(2) before
+  initscr()/after endwin() — stdio printf interleaved with curses output
+  and printed "?1002h"-style garbage on screen; narrow-ncurses builds
+  (macOS system 5.7, no ncursesw) draw box borders via the alternate
+  charset and transliterate —/×/√/… to -/x/v/. instead of '?'.
+- CMake/Makefile.simple: on macOS prefer a Homebrew ncursesw
+  (/opt/homebrew/opt/ncurses, /usr/local/opt/ncurses) for native wide
+  glyphs; setlocale(LC_ALL, "") at backend init. Golden suite now 9
+  scenarios (close button; corner-resize drag in 06).
