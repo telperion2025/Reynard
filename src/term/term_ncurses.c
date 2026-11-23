@@ -20,6 +20,7 @@
 
 #if defined(RX_HAVE_NCURSES)
 
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,11 +38,24 @@
 #include "term/mouse.h"
 #include "util/util.h"
 
+/* Write terminal-mode sequences with write(2), never printf: stdio
+   buffering interleaves with curses' own output and splits escape
+   sequences, which prints garbage like "?1002h" onto the screen. */
+static void raw_write(const char *s)
+{
+    (void)write(STDOUT_FILENO, s, strlen(s));
+}
+
 static int nc_init(void)
 {
     if (!getenv("TERM") || !*getenv("TERM")) {
         return R_ERR_NOUI;
     }
+    setlocale(LC_ALL, "");
+    /* Mouse (spec §5.4): SGR 1006 primary, 1002 button-drag, 1003
+       any-motion; legacy 1000 is auto-detected by the ncurses parser.
+       Emitted before initscr() so the bytes cannot interleave with curses. */
+    raw_write("\x1B[?1006h\x1B[?1002h\x1B[?1003h");
     WINDOW *w = initscr();
     if (!w) {
         return R_ERR_NOUI;
@@ -50,11 +64,7 @@ static int nc_init(void)
     noecho();
     keypad(stdscr, TRUE);
     nonl();
-    /* Mouse: request SGR 1006 + 1002 (button+drag) + 1003 fallback handled
-       by the parser; disable any default reporting first. */
     mousemask(ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION, NULL);
-    printf("\x1B[?1006h\x1B[?1002h\x1B[?1003h");
-    fflush(stdout);
     if (has_colors()) {
         start_color();
     }
@@ -63,10 +73,74 @@ static int nc_init(void)
 
 static void nc_shutdown(void)
 {
-    printf("\x1B[?1003l\x1B[?1002l\x1B[?1006l");
-    fflush(stdout);
     mousemask(0, NULL);
     endwin();
+    /* after endwin(): curses is done writing, so this cannot interleave */
+    raw_write("\x1B[?1003l\x1B[?1002l\x1B[?1006l");
+}
+
+/* narrow ncurses (e.g. macOS system 5.7, no ncursesw): draw line-drawing
+   via the alternate charset and transliterate the few other glyphs we use */
+static int acs_map(uint32_t ch)
+{
+    switch (ch) {
+    case 0x2500: return ACS_HLINE;
+    case 0x2502: return ACS_VLINE;
+    case 0x250C: return ACS_ULCORNER;
+    case 0x2510: return ACS_URCORNER;
+    case 0x2514: return ACS_LLCORNER;
+    case 0x2518: return ACS_LRCORNER;
+    case 0x251C: return ACS_LTEE;
+    case 0x2524: return ACS_RTEE;
+    case 0x252C: return ACS_TTEE;
+    case 0x2534: return ACS_BTEE;
+    case 0x253C: return ACS_PLUS;
+    default: return 0;
+    }
+}
+
+static char ascii_fallback(uint32_t ch)
+{
+    switch (ch) {
+    case 0x2013: /* – */
+    case 0x2014: /* — */
+        return '-';
+    case 0x00D7: /* × close button */
+        return 'x';
+    case 0x221A: /* √ checkmark */
+        return 'v';
+    case 0x2026: /* … */
+        return '.';
+    default:
+        return '?';
+    }
+}
+
+static void nc_draw(int y, int x, rcell c)
+{
+    uint32_t ch = c.ch ? c.ch : ' ';
+    attr_t a = COLOR_PAIR(c.attr & 0x3F);
+#if defined(RX_HAVE_NCURSESW_H)
+    if (ch < 0x80) {
+        mvaddch(y, x, (chtype)(a | (uint8_t)ch));
+    } else {
+        cchar_t cc;
+        wchar_t wch[2] = { (wchar_t)ch, 0 };
+        setcchar(&cc, wch, a, (short)(c.attr & 0x3F), NULL);
+        mvadd_wch(y, x, &cc);
+    }
+#else
+    int ac = acs_map(ch);
+    if (ac) {
+        attron(A_ALTCHARSET);
+        mvaddch(y, x, (chtype)(a | ac));
+        attroff(A_ALTCHARSET);
+    } else if (ch < 0x80) {
+        mvaddch(y, x, (chtype)(a | (uint8_t)ch));
+    } else {
+        mvaddch(y, x, (chtype)(a | (uint8_t)ascii_fallback(ch)));
+    }
+#endif
 }
 
 static int nc_blit(rcell *cells, size_t w, size_t h, struct rrect *damage, size_t n_dmg)
@@ -80,41 +154,14 @@ static int nc_blit(rcell *cells, size_t w, size_t h, struct rrect *damage, size_
     if (full) {
         for (size_t y = 0; y < h; y++) {
             for (size_t x = 0; x < w; x++) {
-                rcell c = cells[y * w + x];
-                uint32_t ch = c.ch ? c.ch : ' ';
-                attr_t a = COLOR_PAIR(c.attr & 0x3F);
-                if (ch < 0x80) {
-                    mvaddch((int)y, (int)x, (chtype)(a | (uint8_t)ch));
-                } else {
-#if defined(RX_HAVE_NCURSESW_H)
-                    cchar_t cc;
-                    wchar_t wch[2] = { (wchar_t)ch, 0 };
-                    setcchar(&cc, wch, a, (short)(c.attr & 0x3F), NULL);
-                    mvadd_wch((int)y, (int)x, &cc);
-#else
-                    char tmp[5];
-                    size_t n = utf8_encode(ch, tmp);
-                    tmp[n] = '\0';
-                    mvaddstr((int)y, (int)x, tmp);
-#endif
-                }
+                nc_draw((int)y, (int)x, cells[y * w + x]);
             }
         }
     } else {
         for (size_t i = 0; i < n_dmg; i++) {
             for (uint16_t y = damage[i].y; y < damage[i].y + damage[i].h && y < h; y++) {
                 for (uint16_t x = damage[i].x; x < damage[i].x + damage[i].w && x < w; x++) {
-                    rcell c = cells[(size_t)y * w + x];
-                    uint32_t ch = c.ch ? c.ch : ' ';
-                    attr_t a = COLOR_PAIR(c.attr & 0x3F);
-                    if (ch < 0x80) {
-                        mvaddch((int)y, (int)x, (chtype)(a | (uint8_t)ch));
-                    } else {
-                        char tmp[5];
-                        size_t n = utf8_encode(ch, tmp);
-                        tmp[n] = '\0';
-                        mvaddstr((int)y, (int)x, tmp);
-                    }
+                    nc_draw((int)y, (int)x, cells[(size_t)y * w + x]);
                 }
             }
         }

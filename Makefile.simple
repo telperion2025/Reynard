@@ -26,15 +26,27 @@ CORE = \
 CORE += src/term/term_ncurses.c
 # Header probes avoid '#include' in the makefile itself ('#' is a make
 # comment); -include pulls the header into an empty translation unit.
-HAVE_CURSES := $(shell $(CC) -x c -fsyntax-only -include curses.h /dev/null 2>/dev/null && echo yes)
-HAVE_CURSESW := $(shell $(CC) -x c -fsyntax-only -include ncursesw/curses.h /dev/null 2>/dev/null && echo yes)
+# On macOS the system ncurses is narrow-only (5.7); a Homebrew ncurses
+# (ncursesw) in the standard prefixes is picked up automatically so wide
+# glyphs render natively.
+ifeq ($(shell uname -s 2>/dev/null),Darwin)
+    ifneq ($(wildcard /opt/homebrew/opt/ncurses/include/ncursesw/curses.h),)
+        CPPFLAGS += -I/opt/homebrew/opt/ncurses/include
+        BREW_L := -L/opt/homebrew/opt/ncurses/lib
+    else ifneq ($(wildcard /usr/local/opt/ncurses/include/ncursesw/curses.h),)
+        CPPFLAGS += -I/usr/local/opt/ncurses/include
+        BREW_L := -L/usr/local/opt/ncurses/lib
+    endif
+endif
+HAVE_CURSES := $(shell $(CC) -x c -fsyntax-only $(CPPFLAGS) -include curses.h /dev/null 2>/dev/null && echo yes)
+HAVE_CURSESW := $(shell $(CC) -x c -fsyntax-only $(CPPFLAGS) -include ncursesw/curses.h /dev/null 2>/dev/null && echo yes)
 ifeq ($(HAVE_CURSES),yes)
 CPPFLAGS += -DRX_HAVE_NCURSES=1
 LDLIBS += -lncurses
 endif
 ifeq ($(HAVE_CURSESW),yes)
 CPPFLAGS += -DRX_HAVE_NCURSESW_H=1
-LDLIBS := -lncursesw $(LDLIBS)
+LDLIBS := $(BREW_L) -lncursesw $(LDLIBS)
 endif
 LDLIBS += -lm
 

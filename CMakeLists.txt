@@ -78,6 +78,11 @@ set(RX_CORE_SOURCES
 set(RX_HAVE_NCURSES OFF)
 if(USE_SYSTEM_NCURSES)
     include(CheckIncludeFile)
+    # macOS: the system ncurses is narrow-only (5.7); prefer a Homebrew
+    # ncurses (ncursesw) when installed so wide glyphs render natively.
+    if(APPLE)
+        list(APPEND CMAKE_PREFIX_PATH /opt/homebrew/opt/ncurses /usr/local/opt/ncurses)
+    endif()
     find_library(RX_NCURSESW_LIB ncursesw)
     find_library(RX_NCURSES_LIB ncurses)
     if(RX_NCURSESW_LIB)

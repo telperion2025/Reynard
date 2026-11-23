@@ -40,8 +40,11 @@ DBF files (including memos and CDX compound indexes).
 ## Building
 
 Requirements: a C17 compiler (GCC 11+ or Clang 14+), CMake >= 3.16, and
-ncurses/ncursesw >= 6.1 for the interactive backend (on macOS a vendored
-ncurses 6.4+ is used automatically; without ncurses headers the build
+ncurses/ncursesw >= 6.1 for the interactive backend. On macOS the system
+ncurses is narrow-only (5.7): `brew install ncurses` gives ncursesw and is
+picked up automatically (CMake prefix path and Makefile.simple probe);
+without ncursesw the UI falls back to ACS line-drawing and ASCII
+transliteration. Without ncurses headers the build
 still works — only the headless script backend and batch mode are
 available).
 
@@ -121,6 +124,17 @@ items (16-color CGA palette).
 `reynard -t` with no script is the same interactive shell with
 DATE()/TIME()/RAND() frozen — the harness drives it through the script
 backend (`RX_EVENTS`/`RX_DUMP`) for the golden-screen tests.
+
+### Terminal notes (macOS Terminal.app)
+
+Mouse reporting is negotiated per spec §5.4: SGR 1006 is enabled first, with
+1002 (button drag) / 1003 (motion) alongside; legacy 1000 bursts are
+auto-detected by the ncurses parser. The mode sequences are written with
+`write(2)` before `initscr()` / after `endwin()` so they never interleave
+with curses output. If your terminal swallows mouse events entirely, run with
+`--no-mouse` (or `SET MOUSE OFF`) — every menu action is also reachable by
+keyboard (F10/Alt + arrows + Enter). Box borders and the × close button use
+the alternate charset when only narrow ncurses is available.
 
 ## Configuration
 
