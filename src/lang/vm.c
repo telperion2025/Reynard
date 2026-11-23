@@ -60,7 +60,13 @@ void rx_ctx_free(rx_ctx *ctx)
 
 int rx_out(rx_ctx *ctx, const char *s, size_t n)
 {
-    if (!ctx->out || !ctx->set.console) {
+    if (!ctx->set.console) {
+        return R_OK;
+    }
+    if (ctx->out_fn) {
+        return ctx->out_fn(ctx->out_ud, s, n);
+    }
+    if (!ctx->out) {
         return R_OK;
     }
     if (fwrite(s, 1, n, ctx->out) != n) {
@@ -88,6 +94,73 @@ int rx_outf(rx_ctx *ctx, const char *fmt, ...)
         n = (int)sizeof(buf) - 1;
     }
     return rx_out(ctx, buf, (size_t)n);
+}
+
+/* run one source buffer; returns exit-code contribution (0 or error code) */
+int rx_run_source(rx_ctx *ctx, const char *src, const char *name)
+{
+    rx_tok *toks;
+    size_t ntok;
+    r_err err;
+    memset(&err, 0, sizeof(err));
+    snprintf(ctx->prog, sizeof(ctx->prog), "%s", name);
+    ctx->src = src;
+    if (rx_lex(src, name, &toks, &ntok, &err) != R_OK) {
+        rx_raise(ctx, err.code, err.line, err.col, "%s", err.msg);
+        return err.code;
+    }
+    rx_stmt *stmts;
+    size_t nstmt;
+    if (rx_parse(toks, ntok, &stmts, &nstmt, &err) != R_OK) {
+        rx_raise(ctx, err.code, err.line, err.col, "%s", err.msg);
+        rx_lex_free(toks, ntok);
+        return err.code;
+    }
+    int rc = rx_exec(ctx, stmts, nstmt);
+    for (size_t i = 0; i < nstmt; i++) {
+        rx_stmt_free(&stmts[i]);
+    }
+    free(stmts);
+    rx_lex_free(toks, ntok);
+    if (rc != R_OK) {
+        if (!ctx->err_printed) {
+            char msg[512];
+            snprintf(msg, sizeof(msg), "%s", ctx->err.msg[0] ? ctx->err.msg : rx_status_str(rc));
+            rx_raise(ctx, rc, ctx->err.line ? ctx->err.line : err.line,
+                     ctx->err.col ? ctx->err.col : err.col, "%s", msg);
+        }
+        return rc;
+    }
+    return R_OK;
+}
+
+int rx_eval_str(rx_ctx *ctx, const char *src, rval *out, r_err *err)
+{
+    rx_tok *toks;
+    size_t ntok;
+    memset(err, 0, sizeof(*err));
+    if (rx_lex(src, "<expr>", &toks, &ntok, err) != R_OK) {
+        return err->code;
+    }
+    rx_stmt *stmts;
+    size_t nstmt;
+    if (rx_parse(toks, ntok, &stmts, &nstmt, err) != R_OK) {
+        rx_lex_free(toks, ntok);
+        return err->code;
+    }
+    int rc = R_ERR_SYNTAX;
+    snprintf(err->msg, sizeof(err->msg), "Not an expression");
+    if (nstmt == 1 && stmts[0].kind == ST_EXPR && stmts[0].nexpr >= 1) {
+        rc = rx_eval(ctx, stmts[0].exprs[0], out, err);
+    } else {
+        rx_rval_undef(out);
+    }
+    for (size_t i = 0; i < nstmt; i++) {
+        rx_stmt_free(&stmts[i]);
+    }
+    free(stmts);
+    rx_lex_free(toks, ntok);
+    return rc;
 }
 
 /* ============================ function registry ============================ */

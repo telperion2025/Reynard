@@ -70,6 +70,7 @@ typedef struct term_backend {
     void (*bell)(void);
     void (*cbreak_on)(void);
     void (*cbreak_off)(void);
+    void (*size)(int *w, int *h); /**< current geometry in cells */
     const char *name;
 } term_backend;
 

@@ -36,6 +36,16 @@ set(RX_CORE_SOURCES
     src/util/cfg.c
     src/term/term_script.c
     src/term/mouse.c
+    src/ui/screen.c
+    src/ui/window.c
+    src/ui/getsay.c
+    src/ui/cmdwin.c
+    src/ui/menudef.c
+    src/ui/menubar.c
+    src/ui/statusbar.c
+    src/ui/dialog.c
+    src/ui/helpwin.c
+    src/ui/ui.c
     src/data/dbf.c
     src/data/dbf_create.c
     src/data/field.c
@@ -135,6 +145,12 @@ add_test(NAME dbf_roundtrip
 add_test(NAME lock_race
     COMMAND reynard-harness lockrace
         ${CMAKE_CURRENT_BINARY_DIR}/test-work)
+add_test(NAME golden_screens
+    COMMAND reynard-harness golden
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/golden
+        $<TARGET_FILE:reynard>
+        ${CMAKE_CURRENT_SOURCE_DIR}/testdata/gen
+        ${CMAKE_CURRENT_BINARY_DIR}/test-work-golden)
 
 if(ENABLE_FUZZ)
     add_subdirectory(tests/fuzz)

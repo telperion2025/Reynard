@@ -1,0 +1,6 @@
+# §6.2 window stack: drag the Command window's top border from (10,15) to
+# (12,13); the window moves (release never triggers an action, §5.4).
+mouse press 10 15 1
+mouse drag 12 13 1
+mouse release 12 13 1
+eof

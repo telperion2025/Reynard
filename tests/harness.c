@@ -885,6 +885,214 @@ static int lockrace(const char *workroot)
     return 1;
 }
 
+/* ---------------- golden screens (M3 gate: §12 event replay + cell dumps) ---------------- */
+
+static int filter_events(const struct dirent *d)
+{
+    size_t n = strlen(d->d_name);
+    return n > 7 && strcmp(d->d_name + n - 7, ".events") == 0;
+}
+
+static int cmp_lines(const char *a, const char *b, char *diffbuf, size_t diffsz)
+{
+    size_t na, nb;
+    char *ca = read_file(a, &na);
+    char *cb = read_file(b, &nb);
+    if (!ca || !cb) {
+        free(ca);
+        free(cb);
+        snprintf(diffbuf, diffsz, "cannot read dump/golden");
+        return -1;
+    }
+    size_t la = 1, lb = 1;
+    char *pa = ca, *pb = cb;
+    char *enda = ca + na, *endb = cb + nb;
+    while (pa < enda && pb < endb) {
+        char *nla = memchr(pa, '\n', (size_t)(enda - pa));
+        char *nlb = memchr(pb, '\n', (size_t)(endb - pb));
+        size_t sa = nla ? (size_t)(nla - pa) : (size_t)(enda - pa);
+        size_t sb = nlb ? (size_t)(nlb - pb) : (size_t)(endb - pb);
+        if (sa != sb || memcmp(pa, pb, sa) != 0) {
+            snprintf(diffbuf, diffsz, "line %zu differs: dump=\"%.*s\" golden=\"%.*s\"", la,
+                     (int)(sa > 120 ? 120 : sa), pa, (int)(sb > 120 ? 120 : sb), pb);
+            free(ca);
+            free(cb);
+            return 1;
+        }
+        la++;
+        lb++;
+        pa = nla ? nla + 1 : enda;
+        pb = nlb ? nlb + 1 : endb;
+    }
+    if (pa < enda || pb < endb) {
+        snprintf(diffbuf, diffsz, "line count differs at line %zu (dump has %s lines)", la,
+                 pa < enda ? "more" : "fewer");
+        free(ca);
+        free(cb);
+        return 1;
+    }
+    free(ca);
+    free(cb);
+    return 0;
+}
+
+static void abs_path(const char *p, char *out, size_t outsz)
+{
+    if (p[0] == '/') {
+        snprintf(out, outsz, "%s", p);
+        return;
+    }
+    char cwd[600];
+    if (!getcwd(cwd, sizeof(cwd))) {
+        perror("getcwd");
+        snprintf(out, outsz, "%s", p);
+        return;
+    }
+    snprintf(out, outsz, "%s/%s", cwd, p);
+}
+
+static int golden(const char *dir, const char *bin, const char *fixtures, const char *workroot,
+                  int update)
+{
+    char absbin[1200], absroot[1000];
+    abs_path(bin, absbin, sizeof(absbin));
+    abs_path(workroot, absroot, sizeof(absroot));
+    mkdir(absroot, 0755);
+    struct dirent **names = NULL;
+    int n = scandir(dir, &names, filter_events, NULL);
+    if (n < 0) {
+        perror("scandir");
+        return 1;
+    }
+    for (int i = 0; i < n; i++) {
+        for (int j = i + 1; j < n; j++) {
+            if (strcmp(names[i]->d_name, names[j]->d_name) > 0) {
+                struct dirent *t = names[i];
+                names[i] = names[j];
+                names[j] = t;
+            }
+        }
+    }
+    int ran = 0;
+    for (int i = 0; i < n; i++) {
+        char base[1100];
+        snprintf(base, sizeof(base), "%s/%s", dir, names[i]->d_name);
+        base[strlen(base) - 7] = '\0';
+        char evp[1200], goldp[1200], sizep[1200], exitp[1200], absev[1400];
+        snprintf(evp, sizeof(evp), "%s.events", base);
+        snprintf(goldp, sizeof(goldp), "%s.golden", base);
+        snprintf(sizep, sizeof(sizep), "%s.size", base);
+        snprintf(exitp, sizeof(exitp), "%s.exit", base);
+        abs_path(evp, absev, sizeof(absev)); /* the child chdirs into its sandbox */
+
+        char wd[1100];
+        snprintf(wd, sizeof(wd), "%s/golden-XXXXXX", absroot);
+        if (rx_mkdtemp(wd) != 0) {
+            perror("mkdtemp");
+            failures++;
+            continue;
+        }
+        struct dirent **fx = NULL;
+        int nf = scandir(fixtures, &fx, NULL, alphasort);
+        if (nf > 0) {
+            for (int k = 0; k < nf; k++) {
+                char s[1400], d[1400];
+                snprintf(s, sizeof(s), "%s/%s", fixtures, fx[k]->d_name);
+                snprintf(d, sizeof(d), "%s/%s", wd, fx[k]->d_name);
+                struct stat st;
+                if (fx[k]->d_name[0] != '.' && stat(s, &st) == 0 && S_ISREG(st.st_mode)) {
+                    copy_file(s, d);
+                }
+                free(fx[k]);
+            }
+            free(fx);
+        }
+        char home[1200], dump[1200], outp[1200], errp[1200];
+        snprintf(home, sizeof(home), "%s/home", wd);
+        mkdir(home, 0755);
+        snprintf(dump, sizeof(dump), "%s/dump.txt", wd);
+        snprintf(outp, sizeof(outp), "%s/out.txt", wd);
+        snprintf(errp, sizeof(errp), "%s/err.txt", wd);
+
+        int cols = 0, rows = 0;
+        size_t sn;
+        char *sz = read_file(sizep, &sn);
+        if (sz) {
+            sscanf(sz, "%d %d", &cols, &rows);
+            free(sz);
+        }
+        int want_exit = 0;
+        char *ex = read_file(exitp, &sn);
+        if (ex) {
+            want_exit = (int)strtol(ex, NULL, 10);
+            free(ex);
+        }
+
+        pid_t pid = fork();
+        if (pid == 0) {
+            if (chdir(wd) != 0) {
+                _exit(99);
+            }
+            FILE *fo = freopen(outp, "w", stdout);
+            FILE *fe = freopen(errp, "w", stderr);
+            (void)fo;
+            (void)fe;
+            setenv("RX_EVENTS", absev, 1);
+            setenv("RX_DUMP", dump, 1);
+            setenv("HOME", home, 1);
+            char xdg[1400];
+            snprintf(xdg, sizeof(xdg), "%s/.cache", home);
+            setenv("XDG_CACHE_HOME", xdg, 1);
+            if (cols > 0 && rows > 0) {
+                char cb[16], rb[16];
+                snprintf(cb, sizeof(cb), "%d", cols);
+                snprintf(rb, sizeof(rb), "%d", rows);
+                setenv("RX_COLS", cb, 1);
+                setenv("RX_ROWS", rb, 1);
+            }
+            execl(absbin, "reynard", "-t", (char *)NULL);
+            _exit(127);
+        }
+        int status = 0;
+        waitpid(pid, &status, 0);
+        int exitcode = WIFEXITED(status) ? WEXITSTATUS(status) : 128;
+        ran++;
+        char diff[400] = "";
+        int bad = 0;
+        if (exitcode != want_exit) {
+            size_t ne;
+            char *e = read_file(errp, &ne);
+            snprintf(diff, sizeof(diff), "exit code %d (want %d); stderr: %s", exitcode, want_exit,
+                     e ? e : "(none)");
+            free(e);
+            bad = 1;
+        } else if (access(goldp, F_OK) != 0) {
+            snprintf(diff, sizeof(diff), "missing .golden file");
+            bad = 1;
+        } else if (!bad) {
+            int r = cmp_lines(dump, goldp, diff, sizeof(diff));
+            if (r != 0) {
+                bad = 1;
+            }
+        }
+        if (bad && update && access(dump, F_OK) == 0) {
+            copy_file(dump, goldp);
+            printf("UPDATE %s\n", names[i]->d_name);
+            bad = 0;
+        } else if (bad) {
+            printf("FAIL %s: %s\n", names[i]->d_name, diff);
+            failures++;
+        } else {
+            printf("PASS %s\n", names[i]->d_name);
+        }
+        rm_rf(wd);
+        free(names[i]);
+    }
+    free(names);
+    printf("golden: %d scenarios, %d failures\n", ran, failures);
+    return failures ? 1 : 0;
+}
+
 int main(int argc, char **argv)
 {
     rx_log_init();
@@ -908,8 +1116,13 @@ int main(int argc, char **argv)
     if (argc >= 3 && strcmp(argv[1], "lockrace") == 0) {
         return lockrace(argv[2]);
     }
+    if (argc >= 6 && strcmp(argv[1], "golden") == 0) {
+        int update = argc >= 7 && strcmp(argv[6], "update") == 0;
+        return golden(argv[2], argv[3], argv[4], argv[5], update);
+    }
     fprintf(stderr, "usage: %s selftest | conformance <dir> <reynard> <fixtures> <workroot>"
-                    " | roundtrip <fixtures> <workroot> | lockrace <workroot>\n",
+                    " | roundtrip <fixtures> <workroot> | lockrace <workroot>"
+                    " | golden <dir> <reynard> <fixtures> <workroot> [update]\n",
             argv[0]);
     return 2;
 }

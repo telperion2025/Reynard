@@ -1,0 +1,9 @@
+# §6.3 System > Calculator via mouse, then evaluate 2+3*4 in the dialog's
+# getsay input line; the result line appears above the input.
+mouse press 2 0 1
+mouse release 2 0 1
+mouse press 3 6 1
+mouse release 3 6 1
+text 2+3*4
+key enter
+eof

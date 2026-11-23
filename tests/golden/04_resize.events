@@ -1,0 +1,7 @@
+# M3 gate: SIGWINCH stability — resize the virtual terminal mid-session;
+# the layout reflows and input survives. Final geometry 60x20 (tolerance:
+# resize cases are compared cell-by-cell at the final size, see README).
+resize 100 30
+key a
+resize 60 20
+eof

@@ -28,6 +28,47 @@ int rx_raise(rx_ctx *ctx, int code, int line, int col, const char *fmt, ...)
     vsnprintf(e->msg, sizeof(e->msg), fmt, ap);
     va_end(ap);
 
+    /* interactive mode (M3): route the first line to the UI message line */
+    if (ctx->msg_line && !ctx->out) {
+        char buf[1200];
+        if (ctx->src && line > 0) {
+            const char *p = ctx->src;
+            int cur = 1;
+            while (*p && cur < line) {
+                if (*p == '\n') {
+                    cur++;
+                }
+                p++;
+            }
+            const char *eol = p;
+            while (*eol && *eol != '\n') {
+                eol++;
+            }
+            size_t n = (size_t)(eol - p);
+            char *srcline = malloc(n + 1);
+            if (!srcline) {
+                RX_FATAL("out of memory");
+            }
+            memcpy(srcline, p, n);
+            srcline[n] = '\0';
+            rx_format_error(e, srcline, buf, sizeof(buf));
+            free(srcline);
+        } else {
+            rx_format_error(e, NULL, buf, sizeof(buf));
+        }
+        if (!ctx->err_printed) {
+            char first[1200];
+            snprintf(first, sizeof(first), "%s", buf);
+            char *nl = strchr(first, '\n');
+            if (nl) {
+                *nl = '\0';
+            }
+            ctx->msg_line(ctx->msg_ud, first);
+            ctx->err_printed = 1;
+        }
+        return code;
+    }
+
     /* batch mode: stderr with caret */
     char buf[1200];
     if (ctx->src && line > 0) {

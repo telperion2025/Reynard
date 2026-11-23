@@ -12,11 +12,13 @@ scripts — all file-based, reading and writing real dBase III+/FoxPro/VFP9
 DBF files (including memos and CDX compound indexes).
 
 > Status: milestones **M0** (skeleton + terminal layer), **M1** (lexer,
-> parser, VM, read-only DBF engine, batch/test modes) and **M2** (data
+> parser, VM, read-only DBF engine, batch/test modes), **M2** (data
 > engine v1: DBF create/read/write, FPT/DBT memos, scopes + FOR/WHILE +
 > SET FILTER, LOCATE, locking with a forked-process race test, COPY/APPEND
 > SDF/DELIMITED, 48-case conformance suite + byte-identical round-trip
-> gate) are implemented. Interactive UI lands at M3; see
+> gate) and **M3** (interactive shell: menubar + pulldowns with mouse and
+> keyboard, window stack, Command window with persistent history, status
+> line, System-menu dialogs; 8 golden-screen tests) are implemented. See
 > [docs/DEVIATIONS.md](docs/DEVIATIONS.md) for the deviation log and
 > [CHANGELOG.md](CHANGELOG.md) for progress. The full specification this
 > project implements is summarized in [docs/language.md](docs/language.md)
@@ -100,9 +102,20 @@ $ reynard -t demo.prg       # -t freezes DATE()/TIME()/RAND() for reproducible r
 ### Interactive mode
 
 Running `reynard` with no arguments opens the full-screen environment
-(System menu bar, Command window, status line; requires the ncurses
-backend). This lands at milestone M3; until then batch mode is the
-supported interface.
+(requires the ncurses backend): menubar on row 0 (F10 or Alt activates,
+arrows navigate, Enter selects, Esc backs out; the mouse clicks titles to
+open and drags across them to sweep), a floating Command window at the
+bottom (type a command, Enter runs it into the window's scrollback;
+Ctrl+Up/Down walk the persisted history, Tab completes command names,
+Ctrl+Y kills to end of line, Ctrl+S pauses, Esc aborts per SET ESCAPE;
+drag the border to move, the corner to resize), and a status line showing
+the last message plus work area/alias/record pointer. System-menu dialogs
+(About, Filer, Calculator, Calendar/Diary, ASCII Chart, Help) are on the
+same window stack. QUIT or File > Quit exits with code 0.
+
+`reynard -t` with no script is the same interactive shell with
+DATE()/TIME()/RAND() frozen — the harness drives it through the script
+backend (`RX_EVENTS`/`RX_DUMP`) for the golden-screen tests.
 
 ## Configuration
 
@@ -152,8 +165,9 @@ ctest --test-dir build --output-on-failure
 - `tests/conformance/` — `.prg` + `.expected` pairs run in `-t` mode;
   error cases use `.expected.err` and require exit code 1. The mapping
   index is [tests/conformance/INDEX.md](tests/conformance/INDEX.md).
-- `tests/golden/` — golden-screen tests via the `term_script` event
-  replay backend (M3+).
+- `tests/golden/` — golden-screen tests: event-replay scenarios run
+  through the `term_script` backend and compared cell-by-cell
+  (`tests/golden/README.md` maps each scenario to its spec section).
 - `testdata/gen/gen_fixtures.py` — regenerates the synthetic DBF fixtures;
   `testdata/reference/` holds real-tool reference files with
   `PROVENANCE.txt` (spec §8.9).
@@ -164,7 +178,7 @@ ctest --test-dir build --output-on-failure
 include/reynard/   installed public headers (dbf.h, status.h, rval.h)
 src/main.c         CLI, mode dispatch, config load
 src/term/          terminal backends (ncurses, script replay), mouse
-src/ui/            screen, windows, menubar, command window, browse (M3+)
+src/ui/            screen, windows, menubar, command window, dialogs (M3); browse (M4+)
 src/lang/          lexer, parser, expression compiler, VM, functions
 src/data/          DBF/FPT/DBT/CDX engine, work areas, scopes, locking
 src/tools/         screen/report/label builders, project manager (M7+)

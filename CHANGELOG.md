@@ -3,7 +3,7 @@
 All notable changes per milestone (spec §0.5). Format: Keep a Changelog;
 Reynard is pre-1.0, versions are milestone tags M0..M10 then v1.0.0.
 
-## [Unreleased] — M0 + M1 + M2 in progress
+## [Unreleased] — M0..M3
 
 ### M0 — Skeleton and term layer
 - CMake + Makefile.simple builds, zero warnings under -Wall -Wextra
@@ -62,3 +62,38 @@ Reynard is pre-1.0, versions are milestone tags M0..M10 then v1.0.0.
   read/write of every fixture + memo FPT determinism + pack), lock_race
   (ctest), all green under ASan/UBSan; Makefile.simple test target runs
   all four suites.
+
+### M3 — Interactive shell
+- src/ui: screen.c (rcell canvas, 64-pair palette, damage rects,
+  differential blit), window.c (uniform pane stack, border-drag move /
+  corner-drag resize, clamping), getsay.c (shared line editor: cursor
+  motion, Ctrl+Y, 1000-entry history ring persisted to
+  $XDG_CACHE_HOME/reynard/history, Tab command-name completion),
+  cmdwin.c (Command window: 5000-line scrollback ring, exec via
+  rx_run_source, Ctrl+S pause / Esc abort per SET ESCAPE), menudef.c +
+  menubar.c (declarative FoxPro 2.x menubar, pulldowns, mouse click-open
+  and drag-sweep, F10/Alt/arrows keyboard path), statusbar.c (message
+  line left; CAPS/NUM/clock/workarea+alias/rec N/M/DEL right), dialog.c
+  (About, Macros, Filer, Calculator, Calendar/Diary, ASCII Chart),
+  helpwin.c, ui.c (rx_ui_run event loop; owns the backend lifecycle).
+- term vtable gains size(w,h); script backend honors RX_COLS/RX_ROWS and
+  `resize w h` events; ncurses backend uses TIOCGWINSZ (SIGWINCH stable).
+- lang: rx_ctx out_fn/msg_line hooks — interpreter output scrolls in the
+  Command window and §6.6 diagnostics land on the message line (with
+  beep) in interactive mode, stderr in batch; rx_run_source() and
+  rx_eval_str() public; rx_keyword_list() for Tab completion.
+- main.c: interactive mode dispatches to rx_ui_run; the script backend is
+  selected when RX_EVENTS is set (CI golden runs use `reynard -t`).
+- Mouse capture: the window that consumes RM_PRESS keeps the drag until
+  RM_RELEASE; release never triggers an action (§5.4).
+- Bug fix: bare expression statements starting with a non-word token
+  (e.g. `2+3*4`) previously looped the parser forever; the ST_EXPR
+  fallthrough now applies to every leading token kind, with a
+  no-progress guard in rx_parse.
+- Tests: harness `golden` mode — 8 event-replay scenarios in
+  tests/golden (boot layout, mouse-visit of every System menu action,
+  Command window exec + history recall, resize, error on message line,
+  window border drag, keyboard menubar path, Calculator eval), compared
+  cell-by-cell; wired into ctest (golden_screens) and the Makefile.simple
+  + CI plain-make paths. All suites green under ASan/UBSan with leak
+  detection.

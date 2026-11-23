@@ -2,7 +2,7 @@
 
 This document is the authoritative language reference (spec §7). It covers
 the full v1.0 target; the **Status** column shows what is implemented at
-the current milestone (M1). Every implemented bullet has at least one
+the current milestone (M3). Every implemented bullet has at least one
 `tests/conformance/` case (spec §14.6; index in
 [tests/conformance/INDEX.md](../tests/conformance/INDEX.md)).
 
@@ -52,7 +52,7 @@ spaces of the left operand) — `* / %` — `** ^` (right associative) — unary
 
 ## 4. Commands
 
-Status legend: ✅ implemented at M1, 🚧 partial, ⏳ planned (milestone).
+Status legend: ✅ implemented (milestone noted), 🚧 partial, ⏳ planned (milestone).
 
 ### Data browsing / positioning
 
@@ -66,7 +66,7 @@ Status legend: ✅ implemented at M1, 🚧 partial, ⏳ planned (milestone).
 | `LIST [scope] [FOR/WHILE] [FIELDS ...] [OFF]` / `DISPLAY [scope] ...` | ✅ M2: scopes, FOR/WHILE, FIELDS, OFF, SET FILTER/HEADINGS/DELETED, deleted `*` marker |
 | `BROWSE` | ⏳ M4 (raises R_ERR_NOUI 601 in batch) |
 | `LOCATE [scope] FOR e [WHILE e]` / `CONTINUE` | ✅ M2 (FOUND(), `Record = n`); SEEK/SET ORDER/SET INDEX ⏳ M6 |
-| `APPEND BLANK` / `APPEND FROM f [TYPE] SDF\|DELIMITED [WITH c\|BLANK\|TAB]` (bare APPEND ⏳ M3) / `REPLACE [scope] [FOR/WHILE] f WITH e, ...` / `DELETE` / `RECALL` / `PACK` / `ZAP` / `COPY TO f [FIELDS..] [scope] [TYPE SDF\|DELIMITED [WITH..]]` / `COPY STRUCTURE TO f [FIELDS..] [EXTENDED]` / `CREATE f FROM struct` / `FLUSH` / `UNLOCK [ALL]` | ✅ M2; INDEX ON/REINDEX/SORT TO/TOTAL TO/COUNT/SUM/AVERAGE/CALCULATE/SCATTER/GATHER ⏳ M4/M5 |
+| `APPEND BLANK` / `APPEND FROM f [TYPE] SDF\|DELIMITED [WITH c\|BLANK\|TAB]` (bare APPEND ⏳ M4 BROWSE) / `REPLACE [scope] [FOR/WHILE] f WITH e, ...` / `DELETE` / `RECALL` / `PACK` / `ZAP` / `COPY TO f [FIELDS..] [scope] [TYPE SDF\|DELIMITED [WITH..]]` / `COPY STRUCTURE TO f [FIELDS..] [EXTENDED]` / `CREATE f FROM struct` / `FLUSH` / `UNLOCK [ALL]` | ✅ M2; INDEX ON/REINDEX/SORT TO/TOTAL TO/COUNT/SUM/AVERAGE/CALCULATE/SCATTER/GATHER ⏳ M4/M5 |
 | alias prefixes `alias->field`, `m.var` | ✅ |
 
 ### Environment

@@ -621,6 +621,20 @@ static const kw keywords[] = {
     { "UNLOCK", ST_UNLOCK },
 };
 
+const char *const *rx_keyword_list(size_t *n)
+{
+    static const char *words[sizeof(keywords) / sizeof(keywords[0])];
+    static int ready = 0;
+    if (!ready) {
+        for (size_t i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++) {
+            words[i] = keywords[i].word;
+        }
+        ready = 1;
+    }
+    *n = sizeof(keywords) / sizeof(keywords[0]);
+    return words;
+}
+
 static int kw_match(const char *w, st_kind *kind)
 {
     size_t wl = strlen(w);
@@ -1314,22 +1328,19 @@ static int parse_stmt(parser *p)
             }
             return stmt_push(p, &s);
         }
-        /* expression statement */
-        s.kind = ST_EXPR;
-        rx_expr *e = NULL;
-        int rc = parse_expr(p, &e);
-        if (rc != R_OK) {
-            return rc;
-        }
-        st_add_expr(&s, e);
-        if (!end_of_line(p)) {
-            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error");
-        }
-        return stmt_push(p, &s);
     }
 
-    /* empty line */
-    s.kind = ST_EMPTY;
+    /* expression statement (any leading token kind: 2+3*4, "hi", f(x), ...) */
+    s.kind = ST_EXPR;
+    rx_expr *e = NULL;
+    int rc = parse_expr(p, &e);
+    if (rc != R_OK) {
+        return rc;
+    }
+    st_add_expr(&s, e);
+    if (!end_of_line(p)) {
+        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error");
+    }
     return stmt_push(p, &s);
 }
 
@@ -1350,8 +1361,13 @@ int rx_parse(rx_tok *toks, size_t ntok, rx_stmt **out, size_t *nout, r_err *err)
         if (pk_is(&p, TK_EOF)) {
             break;
         }
+        size_t pos_before = p.pos;
         int rc = parse_stmt(&p);
         if (rc != R_OK) {
+            break;
+        }
+        if (p.pos == pos_before && !pk_is(&p, TK_NEWLINE) && !pk_is(&p, TK_EOF)) {
+            pk_fail(&p, pk_cur(&p)->line, pk_cur(&p)->col, "Syntax error");
             break;
         }
         /* consume the line terminator, honoring ';' continuation */

@@ -202,6 +202,10 @@ typedef struct rx_set {
 
 struct rx_ctx {
     FILE *out;          /**< batch stdout (or -o file); NULL in interactive */
+    int (*out_fn)(void *ud, const char *s, size_t n); /**< interactive output hook (M3) */
+    void *out_ud;
+    void (*msg_line)(void *ud, const char *s); /**< interactive message-line hook (M3) */
+    void *msg_ud;
     int test_mode;      /**< -t: DATE()/TIME()/RAND() frozen to seed */
     uint32_t rng;       /**< LCG state, seeded 1 in test mode */
     rx_set set;
@@ -224,6 +228,15 @@ struct rx_ctx {
 
 void rx_ctx_init(rx_ctx *ctx, FILE *out, int test_mode);
 void rx_ctx_free(rx_ctx *ctx);
+
+/** Lex+parse+execute one source buffer (interactive Command window, main). */
+int rx_run_source(rx_ctx *ctx, const char *src, const char *name);
+
+/** Evaluate one expression string (calculator dialog); result in *out. */
+int rx_eval_str(rx_ctx *ctx, const char *src, rval *out, r_err *err);
+
+/** Parser keyword table (uppercase words), for Command-window completion. */
+const char *const *rx_keyword_list(size_t *n);
 
 /** Evaluate compiled bytecode; result left in *out. */
 int rx_vm_run(rx_ctx *ctx, const rx_code *code, rval *out, r_err *err);

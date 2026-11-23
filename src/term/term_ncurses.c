@@ -23,6 +23,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
 
 #if defined(HAVE_NCURSESW_CURSES_H)
 #include <ncursesw/curses.h>
@@ -268,6 +270,18 @@ static void nc_cbreak_off(void)
     nocbreak();
 }
 
+static void nc_size(int *w, int *h)
+{
+    struct winsize ws;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 && ws.ws_row > 0) {
+        *w = (int)ws.ws_col;
+        *h = (int)ws.ws_row;
+    } else {
+        *w = COLS;
+        *h = LINES;
+    }
+}
+
 static const term_backend ncurses_backend = {
     .init = nc_init,
     .shutdown = nc_shutdown,
@@ -277,6 +291,7 @@ static const term_backend ncurses_backend = {
     .bell = nc_bell,
     .cbreak_on = nc_cbreak_on,
     .cbreak_off = nc_cbreak_off,
+    .size = nc_size,
     .name = "ncurses",
 };
 

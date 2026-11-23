@@ -15,6 +15,7 @@
 #include "lang/lang.h"
 #include "reynard/dbf.h"
 #include "term/term_if.h"
+#include "ui/ui.h"
 #include "util/util.h"
 
 extern const char rx_license_text[];
@@ -55,44 +56,6 @@ static char *read_all(FILE *f, size_t *outn)
     }
     *outn = sb.len;
     return sb.buf;
-}
-
-/* run one source buffer; returns exit-code contribution (0 or error code) */
-static int run_source(rx_ctx *ctx, const char *src, const char *name)
-{
-    rx_tok *toks;
-    size_t ntok;
-    r_err err;
-    memset(&err, 0, sizeof(err));
-    snprintf(ctx->prog, sizeof(ctx->prog), "%s", name);
-    ctx->src = src;
-    if (rx_lex(src, name, &toks, &ntok, &err) != R_OK) {
-        rx_raise(ctx, err.code, err.line, err.col, "%s", err.msg);
-        return err.code;
-    }
-    rx_stmt *stmts;
-    size_t nstmt;
-    if (rx_parse(toks, ntok, &stmts, &nstmt, &err) != R_OK) {
-        rx_raise(ctx, err.code, err.line, err.col, "%s", err.msg);
-        rx_lex_free(toks, ntok);
-        return err.code;
-    }
-    int rc = rx_exec(ctx, stmts, nstmt);
-    for (size_t i = 0; i < nstmt; i++) {
-        rx_stmt_free(&stmts[i]);
-    }
-    free(stmts);
-    rx_lex_free(toks, ntok);
-    if (rc != R_OK) {
-        if (!ctx->err_printed) {
-            char msg[512];
-            snprintf(msg, sizeof(msg), "%s", ctx->err.msg[0] ? ctx->err.msg : rx_status_str(rc));
-            rx_raise(ctx, rc, ctx->err.line ? ctx->err.line : err.line,
-                     ctx->err.col ? ctx->err.col : err.col, "%s", msg);
-        }
-        return rc;
-    }
-    return R_OK;
 }
 
 int main(int argc, char **argv)
@@ -193,7 +156,7 @@ int main(int argc, char **argv)
         char *copy = rx_strdup(carg);
         char *save = NULL;
         for (char *part = strtok_r(copy, ";", &save); part; part = strtok_r(NULL, ";", &save)) {
-            if (run_source(&ctx, part, "<command>") != R_OK && !ctx.quit) {
+            if (rx_run_source(&ctx, part, "<command>") != R_OK && !ctx.quit) {
                 rc = 1;
                 break;
             }
@@ -211,7 +174,7 @@ int main(int argc, char **argv)
             size_t n;
             char *src = read_all(f, &n);
             fclose(f);
-            if (run_source(&ctx, src, script) != R_OK && !ctx.quit) {
+            if (rx_run_source(&ctx, src, script) != R_OK && !ctx.quit) {
                 rc = 1;
             }
             free(src);
@@ -219,25 +182,30 @@ int main(int argc, char **argv)
     } else if (script && strcmp(script, "-") == 0) {
         size_t n;
         char *src = read_all(stdin, &n);
-        if (run_source(&ctx, src, "<stdin>") != R_OK && !ctx.quit) {
+        if (rx_run_source(&ctx, src, "<stdin>") != R_OK && !ctx.quit) {
             rc = 1;
         }
         free(src);
     } else {
-        /* interactive (spec §3.3) */
-        const term_backend *tb = rx_term_ncurses();
+        /* interactive full-screen shell (spec §3.3, §6). The script backend
+           is selected when RX_EVENTS is set (golden-screen tests); otherwise
+           the production ncurses backend. */
+        const term_backend *tb = getenv("RX_EVENTS") ? rx_term_script() : rx_term_ncurses();
         if (!tb) {
             fprintf(stderr,
-                    "reynard: interactive UI needs ncurses (not available in this build).\n"
+                    "reynard: interactive UI needs a terminal backend (ncurses not available "
+                    "in this build).\n"
                     "Use batch mode: reynard script.prg, reynard -c \"? 1+1\", or reynard -\n");
             rc = 2;
         } else {
-            /* The full-screen UI lands at M3; M0 provides the term layer and
-               the script backend self-test (tests/harness.c). */
-            fprintf(stderr,
-                    "reynard: interactive shell lands at milestone M3; "
-                    "batch mode is available now (reynard --help)\n");
-            rc = 2;
+            ctx.out = NULL; /* output routes through the UI hooks */
+            int uirc = rx_ui_run(&ctx, tb);
+            if (uirc == R_ERR_NOUI) {
+                fprintf(stderr, "reynard: could not initialize the terminal\n");
+                rc = 2;
+            } else {
+                rc = uirc;
+            }
         }
     }
 

@@ -17,7 +17,9 @@
  *   eof
  *
  * Environment: RX_EVENTS = event file path (init fails without it),
- *              RX_DUMP   = file to write the final cell grid to on shutdown.
+ *              RX_DUMP   = file to write the final cell grid to on shutdown,
+ *              RX_COLS / RX_ROWS = initial geometry (default 80x24);
+ *              "resize w h" events move the virtual terminal.
  */
 #include "term/term_if.h"
 
@@ -70,6 +72,16 @@ static int sc_init(void)
     const char *dump = getenv("RX_DUMP");
     if (dump) {
         snprintf(g_state.dump_path, sizeof(g_state.dump_path), "%s", dump);
+    }
+    const char *cols = getenv("RX_COLS");
+    const char *rows = getenv("RX_ROWS");
+    g_state.w = cols && *cols ? (size_t)strtoul(cols, NULL, 10) : 80;
+    g_state.h = rows && *rows ? (size_t)strtoul(rows, NULL, 10) : 24;
+    if (g_state.w == 0) {
+        g_state.w = 80;
+    }
+    if (g_state.h == 0) {
+        g_state.h = 24;
     }
     return R_OK;
 }
@@ -193,7 +205,7 @@ static int key_from_token(const char *tok, rkey *k)
         if (mods & RXK_MOD_CTRL) {
             k->sym = RXK_CTL(toupper(c));
         } else if (mods & RXK_MOD_ALT) {
-            k->sym = RXK_ALT(c);
+            k->sym = RXK_ALT(toupper(c));
         } else {
             k->sym = RXK_BASE;
         }
@@ -272,9 +284,11 @@ static int next_event(revent *out)
         }
         if (strcmp(s, "resize") == 0 && arg) {
             int w = 0, h = 0;
-            if (sscanf(arg, "%d %d", &w, &h) != 2) {
+            if (sscanf(arg, "%d %d", &w, &h) != 2 || w <= 0 || h <= 0) {
                 return R_ERR_SYNTAX;
             }
+            g_state.w = (size_t)w;
+            g_state.h = (size_t)h;
             out->kind = EV_RESIZE;
             out->u.m.x = (uint16_t)w;
             out->u.m.y = (uint16_t)h;
@@ -319,6 +333,12 @@ static void sc_cbreak_off(void)
 {
 }
 
+static void sc_size(int *w, int *h)
+{
+    *w = g_state.w ? (int)g_state.w : 80;
+    *h = g_state.h ? (int)g_state.h : 24;
+}
+
 static const term_backend script_backend = {
     .init = sc_init,
     .shutdown = sc_shutdown,
@@ -328,6 +348,7 @@ static const term_backend script_backend = {
     .bell = sc_bell,
     .cbreak_on = sc_cbreak_on,
     .cbreak_off = sc_cbreak_off,
+    .size = sc_size,
     .name = "script",
 };
 

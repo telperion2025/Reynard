@@ -10,6 +10,9 @@ CORE = \
 	src/util/strbuf.c src/util/str.c src/util/utf8.c src/util/cp_tables.c \
 	src/util/ddatecnv.c src/util/numeric.c src/util/errlist.c src/util/log.c src/util/cfg.c \
 	src/term/term_script.c src/term/mouse.c \
+	src/ui/screen.c src/ui/window.c src/ui/getsay.c src/ui/cmdwin.c \
+	src/ui/menudef.c src/ui/menubar.c src/ui/statusbar.c src/ui/dialog.c \
+	src/ui/helpwin.c src/ui/ui.c \
 	src/data/dbf.c src/data/dbf_create.c src/data/field.c src/data/memo_fpt.c \
 	src/data/memo_dbt.c src/data/codepage.c src/data/workarea.c src/data/rlock.c \
 	src/data/journal.c src/data/scope.c src/data/copyto.c \
@@ -54,6 +57,7 @@ test: all
 	./reynard-harness conformance tests/conformance $(CURDIR)/reynard testdata/gen .test-work
 	./reynard-harness roundtrip testdata/gen .test-work
 	./reynard-harness lockrace .test-work
+	./reynard-harness golden tests/golden $(CURDIR)/reynard testdata/gen .test-work
 
 install: reynard
 	install -d $(DESTDIR)/usr/local/bin $(DESTDIR)/usr/local/share/man/man1
