@@ -118,6 +118,11 @@ Run a script deterministically, capturing output.
 .TP
 .B reynard -
 Read commands from standard input.
+.TP
+.B reynard -t prog.prg
+Run a script with procedures, loops and arrays; a byte-reproducible
+compiled cache prog.rxp is written next to it and reused while the source
+is unchanged.
 .SH SEE ALSO
 Full language reference: \fIdocs/language.md\fR; file formats:
 \fIdocs/formats.md\fR; deviations: \fIdocs/DEVIATIONS.md\fR.

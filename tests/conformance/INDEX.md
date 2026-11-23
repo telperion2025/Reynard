@@ -65,3 +65,14 @@ by CI (`.github/workflows/ci.yml` conformance-index job).
 | 58_rel_offset | §8.1 M4 relation key expression (RECNO()+1) |
 | 59_rel_bottom | §8.1 M4 GO BOTTOM drives the parent to the last record |
 | 60_skip_clear | §8.1 M4 SET SKIP TO with no aliases clears the skip list |
+| 61_control_flow | §7.1 M5 IF/ELSEIF/ELSE, DO WHILE, FOR/STEP/NEXT, DO CASE/OTHERWISE, LOOP/EXIT |
+| 62_procs_udf | §7.5 M5 DO ... WITH, PROCEDURE/FUNCTION, recursion, RETURN value, PRIVATE hiding |
+| 63_arrays | §7.5 M5 DIMENSION, a[i,j] get/set, TYPE "A", AELEMENT/ASUBSCRIPT/ALEN, ACOPY, ASORT |
+| 64_macros | §7.2 M5 & macro substitution at execution time (&cmd = 99, USE &tbl, && comment) |
+| 65_on_error | §7.4 M5 ON ERROR DO handler, ERROR()/MESSAGE() introspection, resume after error |
+| 66_text | §7.1 M5 TEXT...ENDTEXT verbatim output |
+| 67_scan | §7.1 M5 SCAN [FOR/WHILE] ... ENDSCAN with LOOP/EXIT, EOF after scan |
+| 68_scopes | §7.5 M5 PUBLIC/PRIVATE/RELEASE, RELEASE ALL LIKE pattern, TYPE "U" |
+| 69_io | §7.1 M5 WAIT (non-blocking in -t), ACCEPT, INPUT (per-case .stdin) |
+| 70_err_macro | App. D 502 & undefined macro variable |
+| 71_retry | §7.4 M5 RETRY re-runs the erroring statement after the handler fixes it |

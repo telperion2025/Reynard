@@ -361,8 +361,64 @@ static int f_file(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
     return R_OK;
 }
 
+static int f_error(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
+{
+    /* M5 §7.4: ERROR() is the trapped error number (0 when none) */
+    if (argc > 0) {
+        err->code = R_ERR_TYPE;
+        snprintf(err->msg, sizeof(err->msg), "ERROR() expects no arguments");
+        return err->code;
+    }
+    (void)argv;
+    f_num(c, out, c->err.code);
+    return R_OK;
+}
+
+static int f_message(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
+{
+    /* M5 §7.4: MESSAGE() is the trapped error text; MESSAGE(1) the source line */
+    double which = 0;
+    if (argc >= 1) {
+        if (!rv_to_num(&argv[0], &which)) {
+            err->code = R_ERR_TYPE;
+            snprintf(err->msg, sizeof(err->msg), "MESSAGE() expects a numeric argument");
+            return err->code;
+        }
+    }
+    if (which == 1) {
+        const char *line = "";
+        if (c->src && c->err.line > 0) {
+            const char *p = c->src;
+            int cur = 1;
+            while (*p && cur < c->err.line) {
+                if (*p == '\n') {
+                    cur++;
+                }
+                p++;
+            }
+            const char *eol = p;
+            while (*eol && *eol != '\n') {
+                eol++;
+            }
+            static char buf[1200];
+            size_t n = (size_t)(eol - p);
+            if (n > sizeof(buf) - 1) {
+                n = sizeof(buf) - 1;
+            }
+            memcpy(buf, p, n);
+            buf[n] = '\0';
+            line = buf;
+        }
+        f_str(out, rx_strdup(line), strlen(line));
+        return R_OK;
+    }
+    f_str(out, rx_strdup(c->err.msg[0] ? c->err.msg : ""), strlen(c->err.msg));
+    return R_OK;
+}
+
 const rx_funcdef rx_funcs_sys[] = {
     { "OS", f_os },           { "VERSION", f_version }, { "GETENV", f_getenv },
+    { "ERROR", f_error },     { "MESSAGE", f_message },
     { "MEMORY", f_memory },   { "DISKSPACE", f_diskspace }, { "SYS", f_sys },
     { "CAPSLOCK", f_capslock }, { "NUMLOCK", f_numlock }, { "INSMODE", f_insmode },
     { "INKEY", f_inkey },     { "LASTKEY", f_lastkey }, { "READKEY", f_readkey },

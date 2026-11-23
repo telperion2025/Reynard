@@ -342,6 +342,8 @@ static int conformance(const char *dir, const char *bin, const char *fixtures, c
         snprintf(prg, sizeof(prg), "%s.prg", base);
         snprintf(expected, sizeof(expected), "%s.expected", base);
         snprintf(expectederr, sizeof(expectederr), "%s.expected.err", base);
+        char stdinf[1100];
+        snprintf(stdinf, sizeof(stdinf), "%s.stdin", base);
 
         char wd[1100];
         snprintf(wd, sizeof(wd), "%s/case-XXXXXX", absroot);
@@ -372,6 +374,12 @@ static int conformance(const char *dir, const char *bin, const char *fixtures, c
         char caseprg[1200];
         snprintf(caseprg, sizeof(caseprg), "%s/case.prg", wd);
         copy_file(prg, caseprg);
+        int has_stdin = access(stdinf, F_OK) == 0;
+        if (has_stdin) {
+            char stdind[1200];
+            snprintf(stdind, sizeof(stdind), "%s/stdin.txt", wd);
+            copy_file(stdinf, stdind);
+        }
         char outp[1200], errp[1200];
         snprintf(outp, sizeof(outp), "%s/out.txt", wd);
         snprintf(errp, sizeof(errp), "%s/err.txt", wd);
@@ -379,6 +387,11 @@ static int conformance(const char *dir, const char *bin, const char *fixtures, c
         if (pid == 0) {
             if (chdir(wd) != 0) {
                 _exit(99);
+            }
+            setenv("HOME", wd, 1); /* isolate the .RXP fallback cache */
+            if (has_stdin) {
+                FILE *fi = freopen("stdin.txt", "r", stdin);
+                (void)fi;
             }
             FILE *fe = freopen(errp, "w", stderr);
             (void)fe;
@@ -1272,6 +1285,152 @@ static int browseperf(const char *workroot, const char *bin)
     return ok ? 0 : 1;
 }
 
+/* ---------------- rxp (M5 gate: byte-reproducible .RXP cache) ----------------
+ * For each <case>.prg: run it in two fresh sandboxes, require identical
+ * stdout/stderr/exit code AND byte-identical case.rxp; then re-run in the
+ * first sandbox (cache hit) and require identical output again. */
+static int run_in_sandbox(const char *bin, const char *wd, const char *fixtures,
+                          const char *prg, const char *caseprg, char *outp, char *errp,
+                          size_t sz)
+{
+    struct dirent **fx = NULL;
+    int nf = scandir(fixtures, &fx, NULL, alphasort);
+    if (nf > 0) {
+        for (int k = 0; k < nf; k++) {
+            char s[1400], d[1400];
+            snprintf(s, sizeof(s), "%s/%s", fixtures, fx[k]->d_name);
+            snprintf(d, sizeof(d), "%s/%s", wd, fx[k]->d_name);
+            struct stat st;
+            if (fx[k]->d_name[0] != '.' && stat(s, &st) == 0 && S_ISREG(st.st_mode)) {
+                copy_file(s, d);
+            }
+            free(fx[k]);
+        }
+        free(fx);
+    }
+    copy_file(prg, caseprg);
+    snprintf(outp, sz, "%s/out.txt", wd);
+    snprintf(errp, sz, "%s/err.txt", wd);
+    pid_t pid = fork();
+    if (pid == 0) {
+        if (chdir(wd) != 0) {
+            _exit(99);
+        }
+        setenv("HOME", wd, 1);
+        FILE *fe = freopen(errp, "w", stderr);
+        (void)fe;
+        execl(bin, "reynard", "-t", "-o", "out.txt", "case.prg", (char *)NULL);
+        _exit(127);
+    }
+    int status = 0;
+    waitpid(pid, &status, 0);
+    return WIFEXITED(status) ? WEXITSTATUS(status) : 128;
+}
+
+static int rxp_mode(const char *dir, const char *bin, const char *fixtures, const char *workroot)
+{
+    char absbin[1200];
+    if (bin[0] == '/') {
+        snprintf(absbin, sizeof(absbin), "%s", bin);
+    } else {
+        char cwd[600];
+        if (!getcwd(cwd, sizeof(cwd))) {
+            perror("getcwd");
+            return 1;
+        }
+        snprintf(absbin, sizeof(absbin), "%s/%s", cwd, bin);
+    }
+    char absroot[1000];
+    if (workroot[0] == '/') {
+        snprintf(absroot, sizeof(absroot), "%s", workroot);
+    } else {
+        char cwd[600];
+        if (!getcwd(cwd, sizeof(cwd))) {
+            perror("getcwd");
+            return 1;
+        }
+        snprintf(absroot, sizeof(absroot), "%s/%s", cwd, workroot);
+    }
+    mkdir(absroot, 0755);
+    struct dirent **names = NULL;
+    int n = scandir(dir, &names, filter_prg, NULL);
+    if (n < 0) {
+        perror("scandir");
+        return 1;
+    }
+    for (int i = 0; i < n; i++) {
+        for (int j = i + 1; j < n; j++) {
+            if (strcmp(names[i]->d_name, names[j]->d_name) > 0) {
+                struct dirent *t = names[i];
+                names[i] = names[j];
+                names[j] = t;
+            }
+        }
+    }
+    int ran = 0, bad = 0;
+    for (int i = 0; i < n; i++) {
+        char base[1000], prg[1100];
+        snprintf(base, sizeof(base), "%s/%s", dir, names[i]->d_name);
+        base[strlen(base) - 4] = '\0';
+        snprintf(prg, sizeof(prg), "%s.prg", base);
+        char wdA[1100], wdB[1100];
+        snprintf(wdA, sizeof(wdA), "%s/rxpA-XXXXXX", absroot);
+        snprintf(wdB, sizeof(wdB), "%s/rxpB-XXXXXX", absroot);
+        if (rx_mkdtemp(wdA) != 0 || rx_mkdtemp(wdB) != 0) {
+            perror("mkdtemp");
+            bad++;
+            free(names[i]);
+            continue;
+        }
+        char ca[1200], cb[1200], oa[1200], ob[1200], ea[1200], eb[1200];
+        snprintf(ca, sizeof(ca), "%s/case.prg", wdA);
+        snprintf(cb, sizeof(cb), "%s/case.prg", wdB);
+        int rcA = run_in_sandbox(absbin, wdA, fixtures, prg, ca, oa, ea, sizeof(oa));
+        int rcB = run_in_sandbox(absbin, wdB, fixtures, prg, cb, ob, eb, sizeof(ob));
+        /* cache-hit re-run in sandbox A */
+        int rcA2 = run_in_sandbox(absbin, wdA, fixtures, prg, ca, oa, ea, sizeof(oa));
+        char rxpA[1200], rxpB[1200];
+        snprintf(rxpA, sizeof(rxpA), "%s/case.rxp", wdA);
+        snprintf(rxpB, sizeof(rxpB), "%s/case.rxp", wdB);
+        char diff[600] = "";
+        int fail = 0;
+        if (rcA != rcB || rcA != rcA2) {
+            snprintf(diff, sizeof(diff), "exit codes %d/%d/%d", rcA, rcB, rcA2);
+            fail = 1;
+        } else {
+            char d2[300] = "";
+            if (cmp_files(oa, ob, d2, sizeof(d2)) != 0) {
+                snprintf(diff, sizeof(diff), "stdout differs run1 vs run2: %.*s", 250, d2);
+                fail = 1;
+            }
+        }
+        if (!fail && access(rxpA, F_OK) != 0) {
+            snprintf(diff, sizeof(diff), "no case.rxp written");
+            fail = 1;
+        }
+        if (!fail) {
+            char d2[300] = "";
+            if (cmp_files(rxpA, rxpB, d2, sizeof(d2)) != 0) {
+                snprintf(diff, sizeof(diff), ".rxp not byte-reproducible: %.*s", 250, d2);
+                fail = 1;
+            }
+        }
+        ran++;
+        if (fail) {
+            printf("FAIL %s: %s\n", names[i]->d_name, diff);
+            bad++;
+        } else {
+            printf("PASS %s\n", names[i]->d_name);
+        }
+        rm_rf(wdA);
+        rm_rf(wdB);
+        free(names[i]);
+    }
+    free(names);
+    printf("rxp: %d cases, %d failures\n", ran, bad);
+    return bad ? 1 : 0;
+}
+
 int main(int argc, char **argv)
 {
     rx_log_init();
@@ -1289,6 +1448,9 @@ int main(int argc, char **argv)
     if (argc >= 6 && strcmp(argv[1], "conformance") == 0) {
         return conformance(argv[2], argv[3], argv[4], argv[5]);
     }
+    if (argc >= 6 && strcmp(argv[1], "rxp") == 0) {
+        return rxp_mode(argv[2], argv[3], argv[4], argv[5]);
+    }
     if (argc >= 4 && strcmp(argv[1], "roundtrip") == 0) {
         return roundtrip(argv[2], argv[3]);
     }
@@ -1303,6 +1465,7 @@ int main(int argc, char **argv)
         return browseperf(argv[2], argv[3]);
     }
     fprintf(stderr, "usage: %s selftest | conformance <dir> <reynard> <fixtures> <workroot>"
+                    " | rxp <dir> <reynard> <fixtures> <workroot>"
                     " | roundtrip <fixtures> <workroot> | lockrace <workroot>"
                     " | golden <dir> <reynard> <fixtures> <workroot> [update]"
                     " | browseperf <workroot> <reynard>\n",

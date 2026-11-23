@@ -22,6 +22,8 @@ typedef struct parser {
     int failed;
     rx_stmt *stmts;
     size_t nstmt, capstmt;
+    const char *src;  /**< source text (TEXT blocks), may be NULL */
+    rx_stmt *cur;     /**< non-NULL: fill this kid instead of pushing (M5 blocks) */
 } parser;
 
 static int pk_op_ahead_is(parser *p, size_t k, int op);
@@ -314,6 +316,10 @@ static int parse_primary(parser *p, rx_expr **out)
 
 static int parse_unary(parser *p, rx_expr **out)
 {
+    if (pk_op(p, OP_AMP)) {
+        pk_adv(p); /* & : textual macro; the stmt raw span re-parses at exec */
+        return parse_unary(p, out);
+    }
     if (pk_op(p, OP_MINUS) || pk_op(p, OP_PLUS)) {
         int op = pk_cur(p)->ival;
         int line = pk_cur(p)->line, col = pk_cur(p)->col;
@@ -610,6 +616,30 @@ void rx_stmt_add_clause(rx_stmt *s, const char *key, const char *word, rx_expr *
     st_add_clause(s, key, word, e);
 }
 
+/* finish a statement: into the pending kid slot (block mode) or the list */
+static int stmt_finish(parser *p, rx_stmt *s)
+{
+    if (p->cur) {
+        *p->cur = *s;
+        return R_OK;
+    }
+    return stmt_push(p, s);
+}
+
+static void st_add_kid(rx_stmt *s, rx_stmt *kid)
+{
+    if (s->nkids == s->capkids) {
+        size_t nc = s->capkids ? s->capkids * 2 : 8;
+        rx_stmt **nk = realloc(s->kids, nc * sizeof(rx_stmt *));
+        if (!nk) {
+            RX_FATAL("out of memory");
+        }
+        s->kids = nk;
+        s->capkids = nc;
+    }
+    s->kids[s->nkids++] = kid;
+}
+
 /* frees the contents of *s, not the struct itself (stmts are array elements) */
 void rx_stmt_free(rx_stmt *s)
 {
@@ -632,6 +662,12 @@ void rx_stmt_free(rx_stmt *s)
         rx_expr_free(s->bcols[i].valid);
     }
     free(s->bcols);
+    for (size_t i = 0; i < s->nkids; i++) {
+        rx_stmt_free(s->kids[i]);
+        free(s->kids[i]);
+    }
+    free(s->kids);
+    free(s->raw);
     memset(s, 0, sizeof(*s));
 }
 
@@ -652,6 +688,19 @@ static const kw keywords[] = {
     { "LOCATE", ST_LOCATE }, { "CONTINUE", ST_CONTINUE }, { "COPY", ST_COPY },
     { "CREATE", ST_CREATE }, { "FLUSH", ST_FLUSH },   { "TYPE", ST_TYPE },
     { "UNLOCK", ST_UNLOCK },
+    /* M5 §7.1 program flow / I/O / macros */
+    { "IF", ST_IF },       { "DO", ST_DO },         { "FOR", ST_FOR },
+    { "SCAN", ST_SCAN },   { "PROCEDURE", ST_PROC }, { "FUNCTION", ST_PROC },
+    { "TEXT", ST_TEXT },   { "RETURN", ST_RETURN }, { "EXIT", ST_EXIT },
+    { "LOOP", ST_LOOP },   { "RETRY", ST_RETRY },   { "PARAMETERS", ST_PARAMETERS },
+    { "LPARAMETERS", ST_PARAMETERS }, { "PRIVATE", ST_PRIVATE }, { "PUBLIC", ST_PUBLIC },
+    { "RELEASE", ST_RELEASE }, { "ON", ST_ON },     { "WAIT", ST_WAIT },
+    { "INPUT", ST_INPUT }, { "ACCEPT", ST_ACCEPT }, { "CANCEL", ST_CANCEL },
+    { "SUSPEND", ST_SUSPEND }, { "RESUME", ST_RESUME }, { "DIMENSION", ST_DIMENSION },
+    { "DECLARE", ST_DIMENSION },
+    { "ENDIF", ST_ENDMARK }, { "ENDDO", ST_ENDMARK }, { "ENDFOR", ST_ENDMARK },
+    { "ENDCASE", ST_ENDMARK }, { "ENDSCAN", ST_ENDMARK }, { "ENDPROC", ST_ENDMARK },
+    { "ENDFUNC", ST_ENDMARK }, { "ENDTEXT", ST_ENDMARK },
 };
 
 const char *const *rx_keyword_list(size_t *n)
@@ -821,12 +870,478 @@ static int parse_fields(parser *p, rx_stmt *s)
     return 1;
 }
 
+/* ============================ M5 block statements (§7.1) ============================ */
+
+static int parse_stmt(parser *p);
+
+/* parse statements into block->kids until one of the end words (or EOF when
+   eof_ok, or PROCEDURE/FUNCTION when stop_at_proc); end words not consumed */
+/* capture the raw source span of one statement (M5 runtime macro expansion) */
+static void set_raw_span(parser *p, rx_stmt *s, size_t pos0)
+{
+    if (!p->src || s->kind == ST_TEXT || s->raw) {
+        return;
+    }
+    size_t srclen = strlen(p->src);
+    size_t end = p->pos < p->n ? p->toks[p->pos].off : srclen;
+    size_t start = p->toks[pos0].off;
+    if (end > start && end <= srclen) {
+        s->raw = malloc(end - start + 1);
+        if (!s->raw) {
+            RX_FATAL("out of memory");
+        }
+        memcpy(s->raw, p->src + start, end - start);
+        s->raw[end - start] = '\0';
+    }
+}
+
+static int parse_body(parser *p, rx_stmt *block, const char *const *ends, int stop_at_proc,
+                      int eof_ok)
+{
+    for (;;) {
+        while (pk_is(p, TK_NEWLINE)) {
+            pk_adv(p);
+        }
+        if (pk_is(p, TK_EOF)) {
+            if (eof_ok) {
+                return R_OK;
+            }
+            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                           "Unexpected end of input (missing END)");
+        }
+        rx_tok *t = pk_cur(p);
+        if (t->kind == TK_WORD) {
+            int is_end = 0;
+            for (int k = 0; ends[k]; k++) {
+                if (pk_word_is(p, ends[k])) {
+                    is_end = 1;
+                    break;
+                }
+            }
+            if (is_end) {
+                return R_OK;
+            }
+            if (stop_at_proc && (pk_word_is(p, "PROCEDURE") || pk_word_is(p, "FUNCTION"))) {
+                return R_OK;
+            }
+        }
+        rx_stmt *kid = calloc(1, sizeof(rx_stmt));
+        if (!kid) {
+            RX_FATAL("out of memory");
+        }
+        size_t pos0 = p->pos;
+        rx_stmt *saved_cur = p->cur;
+        p->cur = kid;
+        int rc = parse_stmt(p);
+        p->cur = saved_cur;
+        if (rc == R_OK) {
+            set_raw_span(p, kid, pos0);
+        }
+        if (rc != R_OK) {
+            rx_stmt_free(kid);
+            free(kid);
+            return rc;
+        }
+        st_add_kid(block, kid);
+        while (pk_op(p, OP_SEMI)) {
+            pk_adv(p);
+            while (pk_is(p, TK_NEWLINE)) {
+                pk_adv(p);
+            }
+        }
+        while (pk_is(p, TK_NEWLINE)) {
+            pk_adv(p);
+        }
+    }
+}
+
+static int parse_if(parser *p, rx_stmt *s)
+{
+    s->kind = ST_IF;
+    pk_adv(p); /* IF */
+    for (;;) {
+        rx_expr *e = NULL;
+        int rc = parse_expr(p, &e);
+        if (rc != R_OK) {
+            return rc;
+        }
+        st_add_expr(s, e);
+        s->ncond++;
+        rx_stmt *body = calloc(1, sizeof(rx_stmt));
+        if (!body) {
+            RX_FATAL("out of memory");
+        }
+        static const char *const ends[] = { "ELSEIF", "ELSE", "ENDIF", NULL };
+        rc = parse_body(p, body, ends, 0, 0);
+        if (rc != R_OK) {
+            rx_stmt_free(body);
+            free(body);
+            return rc;
+        }
+        st_add_kid(s, body);
+        if (pk_word_is(p, "ELSEIF")) {
+            pk_adv(p);
+            continue;
+        }
+        if (pk_word_is(p, "ELSE")) {
+            pk_adv(p);
+            rx_stmt *els = calloc(1, sizeof(rx_stmt));
+            if (!els) {
+                RX_FATAL("out of memory");
+            }
+            static const char *const e2[] = { "ENDIF", NULL };
+            rc = parse_body(p, els, e2, 0, 0);
+            if (rc != R_OK) {
+                rx_stmt_free(els);
+                free(els);
+                return rc;
+            }
+            st_add_kid(s, els);
+        }
+        if (pk_word_is(p, "ENDIF")) {
+            pk_adv(p);
+            break;
+        }
+        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected ELSEIF, ELSE or ENDIF");
+    }
+    return stmt_finish(p, s);
+}
+
+static int parse_while(parser *p, rx_stmt *s)
+{
+    s->kind = ST_WHILE;
+    pk_adv(p); /* DO */
+    pk_adv(p); /* WHILE */
+    rx_expr *e = NULL;
+    int rc = parse_expr(p, &e);
+    if (rc != R_OK) {
+        return rc;
+    }
+    st_add_expr(s, e);
+    rx_stmt *body = calloc(1, sizeof(rx_stmt));
+    if (!body) {
+        RX_FATAL("out of memory");
+    }
+    static const char *const ends[] = { "ENDDO", NULL };
+    rc = parse_body(p, body, ends, 0, 0);
+    if (rc != R_OK) {
+        rx_stmt_free(body);
+        free(body);
+        return rc;
+    }
+    st_add_kid(s, body);
+    if (!pk_word_is(p, "ENDDO")) {
+        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected ENDDO");
+    }
+    pk_adv(p);
+    return stmt_finish(p, s);
+}
+
+static int parse_for(parser *p, rx_stmt *s)
+{
+    s->kind = ST_FOR;
+    pk_adv(p); /* FOR */
+    if (pk_cur(p)->kind != TK_WORD) {
+        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected loop variable after FOR");
+    }
+    snprintf(s->target, sizeof(s->target), "%s", pk_cur(p)->text);
+    for (char *c = s->target; *c; c++) {
+        *c = (char)toupper((unsigned char)*c);
+    }
+    pk_adv(p);
+    if (!pk_op(p, OP_EQ)) {
+        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected = in FOR");
+    }
+    pk_adv(p);
+    rx_expr *e = NULL;
+    int rc = parse_expr(p, &e); /* start */
+    if (rc != R_OK) {
+        return rc;
+    }
+    st_add_expr(s, e);
+    if (!pk_word_is(p, "TO")) {
+        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected TO in FOR");
+    }
+    pk_adv(p);
+    rc = parse_expr(p, &e); /* end */
+    if (rc != R_OK) {
+        return rc;
+    }
+    st_add_expr(s, e);
+    if (pk_word_is(p, "STEP")) {
+        pk_adv(p);
+        rc = parse_expr(p, &e);
+        if (rc != R_OK) {
+            return rc;
+        }
+        st_add_expr(s, e);
+    }
+    s->ncond = s->nexpr; /* 2 or 3 header exprs */
+    rx_stmt *body = calloc(1, sizeof(rx_stmt));
+    if (!body) {
+        RX_FATAL("out of memory");
+    }
+    static const char *const ends[] = { "ENDFOR", "NEXT", NULL };
+    rc = parse_body(p, body, ends, 0, 0);
+    if (rc != R_OK) {
+        rx_stmt_free(body);
+        free(body);
+        return rc;
+    }
+    st_add_kid(s, body);
+    if (!pk_word_is(p, "ENDFOR") && !pk_word_is(p, "NEXT")) {
+        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected ENDFOR or NEXT");
+    }
+    pk_adv(p);
+    return stmt_finish(p, s);
+}
+
+static int parse_case(parser *p, rx_stmt *s)
+{
+    s->kind = ST_CASE;
+    pk_adv(p); /* DO */
+    pk_adv(p); /* CASE */
+    for (;;) {
+        while (pk_is(p, TK_NEWLINE)) {
+            pk_adv(p);
+        }
+        if (pk_word_is(p, "ENDCASE")) {
+            pk_adv(p);
+            break;
+        }
+        if (pk_word_is(p, "OTHERWISE")) {
+            pk_adv(p);
+            rx_stmt *els = calloc(1, sizeof(rx_stmt));
+            if (!els) {
+                RX_FATAL("out of memory");
+            }
+            static const char *const e2[] = { "ENDCASE", NULL };
+            int rc = parse_body(p, els, e2, 0, 0);
+            if (rc != R_OK) {
+                rx_stmt_free(els);
+                free(els);
+                return rc;
+            }
+            st_add_kid(s, els);
+            if (!pk_word_is(p, "ENDCASE")) {
+                return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected ENDCASE");
+            }
+            pk_adv(p);
+            break;
+        }
+        if (!pk_word_is(p, "CASE")) {
+            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected CASE or ENDCASE");
+        }
+        pk_adv(p);
+        rx_expr *e = NULL;
+        int rc = parse_expr(p, &e);
+        if (rc != R_OK) {
+            return rc;
+        }
+        st_add_expr(s, e);
+        s->ncond++;
+        rx_stmt *body = calloc(1, sizeof(rx_stmt));
+        if (!body) {
+            RX_FATAL("out of memory");
+        }
+        static const char *const ends[] = { "CASE", "OTHERWISE", "ENDCASE", NULL };
+        rc = parse_body(p, body, ends, 0, 0);
+        if (rc != R_OK) {
+            rx_stmt_free(body);
+            free(body);
+            return rc;
+        }
+        st_add_kid(s, body);
+    }
+    return stmt_finish(p, s);
+}
+
+static int parse_scan(parser *p, rx_stmt *s)
+{
+    s->kind = ST_SCAN;
+    pk_adv(p); /* SCAN */
+    int rc = parse_scope_fw(p, s);
+    if (rc != R_OK) {
+        return rc;
+    }
+    if (!end_of_line(p)) {
+        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in SCAN");
+    }
+    rx_stmt *body = calloc(1, sizeof(rx_stmt));
+    if (!body) {
+        RX_FATAL("out of memory");
+    }
+    static const char *const ends[] = { "ENDSCAN", NULL };
+    rc = parse_body(p, body, ends, 0, 0);
+    if (rc != R_OK) {
+        rx_stmt_free(body);
+        free(body);
+        return rc;
+    }
+    st_add_kid(s, body);
+    if (!pk_word_is(p, "ENDSCAN")) {
+        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected ENDSCAN");
+    }
+    pk_adv(p);
+    return stmt_finish(p, s);
+}
+
+static int parse_proc(parser *p, rx_stmt *s)
+{
+    int is_func = pk_word_is(p, "FUNCTION");
+    s->kind = ST_PROC;
+    pk_adv(p);
+    if (pk_cur(p)->kind != TK_WORD) {
+        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected procedure name");
+    }
+    snprintf(s->target, sizeof(s->target), "%s", pk_cur(p)->text);
+    for (char *c = s->target; *c; c++) {
+        *c = (char)toupper((unsigned char)*c);
+    }
+    pk_adv(p);
+    if (is_func) {
+        st_add_clause(s, "FUNC", "1", NULL);
+    }
+    if (pk_op(p, OP_LP)) { /* optional parameter list */
+        pk_adv(p);
+        while (!pk_op(p, OP_RP)) {
+            if (pk_cur(p)->kind == TK_WORD) {
+                st_add_str(s, pk_cur(p)->text);
+                pk_adv(p);
+            } else {
+                return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected parameter name");
+            }
+            if (pk_op(p, OP_COMMA)) {
+                pk_adv(p);
+            }
+        }
+        pk_adv(p);
+    }
+    rx_stmt *body = calloc(1, sizeof(rx_stmt));
+    if (!body) {
+        RX_FATAL("out of memory");
+    }
+    static const char *const ends[] = { "ENDPROC", "ENDFUNC", NULL };
+    int rc = parse_body(p, body, ends, 1, 1);
+    if (rc != R_OK) {
+        rx_stmt_free(body);
+        free(body);
+        return rc;
+    }
+    st_add_kid(s, body);
+    if (pk_word_is(p, "ENDPROC") || pk_word_is(p, "ENDFUNC")) {
+        pk_adv(p);
+    }
+    return stmt_finish(p, s);
+}
+
+static int parse_text(parser *p, rx_stmt *s)
+{
+    s->kind = ST_TEXT;
+    size_t text_off = pk_cur(p)->off;
+    pk_adv(p); /* TEXT */
+    if (p->src) {
+        /* verbatim span: end of the TEXT line .. start of the ENDTEXT line */
+        size_t i = text_off;
+        while (p->src[i] && p->src[i] != '\n') {
+            i++;
+        }
+        size_t start = p->src[i] == '\n' ? i + 1 : i;
+        size_t end = strlen(p->src);
+        for (size_t k = p->pos; k < p->n; k++) {
+            rx_tok *t = &p->toks[k];
+            if (t->kind == TK_WORD && rx_strcasecmp(t->text, "ENDTEXT") == 0) {
+                size_t e = t->off;
+                while (e > 0 && p->src[e - 1] != '\n') {
+                    e--;
+                }
+                end = e;
+                break;
+            }
+        }
+        size_t n = end > start ? end - start : 0;
+        s->raw = malloc(n + 1);
+        if (!s->raw) {
+            RX_FATAL("out of memory");
+        }
+        memcpy(s->raw, p->src + start, n);
+        s->raw[n] = '\0';
+        while (!pk_is(p, TK_EOF) && !pk_word_is(p, "ENDTEXT")) {
+            pk_adv(p);
+        }
+        if (pk_word_is(p, "ENDTEXT")) {
+            pk_adv(p);
+        }
+        return stmt_finish(p, s);
+    }
+    /* no source text available: join token texts (approximate) */
+    strbuf sb;
+    sb_init(&sb);
+    while (!pk_is(p, TK_EOF) && !pk_word_is(p, "ENDTEXT")) {
+        rx_tok *t = pk_cur(p);
+        if (t->kind == TK_NEWLINE) {
+            sb_putc(&sb, '\n');
+        } else if (t->text) {
+            if (sb.len && sb.buf[sb.len - 1] != '\n') {
+                sb_putc(&sb, ' ');
+            }
+            sb_puts(&sb, t->text);
+        }
+        pk_adv(p);
+    }
+    if (pk_word_is(p, "ENDTEXT")) {
+        pk_adv(p);
+    }
+    if (!sb.buf) {
+        sb_putc(&sb, '\0');
+        sb.len = 0;
+    }
+    s->raw = sb.buf;
+    return stmt_finish(p, s);
+}
+
 static int parse_stmt(parser *p)
 {
     rx_stmt s;
     memset(&s, 0, sizeof(s));
     s.line = pk_cur(p)->line;
     s.col = pk_cur(p)->col;
+
+    /* M5: a line starting with & is a macro line; keep it raw, it is
+       expanded and re-parsed at execution time */
+    if (pk_op(p, OP_AMP)) {
+        s.kind = ST_EMPTY;
+        while (!end_of_line(p)) {
+            pk_adv(p);
+        }
+        return stmt_finish(p, &s);
+    }
+
+    /* M5 block openers (recursive) */
+    if (pk_word_is(p, "IF")) {
+        return parse_if(p, &s);
+    }
+    if (pk_word_is(p, "DO")) {
+        rx_tok *a = pk_ahead(p, 1);
+        if (a->kind == TK_WORD && rx_strcasecmp(a->text, "WHILE") == 0) {
+            return parse_while(p, &s);
+        }
+        if (a->kind == TK_WORD && rx_strcasecmp(a->text, "CASE") == 0) {
+            return parse_case(p, &s);
+        }
+    }
+    if (pk_word_is(p, "FOR")) {
+        return parse_for(p, &s);
+    }
+    if (pk_word_is(p, "SCAN")) {
+        return parse_scan(p, &s);
+    }
+    if (pk_word_is(p, "PROCEDURE") || pk_word_is(p, "FUNCTION")) {
+        return parse_proc(p, &s);
+    }
+    if (pk_word_is(p, "TEXT")) {
+        return parse_text(p, &s);
+    }
 
     if (pk_op(p, OP_Q)) {
         int qq = 0;
@@ -853,7 +1368,7 @@ static int parse_stmt(parser *p)
         if (!end_of_line(p)) {
             return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error");
         }
-        return stmt_push(p, &s);
+        return stmt_finish(p, &s);
     }
 
     if (pk_cur(p)->kind == TK_WORD) {
@@ -1414,10 +1929,353 @@ static int parse_stmt(parser *p)
                 skip_to_eol(p); /* TO PRINT etc. at their milestone */
                 break;
             }
+            /* ---- M5 single-line statements ---- */
+            case ST_ENDMARK:
+                return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Unexpected END keyword");
+            case ST_DO:
+                if (pk_cur(p)->kind != TK_WORD) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected procedure name after DO");
+                }
+                snprintf(s.target, sizeof(s.target), "%s", pk_cur(p)->text);
+                for (char *c = s.target; *c; c++) {
+                    *c = (char)toupper((unsigned char)*c);
+                }
+                pk_adv(p);
+                if (pk_word_is(p, "WITH")) {
+                    pk_adv(p);
+                    for (;;) {
+                        rx_expr *e = NULL;
+                        rc = parse_expr(p, &e);
+                        if (rc != R_OK) {
+                            return rc;
+                        }
+                        st_add_expr(&s, e);
+                        if (pk_op(p, OP_COMMA)) {
+                            pk_adv(p);
+                            continue;
+                        }
+                        break;
+                    }
+                }
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in DO");
+                }
+                break;
+            case ST_RETURN:
+                if (!end_of_line(p)) {
+                    rx_expr *e = NULL;
+                    rc = parse_expr(p, &e);
+                    if (rc != R_OK) {
+                        return rc;
+                    }
+                    st_add_expr(&s, e);
+                }
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in RETURN");
+                }
+                break;
+            case ST_EXIT:
+            case ST_LOOP:
+            case ST_RETRY:
+            case ST_CANCEL:
+            case ST_SUSPEND:
+            case ST_RESUME:
+                skip_to_eol(p);
+                break;
+            case ST_PARAMETERS: {
+                /* LPARAMETERS (by-reference) vs PARAMETERS: look at the keyword
+                   token just consumed */
+                if (p->pos > 0 && rx_strcasecmp(p->toks[p->pos - 1].text, "LPARAMETERS") == 0) {
+                    st_add_clause(&s, "LPAR", "1", NULL);
+                }
+                for (;;) {
+                    if (pk_cur(p)->kind != TK_WORD) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                       "Expected parameter name");
+                    }
+                    st_add_str(&s, pk_cur(p)->text);
+                    pk_adv(p);
+                    if (pk_op(p, OP_COMMA)) {
+                        pk_adv(p);
+                        continue;
+                    }
+                    break;
+                }
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in PARAMETERS");
+                }
+                break;
+            }
+            case ST_PRIVATE:
+            case ST_PUBLIC: {
+                if (pk_word_is(p, "ALL")) {
+                    pk_adv(p);
+                    st_add_clause(&s, "ALL", "", NULL);
+                    if (pk_word_is(p, "LIKE") || pk_word_is(p, "EXCEPT")) {
+                        st_add_clause(&s, "ALL", pk_cur(p)->text, NULL);
+                        pk_adv(p);
+                        if (pk_cur(p)->kind == TK_STR || pk_cur(p)->kind == TK_WORD) {
+                            st_add_clause(&s, "PATTERN", pk_cur(p)->text, NULL);
+                            pk_adv(p);
+                        }
+                    }
+                } else {
+                    for (;;) {
+                        if (pk_cur(p)->kind != TK_WORD) {
+                            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected variable name");
+                        }
+                        st_add_str(&s, pk_cur(p)->text);
+                        pk_adv(p);
+                        if (pk_op(p, OP_COMMA)) {
+                            pk_adv(p);
+                            continue;
+                        }
+                        break;
+                    }
+                }
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error");
+                }
+                break;
+            }
+            case ST_RELEASE:
+                if (pk_word_is(p, "MEMVAR") || pk_word_is(p, "MEMORY")) {
+                    pk_adv(p);
+                }
+                if (pk_word_is(p, "ALL")) {
+                    pk_adv(p);
+                    st_add_clause(&s, "ALL", "", NULL);
+                    if (pk_word_is(p, "LIKE") || pk_word_is(p, "EXCEPT")) {
+                        st_add_clause(&s, "ALL", pk_cur(p)->text, NULL);
+                        pk_adv(p);
+                        if (pk_cur(p)->kind == TK_STR || pk_cur(p)->kind == TK_WORD) {
+                            st_add_clause(&s, "PATTERN", pk_cur(p)->text, NULL);
+                            pk_adv(p);
+                        }
+                    }
+                } else {
+                    for (;;) {
+                        if (pk_cur(p)->kind != TK_WORD) {
+                            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected variable name");
+                        }
+                        st_add_str(&s, pk_cur(p)->text);
+                        pk_adv(p);
+                        if (pk_op(p, OP_COMMA)) {
+                            pk_adv(p);
+                            continue;
+                        }
+                        break;
+                    }
+                }
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in RELEASE");
+                }
+                break;
+            case ST_ON:
+                /* ON ERROR|ESCAPE [DO proc] | ON KEY LABEL key [DO proc] */
+                if (pk_word_is(p, "KEY")) {
+                    pk_adv(p);
+                    if (!pk_word_is(p, "LABEL")) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected LABEL after ON KEY");
+                    }
+                    pk_adv(p);
+                    if (pk_cur(p)->kind == TK_WORD || pk_is(p, TK_STR)) {
+                        st_add_clause(&s, "KEYLABEL", pk_cur(p)->text, NULL);
+                        pk_adv(p);
+                    }
+                    if (pk_word_is(p, "DO")) {
+                        pk_adv(p);
+                        if (pk_cur(p)->kind == TK_WORD) {
+                            st_add_str(&s, pk_cur(p)->text);
+                            pk_adv(p);
+                        }
+                    }
+                } else if (pk_word_is(p, "ERROR") || pk_word_is(p, "ESCAPE")) {
+                    st_add_clause(&s, pk_cur(p)->text, "1", NULL);
+                    pk_adv(p);
+                    if (pk_word_is(p, "DO")) {
+                        pk_adv(p);
+                        if (pk_cur(p)->kind == TK_WORD) {
+                            st_add_str(&s, pk_cur(p)->text);
+                            pk_adv(p);
+                        }
+                    }
+                } else {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                   "Expected ERROR, ESCAPE or KEY LABEL after ON");
+                }
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in ON");
+                }
+                break;
+            case ST_WAIT:
+                if (pk_word_is(p, "WINDOW")) {
+                    st_add_clause(&s, "WINDOW", "1", NULL);
+                    pk_adv(p);
+                }
+                if (pk_word_is(p, "NOWAIT") || pk_word_is(p, "CLEAR")) {
+                    pk_adv(p);
+                }
+                if (!end_of_line(p)) {
+                    if (pk_is(p, TK_STR)) {
+                        st_add_str(&s, pk_cur(p)->text);
+                        pk_adv(p);
+                    } else {
+                        rx_expr *e = NULL;
+                        rc = parse_expr(p, &e);
+                        if (rc != R_OK) {
+                            return rc;
+                        }
+                        st_add_expr(&s, e);
+                    }
+                }
+                if (pk_word_is(p, "TIMEOUT")) {
+                    pk_adv(p);
+                    rx_expr *e = NULL;
+                    rc = parse_expr(p, &e);
+                    if (rc != R_OK) {
+                        return rc;
+                    }
+                    st_add_clause(&s, "TIMEOUT", "", e);
+                }
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in WAIT");
+                }
+                break;
+            case ST_INPUT:
+            case ST_ACCEPT: {
+                /* [prompt] TO var */
+                if (!pk_word_is(p, "TO")) {
+                    if (pk_is(p, TK_STR)) {
+                        st_add_str(&s, pk_cur(p)->text);
+                        pk_adv(p);
+                    } else {
+                        rx_expr *e = NULL;
+                        rc = parse_expr(p, &e);
+                        if (rc != R_OK) {
+                            return rc;
+                        }
+                        st_add_expr(&s, e);
+                    }
+                    if (pk_word_is(p, "TO")) {
+                        pk_adv(p);
+                    }
+                } else {
+                    pk_adv(p);
+                }
+                if (pk_cur(p)->kind != TK_WORD) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected variable after TO");
+                }
+                snprintf(s.target, sizeof(s.target), "%s", pk_cur(p)->text);
+                for (char *c = s.target; *c; c++) {
+                    *c = (char)toupper((unsigned char)*c);
+                }
+                pk_adv(p);
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error");
+                }
+                break;
+            }
+            case ST_DIMENSION:
+                /* DIMENSION a[d1,d2], b[d1], ... — one kid stmt per array */
+                for (;;) {
+                    if (pk_cur(p)->kind != TK_WORD) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected array name");
+                    }
+                    rx_stmt *kid = calloc(1, sizeof(rx_stmt));
+                    if (!kid) {
+                        RX_FATAL("out of memory");
+                    }
+                    kid->kind = ST_DIMENSION;
+                    snprintf(kid->target, sizeof(kid->target), "%s", pk_cur(p)->text);
+                    for (char *c = kid->target; *c; c++) {
+                        *c = (char)toupper((unsigned char)*c);
+                    }
+                    pk_adv(p);
+                    if (!pk_op(p, OP_LB)) {
+                        rx_stmt_free(kid);
+                        free(kid);
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected [ after array name");
+                    }
+                    pk_adv(p);
+                    for (;;) {
+                        rx_expr *e = NULL;
+                        rc = parse_expr(p, &e);
+                        if (rc != R_OK) {
+                            rx_stmt_free(kid);
+                            free(kid);
+                            return rc;
+                        }
+                        st_add_expr(kid, e);
+                        if (pk_op(p, OP_COMMA)) {
+                            pk_adv(p);
+                            continue;
+                        }
+                        break;
+                    }
+                    if (!pk_op(p, OP_RB)) {
+                        rx_stmt_free(kid);
+                        free(kid);
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected ] in DIMENSION");
+                    }
+                    pk_adv(p);
+                    st_add_kid(&s, kid);
+                    if (pk_op(p, OP_COMMA)) {
+                        pk_adv(p);
+                        continue;
+                    }
+                    break;
+                }
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in DIMENSION");
+                }
+                break;
             default:
                 break;
             }
-            return stmt_push(p, &s);
+            return stmt_finish(p, &s);
+        }
+        /* array element assignment: WORD [i, j] = expr */
+        if (pk_cur(p)->kind == TK_WORD && pk_op_ahead_is(p, 1, OP_LB)) {
+            s.kind = ST_ASSIGN;
+            snprintf(s.target, sizeof(s.target), "%s", pk_cur(p)->text);
+            for (char *c = s.target; *c; c++) {
+                *c = (char)toupper((unsigned char)*c);
+            }
+            pk_adv(p);
+            pk_adv(p); /* [ */
+            for (;;) {
+                rx_expr *e = NULL;
+                int rc2 = parse_expr(p, &e);
+                if (rc2 != R_OK) {
+                    return rc2;
+                }
+                st_add_expr(&s, e);
+                s.nidx++;
+                if (pk_op(p, OP_COMMA)) {
+                    pk_adv(p);
+                    continue;
+                }
+                break;
+            }
+            if (!pk_op(p, OP_RB)) {
+                return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected ] in array assignment");
+            }
+            pk_adv(p);
+            if (!pk_op(p, OP_EQ)) {
+                return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected = in array assignment");
+            }
+            pk_adv(p);
+            rx_expr *v = NULL;
+            int rc3 = parse_expr(p, &v);
+            if (rc3 != R_OK) {
+                return rc3;
+            }
+            st_add_expr(&s, v);
+            if (!end_of_line(p)) {
+                return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error");
+            }
+            return stmt_finish(p, &s);
         }
         /* assignment: WORD = expr  (or m.var = expr) */
         if (pk_op_ahead_is(p, 1, OP_EQ)) {
@@ -1437,7 +2295,7 @@ static int parse_stmt(parser *p)
             if (!end_of_line(p)) {
                 return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error");
             }
-            return stmt_push(p, &s);
+            return stmt_finish(p, &s);
         }
         if (pk_op_ahead_is(p, 1, OP_DOT) && pk_ahead(p, 2)->kind == TK_WORD &&
             pk_op_ahead_is(p, 3, OP_EQ)) {
@@ -1459,7 +2317,7 @@ static int parse_stmt(parser *p)
             if (!end_of_line(p)) {
                 return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error");
             }
-            return stmt_push(p, &s);
+            return stmt_finish(p, &s);
         }
     }
 
@@ -1474,7 +2332,7 @@ static int parse_stmt(parser *p)
     if (!end_of_line(p)) {
         return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error");
     }
-    return stmt_push(p, &s);
+    return stmt_finish(p, &s);
 }
 
 /* BROWSE clause grammar (spec §9.1, M4):
@@ -1736,13 +2594,15 @@ static int parse_browse(parser *p, rx_stmt *s)
     return R_OK;
 }
 
-int rx_parse(rx_tok *toks, size_t ntok, rx_stmt **out, size_t *nout, r_err *err)
+int rx_parse_src(rx_tok *toks, size_t ntok, const char *src, rx_stmt **out, size_t *nout,
+                 r_err *err)
 {
     parser p;
     memset(&p, 0, sizeof(p));
     p.toks = toks;
     p.n = ntok;
     p.pos = 0;
+    p.src = src;
     p.err = err;
 
     while (!p.failed) {
@@ -1757,6 +2617,9 @@ int rx_parse(rx_tok *toks, size_t ntok, rx_stmt **out, size_t *nout, r_err *err)
         int rc = parse_stmt(&p);
         if (rc != R_OK) {
             break;
+        }
+        if (p.nstmt > 0) {
+            set_raw_span(&p, &p.stmts[p.nstmt - 1], pos_before);
         }
         if (p.pos == pos_before && !pk_is(&p, TK_NEWLINE) && !pk_is(&p, TK_EOF)) {
             pk_fail(&p, pk_cur(&p)->line, pk_cur(&p)->col, "Syntax error");
@@ -1782,19 +2645,7 @@ int rx_parse(rx_tok *toks, size_t ntok, rx_stmt **out, size_t *nout, r_err *err)
     }
     if (p.failed) {
         for (size_t i = 0; i < p.nstmt; i++) {
-            rx_stmt *s = &p.stmts[i];
-            for (size_t k = 0; k < s->nexpr; k++) {
-                rx_expr_free(s->exprs[k]);
-            }
-            free(s->exprs);
-            for (size_t k = 0; k < s->nclause; k++) {
-                rx_expr_free(s->clauses[k].e);
-            }
-            free(s->clauses);
-            for (size_t k = 0; k < s->nstrs; k++) {
-                free(s->strs[k]);
-            }
-            free(s->strs);
+            rx_stmt_free(&p.stmts[i]);
         }
         free(p.stmts);
         return R_ERR_SYNTAX;
@@ -1802,4 +2653,9 @@ int rx_parse(rx_tok *toks, size_t ntok, rx_stmt **out, size_t *nout, r_err *err)
     *out = p.stmts;
     *nout = p.nstmt;
     return R_OK;
+}
+
+int rx_parse(rx_tok *toks, size_t ntok, rx_stmt **out, size_t *nout, r_err *err)
+{
+    return rx_parse_src(toks, ntok, NULL, out, nout, err);
 }

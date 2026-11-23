@@ -134,3 +134,28 @@ int rx_unlink(const char *path)
 {
     return unlink(path);
 }
+
+/* FoxPro-style wildcard match for LIKE/EXCEPT patterns: * and ? (M5) */
+int rx_wildmatch(const char *pat, const char *str)
+{
+    const char *p = pat, *s = str;
+    const char *star = NULL, *ss = NULL;
+    while (*s) {
+        if (*p == '?' || toupper((unsigned char)*p) == toupper((unsigned char)*s)) {
+            p++;
+            s++;
+        } else if (*p == '*') {
+            star = p++;
+            ss = s;
+        } else if (star) {
+            p = star + 1;
+            s = ++ss;
+        } else {
+            return 0;
+        }
+    }
+    while (*p == '*') {
+        p++;
+    }
+    return *p == '\0';
+}

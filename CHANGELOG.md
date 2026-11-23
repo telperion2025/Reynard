@@ -3,7 +3,7 @@
 All notable changes per milestone (spec §0.5). Format: Keep a Changelog;
 Reynard is pre-1.0, versions are milestone tags M0..M10 then v1.0.0.
 
-## [Unreleased] — M0..M4
+## [Unreleased] — M0..M5
 
 ### M0 — Skeleton and term layer
 - CMake + Makefile.simple builds, zero warnings under -Wall -Wextra
@@ -200,3 +200,41 @@ Reynard is pre-1.0, versions are milestone tags M0..M10 then v1.0.0.
   scripted browse, asserts avg handle+render <= 16ms (measured ~0.1ms);
   wired into ctest (browse_perf) and Makefile.simple test, so CI enforces
   it on every matrix job.
+
+### M5 — Language core (spec §7.1–§7.5, gate §14)
+- Control flow: IF/ELSEIF/ELSE/ENDIF, DO WHILE/ENDDO, FOR/STEP/NEXT/ENDFOR,
+  DO CASE/OTHERWISE/ENDCASE, SCAN [scope] [FOR/WHILE] /ENDSCAN with LOOP and
+  EXIT (EXIT/LOOP leave the innermost loop only), nested blocks arbitrary.
+- Program structure: PROCEDURE/FUNCTION ... ENDPROC/ENDFUNC (registered for
+  the whole file before execution, FoxPro order-independence), DO name [WITH
+  args], RETURN [expr], user functions callable as UDFs from expressions
+  (recursion, depth limit 64), PARAMETERS/LPARAMETERS (by value — DEVIATIONS
+  #34), PUBLIC/PRIVATE [ALL LIKE/EXCEPT pat] with per-call frame scopes,
+  RELEASE [ALL [LIKE/EXCEPT]] / RELEASE MEMVAR.
+- Arrays: DIMENSION/DECLARE a[d1] / a[d1,d2], element get/set a[i,j]
+  (1-based, row-major), bare array name in an expression yields element 1;
+  AELEMENT, ASUBSCRIPT, ACOPY (creates the target), ADEL, AINS, ASCAN,
+  ASORT, AFIELDS, ADIR, ALEN; TYPE("a") = "A".
+- Macros: &var expands at execution time per statement (raw source spans are
+  kept per statement and re-parsed after expansion, so & sees memvars
+  assigned earlier in the program), depth limit 16, && line comments,
+  &name as a call argument passes the name (array functions).
+- Errors: ON ERROR DO handler (suppresses the default diagnostic, resumes
+  after the erroring statement), RETRY re-runs it (storm-guarded at 1000),
+  ERROR()/MESSAGE()/MESSAGE(1) introspection inside the handler, ON ERROR
+  clears; ON ESCAPE/ON KEY LABEL accepted (batch: no dispatch).
+- I/O: WAIT (non-blocking in -t), ACCEPT, INPUT (reads ctx->in = stdin),
+  TEXT...ENDTEXT verbatim blocks (lexer skips the raw span), CANCEL, SUSPEND/
+  RESUME (batch: note only — DEVIATIONS #35).
+- TYPE("name") now resolves memvars/fields ("U" when undefined) per §7.6.
+- .RXP compiled cache (spec §7.4): `reynard script.prg` writes script.rxp
+  next to the source (fallback $XDG_CACHE_HOME/reynard/rxp/<sha256>.rxp),
+  magic RXP1 + sha256 of the source; the serialized AST is little-endian
+  fixed-width so the same source yields byte-identical .RXP files; new
+  `rxp` harness mode asserts byte-reproducibility + cache-hit equivalence
+  (ctest rxp_repro, Makefile.simple test).
+- Tests: conformance 60 -> 71 cases (control flow, procs/UDFs, arrays,
+  macros, ON ERROR/RETRY, TEXT, SCAN, scopes, WAIT/ACCEPT/INPUT via
+  per-case .stdin, & undefined-macro error); all green under -Werror and
+  ASan/UBSan, plus Makefile.simple.
+

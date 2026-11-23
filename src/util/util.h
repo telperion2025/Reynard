@@ -46,6 +46,8 @@ int rstr_cmp(const r_str *a, const r_str *b);
 void rval_set_str(rval *v, char *utf8, size_t n);
 /** Case-insensitive ASCII compare of NUL-terminated strings. */
 int rx_strcasecmp(const char *a, const char *b);
+/* FoxPro LIKE/EXCEPT wildcard match: * and ? (M5) */
+int rx_wildmatch(const char *pat, const char *str);
 /** Uppercase ASCII in place. */
 void rx_strtoupper(char *s);
 /** Duplicate a C string (NULL-safe). */
@@ -97,6 +99,9 @@ double rx_parse_num(const char *s, size_t n, int *blank);
 
 /* ---- errlist.c ---- */
 /* implemented in errlist.c; declared in reynard/status.h */
+
+/* ---- sha256.c ---- */
+void rx_sha256(const void *data, size_t n, uint8_t out[32]);
 
 /* ---- log.c: RX_LOG trace ---- */
 #define RX_LOG_ERROR 1

@@ -34,6 +34,7 @@ set(RX_CORE_SOURCES
     src/util/errlist.c
     src/util/log.c
     src/util/cfg.c
+    src/util/sha256.c
     src/term/term_script.c
     src/term/mouse.c
     src/ui/screen.c
@@ -66,11 +67,13 @@ set(RX_CORE_SOURCES
     src/lang/cmds_env.c
     src/lang/memvar.c
     src/lang/errhand.c
+    src/lang/rxp.c
     src/lang/funcs_str.c
     src/lang/funcs_num.c
     src/lang/funcs_date.c
     src/lang/funcs_db.c
     src/lang/funcs_sys.c
+    src/lang/funcs_array.c
 )
 
 # ncurses production backend: built when headers are available. On hosts
@@ -189,6 +192,12 @@ add_test(NAME dbf_roundtrip
     COMMAND reynard-harness roundtrip
         ${CMAKE_CURRENT_SOURCE_DIR}/testdata/gen
         ${CMAKE_CURRENT_BINARY_DIR}/test-work)
+add_test(NAME rxp_repro
+    COMMAND reynard-harness rxp
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/rxp
+        $<TARGET_FILE:reynard>
+        ${CMAKE_CURRENT_SOURCE_DIR}/testdata/gen
+        ${CMAKE_CURRENT_BINARY_DIR}/test-work-rxp)
 add_test(NAME lock_race
     COMMAND reynard-harness lockrace
         ${CMAKE_CURRENT_BINARY_DIR}/test-work)

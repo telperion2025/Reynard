@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "lang/lang.h"
 #include "reynard/dbf.h"
@@ -135,6 +136,7 @@ int main(int argc, char **argv)
 
     rx_ctx ctx;
     rx_ctx_init(&ctx, out, test_mode);
+    ctx.in = stdin; /* INPUT/ACCEPT/WAIT read here (M5) */
     ctx.set.mouse = !no_mouse;
     /* data-engine session: frozen header date in -t, default code page mark
        from REYNARD_CODEPAGE or the config file (spec §8.2) */
@@ -166,18 +168,12 @@ int main(int argc, char **argv)
         }
         free(copy);
     } else if (script && strcmp(script, "-") != 0) {
-        FILE *f = fopen(script, "r");
-        if (!f) {
+        /* M5: .prg files run through rx_run_file with the .RXP compiled cache */
+        if (access(script, R_OK) != 0) {
             fprintf(stderr, "reynard: cannot open %s\n", script);
             rc = 2;
-        } else {
-            size_t n;
-            char *src = read_all(f, &n);
-            fclose(f);
-            if (rx_run_source(&ctx, src, script) != R_OK && !ctx.quit) {
-                rc = 1;
-            }
-            free(src);
+        } else if (rx_run_file(&ctx, script) != R_OK && !ctx.quit) {
+            rc = 1;
         }
     } else if (script && strcmp(script, "-") == 0) {
         size_t n;

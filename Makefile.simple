@@ -9,6 +9,7 @@ CPPFLAGS += -D_POSIX_C_SOURCE=200809L -Iinclude -Isrc
 CORE = \
 	src/util/strbuf.c src/util/str.c src/util/utf8.c src/util/cp_tables.c \
 	src/util/ddatecnv.c src/util/numeric.c src/util/errlist.c src/util/log.c src/util/cfg.c \
+	src/util/sha256.c \
 	src/term/term_script.c src/term/mouse.c \
 	src/ui/screen.c src/ui/window.c src/ui/getsay.c src/ui/cmdwin.c \
 	src/ui/menudef.c src/ui/menubar.c src/ui/statusbar.c src/ui/dialog.c \
@@ -18,6 +19,7 @@ CORE = \
 	src/data/journal.c src/data/scope.c src/data/copyto.c \
 	src/lang/lexer.c src/lang/parser.c src/lang/expr_compile.c src/lang/vm.c \
 	src/lang/cmds_data.c src/lang/cmds_env.c src/lang/memvar.c src/lang/errhand.c \
+	src/lang/rxp.c src/lang/funcs_array.c \
 	src/lang/funcs_str.c src/lang/funcs_num.c src/lang/funcs_date.c \
 	src/lang/funcs_db.c src/lang/funcs_sys.c
 
@@ -87,6 +89,7 @@ test: all
 	./reynard-harness selftest
 	./reynard-harness conformance tests/conformance $(CURDIR)/reynard testdata/gen .test-work
 	./reynard-harness roundtrip testdata/gen .test-work
+	./reynard-harness rxp tests/rxp $(CURDIR)/reynard testdata/gen .test-work
 	./reynard-harness lockrace .test-work
 	./reynard-harness golden tests/golden $(CURDIR)/reynard testdata/gen .test-work
 	./reynard-harness browseperf .test-work $(CURDIR)/reynard

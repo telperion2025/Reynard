@@ -32,6 +32,8 @@ extern const rx_funcdef rx_funcs_db[];
 extern const size_t rx_funcs_db_n;
 extern const rx_funcdef rx_funcs_sys[];
 extern const size_t rx_funcs_sys_n;
+extern const rx_funcdef rx_funcs_array[];
+extern const size_t rx_funcs_array_n;
 
 /* ---- coercion helpers shared by all funcs_*.c ---- */
 

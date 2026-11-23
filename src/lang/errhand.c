@@ -28,6 +28,14 @@ int rx_raise(rx_ctx *ctx, int code, int line, int col, const char *fmt, ...)
     vsnprintf(e->msg, sizeof(e->msg), fmt, ap);
     va_end(ap);
 
+    ctx->err_printed = 0;
+    /* M5: when an ON ERROR handler is registered (and not itself running),
+       the diagnostic is suppressed — exec_list dispatches to the handler */
+    if (ctx->on_error[0] && !ctx->in_on_error && !ctx->quit) {
+        ctx->err_printed = 1;
+        return code;
+    }
+
     /* interactive mode (M3): route the first line to the UI message line */
     if (ctx->msg_line && !ctx->out) {
         char buf[1200];

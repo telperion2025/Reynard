@@ -159,18 +159,32 @@ static int compile(const rx_expr *e, rx_code *c, r_err *err)
     case EX_FUNC: {
         emit(c, BOP_PUSH_STR, add_str(c, e->name));
         for (size_t i = 0; i < e->nargs; i++) {
-            int rc = compile(e->args[i], c, err);
-            if (rc != R_OK) {
-                return rc;
+            /* a bare variable argument may be an array reference (AELEMENT(a,..)):
+               BOP_ARGNAME pushes the name for arrays, the value otherwise */
+            if (e->args[i]->kind == EX_VAR) {
+                emit(c, BOP_ARGNAME, add_str(c, e->args[i]->name));
+            } else {
+                int rc = compile(e->args[i], c, err);
+                if (rc != R_OK) {
+                    return rc;
+                }
             }
         }
         emit(c, BOP_FUNC, (uint32_t)e->nargs);
         return R_OK;
     }
-    case EX_ARRAY:
-        /* arrays land at M5; treat as undefined variable read for now */
-        emit(c, BOP_VAR, add_str(c, e->name));
+    case EX_ARRAY: {
+        /* M5: a[i, j] -> push name, evaluate indexes, BOP_ARRAY_LOAD argc */
+        emit(c, BOP_PUSH_STR, add_str(c, e->name));
+        for (size_t i = 0; i < e->nargs; i++) {
+            int rc = compile(e->args[i], c, err);
+            if (rc != R_OK) {
+                return rc;
+            }
+        }
+        emit(c, BOP_ARRAY_LOAD, (uint32_t)e->nargs);
         return R_OK;
+    }
     }
     return R_ERR_SYNTAX;
 }

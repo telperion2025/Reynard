@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "reynard/dbf.h"
 #include "util/util.h"
 
 static char *dup_range(const char *s, size_t n, size_t off, size_t len)
@@ -898,8 +899,56 @@ static int f_valtype(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
 
 static int f_type(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
 {
-    /* M1: TYPE() receives the evaluated value (spec §7.6 unevaluated-argument
-       form lands with the M5 compiler); see docs/DEVIATIONS.md. */
+    /* M5 §7.6: TYPE("name") resolves the named memvar/field; "U" when the
+       name does not exist. A non-character argument falls back to VALTYPE. */
+    if (f_argc(err, argc, 1, "TYPE") != 0) {
+        return err->code;
+    }
+    if (argv[0].t == RX_T_C && argv[0].u.c.utf8) {
+        char t = 'U';
+        rx_memvar *mv = rx_memvar_lookup(c, argv[0].u.c.utf8);
+        if (mv) {
+            if (mv->is_array) {
+                t = 'A';
+            } else {
+                switch (mv->val.t) {
+                case RX_T_C: t = 'C'; break;
+                case RX_T_N: case RX_T_I: case RX_T_Y: case RX_T_B: t = 'N'; break;
+                case RX_T_D: t = 'D'; break;
+                case RX_T_T: t = 'T'; break;
+                case RX_T_L: t = 'L'; break;
+                case RX_T_M: t = 'M'; break;
+                case RX_T_G: t = 'G'; break;
+                default: t = 'U'; break;
+                }
+            }
+        } else {
+            rx_dbf *dbf;
+            if (rx_wa_dbf(0, &dbf) == R_OK) {
+                size_t idx;
+                if (rx_dbf_field_index(dbf, argv[0].u.c.utf8, &idx) == R_OK) {
+                    rx_fielddef fd;
+                    if (rx_dbf_field_def(dbf, idx, &fd) == R_OK) {
+                        switch (fd.type) {
+                        case RFT_C: t = 'C'; break;
+                        case RFT_N: case RFT_F: t = 'N'; break;
+                        case RFT_Y: t = 'Y'; break;
+                        case RFT_D: t = 'D'; break;
+                        case RFT_T: t = 'T'; break;
+                        case RFT_L: t = 'L'; break;
+                        case RFT_M: t = 'M'; break;
+                        case RFT_G: t = 'G'; break;
+                        case RFT_B: t = 'B'; break;
+                        default: t = 'U'; break;
+                        }
+                    }
+                }
+            }
+        }
+        char r[2] = { t, '\0' };
+        f_str(out, rx_strdup(r), 1);
+        return R_OK;
+    }
     return f_valtype(c, argc, argv, out, err);
 }
 

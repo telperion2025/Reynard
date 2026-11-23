@@ -22,7 +22,12 @@ DBF files (including memos and CDX compound indexes).
 > full-screen grid window with in-cell editing, FREEZE/PARTITION/LEDIT,
 > mouse reorder/resize, Ctrl+T/Ctrl+N, SET RELATION/SET SKIP, shared
 > locking on edits; 60-case conformance suite incl. scripted-BROWSE
-> goldens; §11.3 browse perf gate in CI) are implemented. See
+> goldens; §11.3 browse perf gate in CI) and **M5** (language core:
+> IF/DO WHILE/FOR/DO CASE/SCAN, PROCEDURE/FUNCTION UDFs with recursion,
+> PUBLIC/PRIVATE scopes, DIMENSION arrays + array functions, & macros at
+> execution time, ON ERROR/RETRY with ERROR()/MESSAGE(), WAIT/ACCEPT/INPUT,
+> TEXT...ENDTEXT, .RXP compiled-program cache with a byte-reproducibility
+> gate; 71-case conformance suite) are implemented. See
 > [docs/DEVIATIONS.md](docs/DEVIATIONS.md) for the deviation log and
 > [CHANGELOG.md](CHANGELOG.md) for progress. The full specification this
 > project implements is summarized in [docs/language.md](docs/language.md)

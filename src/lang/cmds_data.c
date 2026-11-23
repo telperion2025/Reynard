@@ -325,6 +325,10 @@ static int eval_scope(rx_ctx *ctx, rx_stmt *s, int default_kind, rx_scope *sc)
 /* shared scope iteration with SET DELETED, SET FILTER, FOR and WHILE */
 typedef int (*rx_rec_cb)(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud);
 
+/* internal sentinel: callback asks iterate() to stop scanning without error
+   (SCAN body hit EXIT/RETURN) */
+#define RX_ITER_STOP 0x7ffffff1
+
 static int eval_predicate(rx_ctx *ctx, const rx_code *code, int *pass)
 {
     rval v;
@@ -441,7 +445,16 @@ static int iterate(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, int default_kind, rx_re
                 break;
             }
         }
+        if (ctx->loop_ctl == RX_CTL_EXIT) {
+            stop = 1;
+            break;
+        }
         rc = cb(ctx, dbf, r, ud);
+        if (rc == RX_ITER_STOP) {
+            rc = R_OK;
+            stop = 1;
+            break;
+        }
         if (rc != R_OK) {
             break;
         }
@@ -1158,6 +1171,52 @@ int rx_cmd_locate(rx_ctx *ctx, rx_stmt *s, int cont)
         rx_dbf_set_found(dbf, 0);
     }
     return rc == R_OK ? R_OK : data_raise(ctx, s, rc, cont ? "CONTINUE" : "LOCATE");
+}
+
+/* ---- SCAN ... ENDSCAN (spec §7.1, M5) ---- */
+
+typedef struct {
+    rx_stmt *body; /* container stmt: kids/nkids hold the real body */
+} scan_ud;
+
+static int scan_cb(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud)
+{
+    scan_ud *u = ud;
+    (void)dbf;
+    (void)recno;
+    int rc = rx_exec_block(ctx, u->body->kids, u->body->nkids);
+    if (rc != R_OK) {
+        return rc;
+    }
+    if (ctx->returning || ctx->abort) {
+        return RX_ITER_STOP; /* unwind: stop scanning, propagate control */
+    }
+    if (ctx->loop_ctl == RX_CTL_LOOP) {
+        ctx->loop_ctl = RX_CTL_NONE;
+        return R_OK;
+    }
+    if (ctx->loop_ctl == RX_CTL_EXIT) {
+        return RX_ITER_STOP; /* leave EXIT set so enclosing loops unwind */
+    }
+    return R_OK;
+}
+
+int rx_cmd_scan(rx_ctx *ctx, rx_stmt *s)
+{
+    rx_dbf *dbf;
+    int rc = cur_table(ctx, s, &dbf);
+    if (rc != R_OK) {
+        return rc;
+    }
+    if (s->nkids < 1 || !s->kids[0]) {
+        return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "SCAN without body");
+    }
+    scan_ud ud = { s->kids[0] };
+    rc = iterate(ctx, s, dbf, 1 /* ALL */, scan_cb, &ud, NULL);
+    if (ctx->loop_ctl == RX_CTL_EXIT) {
+        ctx->loop_ctl = RX_CTL_NONE; /* EXIT leaves the SCAN, not the program */
+    }
+    return rc;
 }
 
 /* ---- APPEND ---- */

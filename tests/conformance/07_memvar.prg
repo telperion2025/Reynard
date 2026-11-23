@@ -5,4 +5,4 @@ STORE "hello" TO a, b
 ? a, b
 m.z = 99
 ? m.z
-? TYPE(a), VALTYPE(x), VALTYPE(DATE())
+? TYPE("a"), VALTYPE(x), VALTYPE(DATE())

@@ -47,6 +47,7 @@ enum {
 typedef struct rx_tok {
     tk_kind kind;
     int line, col;
+    size_t off;   /**< byte offset in the source (for TEXT...ENDTEXT spans) */
     char *text;   /**< owned: WORD text, STR contents, NUM text, OP symbol */
     int ival;     /**< OP_* for TK_OP */
     double num;   /**< TK_NUM value */
@@ -112,7 +113,33 @@ typedef enum {
     ST_FLUSH,
     ST_TYPE,      /**< TYPE file */
     ST_UNLOCK,    /**< UNLOCK [ALL] */
-    ST_EMPTY     /**< comment-only line */
+    ST_EMPTY,    /**< comment-only line */
+    /* M5 control flow / program structure (§7.1) */
+    ST_IF,       /**< exprs[0..ncond-1] branch conds, kids[0..ncond-1] bodies, kids[ncond] else */
+    ST_WHILE,    /**< exprs[0] cond, kids[0] body */
+    ST_FOR,      /**< target=var, exprs: start,end,step(optional), kids[0] body */
+    ST_CASE,     /**< like ST_IF with OTHERWISE as final else */
+    ST_SCAN,     /**< scope/FOR/WHILE in clauses, kids[0] body */
+    ST_PROC,     /**< target=name, strs=param names, kids[0] body; FUNCTION sets is_func via clause */
+    ST_TEXT,     /**< raw = literal text block (TEXT...ENDTEXT) */
+    ST_DO,       /**< target=proc name, exprs=args, clauses WITH */
+    ST_RETURN,   /**< exprs[0] optional value */
+    ST_EXIT,     /**< EXIT loop */
+    ST_LOOP,     /**< LOOP to next iteration */
+    ST_RETRY,    /**< RETRY inside ON ERROR handler */
+    ST_PARAMETERS, /**< strs = param names (LPARAMETERS: clause LPAR) */
+    ST_PRIVATE,  /**< strs = names, or clause ALL LIKE/EXCEPT pattern */
+    ST_PUBLIC,   /**< strs = names */
+    ST_RELEASE,  /**< strs = names, or MEMVAR ALL LIKE/EXCEPT, or ALL */
+    ST_ON,       /**< clause key ERROR/ESCAPE/KEY LABEL, word = handler */
+    ST_WAIT,     /**< strs[0] optional message */
+    ST_INPUT,    /**< strs[0] prompt, target = var */
+    ST_ACCEPT,   /**< strs[0] prompt, target = var */
+    ST_CANCEL,   /**< CANCEL: abort program deterministically */
+    ST_SUSPEND,  /**< SUSPEND (interactive; batch: no-op + message) */
+    ST_RESUME,   /**< RESUME */
+    ST_DIMENSION,/**< kids: one per array (target=name, exprs=dims) */
+    ST_ENDMARK   /**< stray ENDIF/ENDDO/... at top level: syntax error */
 } st_kind;
 
 typedef struct rx_clause {
@@ -151,6 +178,15 @@ typedef struct rx_stmt {
     size_t nstrs;
     rx_bcol *bcols;   /**< ST_BROWSE FIELDS specs */
     size_t nbcols, capbcols;
+    /* M5 block structure: kids = child statements (branch bodies / loop body
+       / procedure body); ncond = number of leading branch conditions in
+       exprs for ST_IF/ST_CASE; nidx = array index exprs for ST_ASSIGN;
+       raw = TEXT block content */
+    struct rx_stmt **kids;
+    size_t nkids, capkids;
+    size_t ncond;
+    size_t nidx;
+    char *raw;
 } rx_stmt;
 
 /** Steal the BROWSE column specs out of a stmt (sets s->bcols = NULL), so a
@@ -161,6 +197,10 @@ void rx_stmt_add_clause(rx_stmt *s, const char *key, const char *word, rx_expr *
 
 /** Parse a token stream into statements (one per logical line). */
 int rx_parse(rx_tok *toks, size_t ntok, rx_stmt **out, size_t *nout, r_err *err);
+/** Like rx_parse, but keeps the source text so TEXT...ENDTEXT blocks are
+ *  captured verbatim (M5). */
+int rx_parse_src(rx_tok *toks, size_t ntok, const char *src, rx_stmt **out, size_t *nout,
+                 r_err *err);
 void rx_stmt_free(rx_stmt *s);
 void rx_expr_free(rx_expr *e);
 
@@ -174,7 +214,9 @@ enum {
     BOP_ADD, BOP_SUB, BOP_MUL, BOP_DIV, BOP_MOD, BOP_POW,
     BOP_EQ, BOP_EEQ, BOP_NE, BOP_LT, BOP_LE, BOP_GT, BOP_GE, BOP_IN,
     BOP_JMPF, BOP_JMPT, /* short-circuit, arg = absolute target */
-    BOP_FUNC, BOP_ARGC  /* BOP_ARGC follows BOP_FUNC with the arg count */
+    BOP_FUNC, BOP_ARGC, /* BOP_ARGC follows BOP_FUNC with the arg count */
+    BOP_ARRAY_LOAD,     /* M5: name str, then argc index values on stack */
+    BOP_ARGNAME         /* M5: like BOP_VAR, but an array memvar pushes its name */
 };
 
 typedef struct rx_code {
@@ -197,10 +239,43 @@ typedef struct rx_ctx rx_ctx;
 typedef struct rx_memvar {
     char name[64]; /**< uppercased */
     rval val;      /**< owned */
+    /* M5 arrays: when is_array, aelem[0..anelem) hold the elements row-major */
+    int is_array;
+    size_t adim[2]; /**< adim[1]==0 for 1-D */
+    rval *aelem;
+    size_t anelem;
 } rx_memvar;
+
+/** A user procedure/function definition (M5): PROCEDURE/FUNCTION ... body. */
+typedef struct rx_proc {
+    char name[64];
+    char params[16][64];
+    size_t nparams;
+    struct rx_stmt **body; /**< owned array of owned body stmts */
+    size_t nbody;
+    int is_func;
+} rx_proc;
+
+/** A procedure call frame: its own memvar scope (PRIVATE hiding, §7.5). */
+typedef struct rx_frame {
+    rx_memvar *vars;
+    size_t nvars, capvars;
+    struct rx_frame *up;
+} rx_frame;
+
+/* loop/return control */
+#define RX_CTL_NONE 0
+#define RX_CTL_LOOP 1
+#define RX_CTL_EXIT 2
+#define RX_CTL_RETRY 3
 
 rx_memvar *rx_memvar_find(struct rx_ctx *ctx, const char *name);
 int rx_memvar_set(struct rx_ctx *ctx, const char *name, const rval *v);
+/** M5 scoping: PUBLIC writes the global table; PRIVATE declares in the
+ *  current frame (hiding outer scopes); RELEASE removes from any scope. */
+int rx_memvar_set_public(struct rx_ctx *ctx, const char *name, const rval *v);
+int rx_memvar_private(struct rx_ctx *ctx, const char *name);
+int rx_memvar_release(struct rx_ctx *ctx, const char *name);
 void rx_memvar_clear(struct rx_ctx *ctx);
 
 /* ============================ context / VM ============================ */
@@ -255,6 +330,17 @@ struct rx_ctx {
     struct rx_rel *rels; /**< SET RELATION list (driver -> target) */
     size_t nrels, caprels;
     int skip_to[256];    /**< SET SKIP TO alias areas (1-based) */
+    /* M5: frames, procedures, error trapping, loop control, macros, .RXP */
+    rx_frame *frame;     /**< current procedure frame, NULL at top level */
+    rx_proc *procs;      /**< user procedures/functions defined in the program */
+    size_t nprocs, capprocs;
+    char on_error[128];  /**< ON ERROR handler proc name ("" = none) */
+    int in_on_error;     /**< handler currently running */
+    int retry;           /**< RETRY seen in handler: re-run the erroring stmt */
+    int loop_ctl;        /**< RX_CTL_* set by LOOP/EXIT */
+    int returning;       /**< RETURN seen: unwind current body */
+    rval retval;         /**< RETURN expr value (owned) */
+    FILE *in;            /**< input stream for INPUT/ACCEPT/WAIT (default stdin) */
 };
 
 /** One SET RELATION (spec §8.1, M4): moving the driver work area
@@ -285,6 +371,8 @@ int rx_vm_run(rx_ctx *ctx, const rx_code *code, rval *out, r_err *err);
 int rx_eval(rx_ctx *ctx, const rx_expr *e, rval *out, r_err *err);
 /** Execute a statement list. */
 int rx_exec(rx_ctx *ctx, rx_stmt *stmts, size_t n);
+/** Execute a block (branch/loop body: array of stmt pointers) — SCAN. */
+int rx_exec_block(rx_ctx *ctx, rx_stmt **list, size_t n);
 
 /* ============================ errors ============================ */
 
@@ -333,6 +421,35 @@ int rx_cmd_create(rx_ctx *ctx, rx_stmt *s);
 int rx_cmd_flush(rx_ctx *ctx, rx_stmt *s);
 int rx_cmd_type(rx_ctx *ctx, rx_stmt *s);
 int rx_cmd_unlock(rx_ctx *ctx, rx_stmt *s);
+/* M5 */
+int rx_cmd_do(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_return(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_scan(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_on(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_wait(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_input(rx_ctx *ctx, rx_stmt *s, int eval);
+int rx_cmd_dimension(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_private_public(rx_ctx *ctx, rx_stmt *s, int pub);
+int rx_cmd_release(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_parameters(rx_ctx *ctx, rx_stmt *s, int lpar);
+
+/* ---- M5: memvar scopes, arrays, procedures, files ---- */
+/** Find a memvar walking the frame chain, then the global table. */
+rx_memvar *rx_memvar_lookup(rx_ctx *ctx, const char *name);
+/** Define an array memvar (DIMENSION a[d1] / a[d1,d2]); elements undefined. */
+int rx_array_def(rx_ctx *ctx, const char *name, size_t d1, size_t d2);
+/** Array element access; 1-based indexes per FoxPro AELEMENT. */
+int rx_array_get(rx_ctx *ctx, const char *name, size_t i, size_t j, rval *out);
+int rx_array_set(rx_ctx *ctx, const char *name, size_t i, size_t j, const rval *v);
+/** Array dims of a memvar; 0,0 when not an array. */
+int rx_array_dims(rx_ctx *ctx, const char *name, size_t *d1, size_t *d2);
+/** Call a user procedure (DO name / UDF call); out receives RETURN value. */
+int rx_call_proc(rx_ctx *ctx, const char *name, size_t argc, const rval *argv, rval *out,
+                 r_err *err);
+/** Run a .prg file with the .RXP compiled cache (magic RXP1, sha256). */
+int rx_run_file(rx_ctx *ctx, const char *path);
+/** Macro-expand &var in src (depth <= 16); returns owned string. */
+char *rx_macro_expand(rx_ctx *ctx, const char *src, r_err *err);
 
 /* ---- M4: navigation with relation follow + relations ---- */
 /** GO TO recno in the current work area, then reposition related parents. */

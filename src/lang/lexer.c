@@ -12,12 +12,14 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include "util/util.h"
 
 typedef struct lexer {
     const char *src;
     size_t pos, len;
+    size_t tok_start; /**< offset where the current token began */
     int line, col;
     const char *fname;
     rx_tok *toks;
@@ -41,6 +43,7 @@ static int lx_emit(lexer *lx, tk_kind kind, const char *text, size_t tn, int iva
     t->kind = kind;
     t->line = lx->line;
     t->col = lx->col;
+    t->off = lx->tok_start;
     t->ival = ival;
     t->num = num;
     t->text = malloc(tn + 1);
@@ -99,6 +102,45 @@ static void lx_skip_inline_comment(lexer *lx)
     }
 }
 
+/* after a line-initial TEXT word: consume the raw block up to the ENDTEXT
+   line, emitting a synthetic ENDTEXT word token so the parser can find the
+   block end (parse_text captures the verbatim span from token offsets) */
+static void lx_skip_text_block(lexer *lx)
+{
+    while (lx->pos < lx->len && lx->src[lx->pos] != '\n') {
+        lx_get(lx);
+    }
+    for (;;) {
+        while (lx->pos < lx->len &&
+               (lx->src[lx->pos] == ' ' || lx->src[lx->pos] == '\t' || lx->src[lx->pos] == '\r')) {
+            lx_get(lx);
+        }
+        if (lx->pos >= lx->len) {
+            return;
+        }
+        if (lx->pos + 7 <= lx->len && strncasecmp(lx->src + lx->pos, "ENDTEXT", 7) == 0 &&
+            (lx->pos + 7 >= lx->len ||
+             !(isalnum((unsigned char)lx->src[lx->pos + 7]) || lx->src[lx->pos + 7] == '_'))) {
+            size_t off = lx->pos;
+            int line = lx->line, col = lx->col;
+            for (int i = 0; i < 7; i++) {
+                lx_get(lx);
+            }
+            lx_emit(lx, TK_WORD, "ENDTEXT", 7, 0, 0);
+            lx->toks[lx->n - 1].off = off;
+            lx->toks[lx->n - 1].line = line;
+            lx->toks[lx->n - 1].col = col;
+            return;
+        }
+        while (lx->pos < lx->len && lx->src[lx->pos] != '\n') {
+            lx_get(lx);
+        }
+        if (lx->pos < lx->len) {
+            lx_get(lx);
+        }
+    }
+}
+
 int rx_lex(const char *src, const char *fname, rx_tok **out, size_t *nout, r_err *err)
 {
     lexer lx;
@@ -111,6 +153,7 @@ int rx_lex(const char *src, const char *fname, rx_tok **out, size_t *nout, r_err
     lx.err = err;
 
     while (lx.pos < lx.len && !lx.failed) {
+        lx.tok_start = lx.pos;
         char c = lx_peek(&lx);
         if (c == ' ' || c == '\t' || c == '\r') {
             lx_get(&lx);
@@ -224,9 +267,13 @@ int rx_lex(const char *src, const char *fname, rx_tok **out, size_t *nout, r_err
                 lx_get(&lx);
             }
             size_t tn = lx.pos - start;
+            int line_start = lx.n == 0 || lx.toks[lx.n - 1].kind == TK_NEWLINE;
             lx_emit(&lx, TK_WORD, lx.src + start, tn, 0, 0);
             lx.toks[lx.n - 1].line = line;
             lx.toks[lx.n - 1].col = col;
+            if (line_start && tn == 4 && strncasecmp(lx.src + start, "TEXT", 4) == 0) {
+                lx_skip_text_block(&lx);
+            }
             continue;
         }
         /* two-char operators first */

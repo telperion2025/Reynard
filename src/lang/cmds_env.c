@@ -44,6 +44,45 @@ int rx_cmd_print(rx_ctx *ctx, rx_stmt *s, int newline)
 
 int rx_cmd_assign(rx_ctx *ctx, rx_stmt *s)
 {
+    if (s->nidx > 0) {
+        /* M5 array element: a[i] = v or a[i,j] = v (index exprs first, value last) */
+        double di = 1, dj = 1;
+        for (size_t i = 0; i < s->nidx; i++) {
+            rval iv;
+            rx_rval_undef(&iv);
+            int rc = rx_eval(ctx, s->exprs[i], &iv, &ctx->err);
+            if (rc != R_OK) {
+                return rc;
+            }
+            double d;
+            int ok = rv_to_num(&iv, &d);
+            rx_rval_free(&iv);
+            if (!ok) {
+                return rx_raise(ctx, R_ERR_TYPE, s->line, s->col, "Array index must be numeric");
+            }
+            if (i == 0) {
+                di = d;
+            } else {
+                dj = d;
+            }
+        }
+        rval v;
+        rx_rval_undef(&v);
+        int rc = rx_eval(ctx, s->exprs[s->nidx], &v, &ctx->err);
+        if (rc != R_OK) {
+            return rc;
+        }
+        rc = rx_array_set(ctx, s->target, (size_t)(di < 1 ? 1 : di), (size_t)(dj < 1 ? 1 : dj),
+                          &v);
+        rx_rval_free(&v);
+        if (rc == R_ERR_TYPE) {
+            return rx_raise(ctx, R_ERR_TYPE, s->line, s->col, "Variable is not an array");
+        }
+        if (rc == R_ERR_RANGE) {
+            return rx_raise(ctx, R_ERR_RANGE, s->line, s->col, "Array index out of range");
+        }
+        return rc;
+    }
     rval v;
     rx_rval_undef(&v);
     int rc = rx_eval(ctx, s->exprs[0], &v, &ctx->err);
