@@ -81,7 +81,7 @@ static void nc_shutdown(void)
 
 /* narrow ncurses (e.g. macOS system 5.7, no ncursesw): draw line-drawing
    via the alternate charset and transliterate the few other glyphs we use */
-static int acs_map(uint32_t ch)
+static int nc_acs_char(uint32_t ch)
 {
     switch (ch) {
     case 0x2500: return ACS_HLINE;
@@ -130,7 +130,7 @@ static void nc_draw(int y, int x, rcell c)
         mvadd_wch(y, x, &cc);
     }
 #else
-    int ac = acs_map(ch);
+    int ac = nc_acs_char(ch);
     if (ac) {
         attron(A_ALTCHARSET);
         mvaddch(y, x, (chtype)(a | ac));
