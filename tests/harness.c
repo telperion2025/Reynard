@@ -904,7 +904,7 @@ static int cmp_lines(const char *a, const char *b, char *diffbuf, size_t diffsz)
         snprintf(diffbuf, diffsz, "cannot read dump/golden");
         return -1;
     }
-    size_t la = 1, lb = 1;
+    size_t la = 1;
     char *pa = ca, *pb = cb;
     char *enda = ca + na, *endb = cb + nb;
     while (pa < enda && pb < endb) {
@@ -920,7 +920,6 @@ static int cmp_lines(const char *a, const char *b, char *diffbuf, size_t diffsz)
             return 1;
         }
         la++;
-        lb++;
         pa = nla ? nla + 1 : enda;
         pb = nlb ? nlb + 1 : endb;
     }
