@@ -53,3 +53,4 @@ by CI (`.github/workflows/ci.yml` conformance-index job).
 | 46_locks | §8.5 FLOCK()/RLOCK()/UNLOCK, SET EXCLUSIVE, USE SHARED |
 | 47_copy_to_dbf | §8.8 COPY TO <dbf> record copy, SAFETY overwrite guard |
 | 48_err_append_nofile | App. D 107 APPEND FROM missing file |
+| 49_memo_sdf_demo | §8.3 FPT REPLACE persistence across CLOSE/USE + §8.8 COPY TO SDF → APPEND FROM (.txt default ext) + LOCATE/CONTINUE after append |
