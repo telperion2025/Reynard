@@ -128,3 +128,17 @@ Reynard is pre-1.0, versions are milestone tags M0..M10 then v1.0.0.
   Flat layout (MacPorts/BSD: include/curses.h + lib/libncursesw.*) is
   treated as wide-capable via new RX_HAVE_NCURSESW_FLAT (ncurses 6 flat
   headers declare the wide API); the /usr system copy stays narrow.
+- Palette fix: attr is now the full fg|bg<<4 slot into a 256-entry (16x16)
+  palette in both backends, and the ncurses side uses 1-based pairs
+  (COLOR_PAIR(attr+1)); previously the 0x3F mask truncated bg to 2 bits and
+  an off-by-one shifted every pair, rendering the silver menubar green and
+  the cyan Command window black on real terminals (golden dumps are
+  text-only, so CI never saw it). Selftest expects 256 slots; DEVIATIONS #25.
+- term_ncurses: sync curses' stdscr to the real TIOCGWINSZ geometry at init
+  and on KEY_RESIZE (resizeterm) — a stale LINES/COLS clipped blits, leaving
+  unpainted black margins where window borders should be. Brute-force mouse:
+  all protocol tiers enabled (1000/1002/1003/1015/1006) after the first
+  refresh(), and raw ESC-led sequences that terminfo XM doesn't know are
+  decoded by mouse.c in nc_poll (with ungetch pushback), so SGR and legacy
+  press/drag/release/wheel work regardless of the terminal's XM entry.
+  --no-mouse / REYNARD_NO_MOUSE skips enabling entirely.
