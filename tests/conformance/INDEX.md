@@ -76,3 +76,13 @@ by CI (`.github/workflows/ci.yml` conformance-index job).
 | 69_io | §7.1 M5 WAIT (non-blocking in -t), ACCEPT, INPUT (per-case .stdin) |
 | 70_err_macro | App. D 502 & undefined macro variable |
 | 71_retry | §7.4 M5 RETRY re-runs the erroring statement after the handler fixes it |
+| 72_index_cdx_basic | §8.4 M6 INDEX ON ... TAG (structural CDX), ORDER()/TAGCOUNT()/KEY()/KEYCOUNT(), ordered LIST, SEEK, SET ORDER TO 0/TAG, GO TOP/BOTTOM + SKIP in tag order, BOF/EOF |
+| 73_idx_standalone | §8.4 M6 INDEX ON ... TO standalone .idx, NDX(), USE ... INDEX, SET INDEX TO (clear) |
+| 74_seek_exact | §8.4 M6 SEEK with SET EXACT ON (exact) vs OFF (first >=), FOUND()/EOF() |
+| 75_unique_for | §8.4 M6 SET UNIQUE ON (UNIQUE tag), INDEX ON ... FOR filter (KEYCOUNT, KEY(2)) |
+| 76_replace_maintain | §8.4 M6 REPLACE/APPEND BLANK keep tags current (SEEK after write), REINDEX |
+| 77_delete_pack | §8.4 M6 DELETE keeps entries, SET DELETED ON SEEK skips deleted, PACK rebuilds (RECCOUNT/KEYCOUNT) |
+| 78_for_tag | §8.4 M6 FOR-filtered tag: ordered LIST shows only matching records |
+| 79_order_numbers | §8.4 M6 SET ORDER TO n / TAG, SET INDEX TO ... ADDITIVE, TAG(n), multi-file order numbering |
+| 80_err_seek_noorder | App. D 302 SEEK without an active index order |
+| 81_rel_index | §8.1 M6 index-keyed SET RELATION (SEEK in target order), RELATION(), TARGET() |

@@ -139,13 +139,18 @@ typedef enum {
     ST_SUSPEND,  /**< SUSPEND (interactive; batch: no-op + message) */
     ST_RESUME,   /**< RESUME */
     ST_DIMENSION,/**< kids: one per array (target=name, exprs=dims) */
+    /* M6 §8.4 index statements */
+    ST_INDEX,    /**< INDEX ON e TO file | TAG t [OF cdx] [FOR e] [UNIQUE] [DESC] [ADDITIVE] */
+    ST_SEEK,     /**< SEEK e */
+    ST_REINDEX,  /**< REINDEX */
     ST_ENDMARK   /**< stray ENDIF/ENDDO/... at top level: syntax error */
 } st_kind;
 
 typedef struct rx_clause {
-    char key[24];   /**< e.g. SCOPE, IN, ALIAS, TO */
-    char word[64];  /**< keyword value when applicable */
-    rx_expr *e;     /**< expression value when applicable */
+    char key[24];    /**< e.g. SCOPE, IN, ALIAS, TO, IDXFILE */
+    char word[280];  /**< keyword value or path when applicable */
+    rx_expr *e;      /**< expression value when applicable */
+    char *text;      /**< owned raw source text of e (M6, may be NULL) */
 } rx_clause;
 
 /** One BROWSE FIELDS column spec (spec §9.1, M4). For plain fields is_field
@@ -178,6 +183,10 @@ typedef struct rx_stmt {
     size_t nstrs;
     rx_bcol *bcols;   /**< ST_BROWSE FIELDS specs */
     size_t nbcols, capbcols;
+    /* M6: raw source text of statement expressions, kept for index tag
+       headers (KEY()), SET FILTER text (FILTER()) and macro re-expansion */
+    char *keytext;    /**< ST_INDEX key expression text (owned) */
+    char *auxtext;    /**< ST_INDEX FOR text / ST_SET FILTER text (owned) */
     /* M5 block structure: kids = child statements (branch bodies / loop body
        / procedure body); ncond = number of leading branch conditions in
        exprs for ST_IF/ST_CASE; nidx = array index exprs for ST_ASSIGN;
@@ -235,6 +244,7 @@ void rx_code_free(rx_code *code);
 /* ============================ memvars ============================ */
 
 typedef struct rx_ctx rx_ctx;
+typedef struct rx_dbf rx_dbf; /**< data engine handle (reynard/dbf.h) */
 
 typedef struct rx_memvar {
     char name[64]; /**< uppercased */
@@ -297,6 +307,7 @@ typedef struct rx_set {
     int exclusive;  /**< SET EXCLUSIVE, default ON */
     int reprocess;  /**< SET REPROCESS, 0 = no retry, <0 = AUTOMATIC */
     int multilocks; /**< SET MULTILOCKS, default OFF */
+    int unique;     /**< SET UNIQUE, default OFF (M6: UNIQUE index builds) */
     char defdir[260];
     char path[1024];
 } rx_set;
@@ -330,6 +341,11 @@ struct rx_ctx {
     struct rx_rel *rels; /**< SET RELATION list (driver -> target) */
     size_t nrels, caprels;
     int skip_to[256];    /**< SET SKIP TO alias areas (1-based) */
+    /* M6 §8.4: index key expressions seen this session, for REINDEX and
+       REPLACE/APPEND maintenance (data layer stores only the text) */
+    struct rx_idxexpr *idxexprs;
+    size_t nidxexprs, capidxexprs;
+    char *filter_text;   /**< SET FILTER expression text for FILTER() */
     /* M5: frames, procedures, error trapping, loop control, macros, .RXP */
     rx_frame *frame;     /**< current procedure frame, NULL at top level */
     rx_proc *procs;      /**< user procedures/functions defined in the program */
@@ -345,12 +361,28 @@ struct rx_ctx {
 
 /** One SET RELATION (spec §8.1, M4): moving the driver work area
  *  repositions target by evaluating e in the driver. Without an index
- *  (M6) the key must be numeric and positions the target by record number. */
+ *  the key must be numeric and positions the target by record number;
+ *  with an active order on the target the key is SEEKed (M6). */
 typedef struct rx_rel {
     int driver;   /**< work area whose movement drives the relation */
     rx_expr *e;   /**< key expression, evaluated with driver selected */
+    char *text;   /**< owned raw source text of e, for RELATION() (M6) */
     int target;   /**< INTO alias work area */
 } rx_rel;
+
+/** Index key expression registry entry (M6): one per (table, file, tag).
+ *  Text is authoritative (stored in CDX headers); the parsed ASTs are
+ *  compiled lazily once and reused for REINDEX / record maintenance. */
+typedef struct rx_idxexpr {
+    char dbf[260];   /**< owning table path */
+    char path[264];  /**< index file path (structural CDX = dbf stem + .cdx) */
+    char tag[12];    /**< tag name, uppercased */
+    char *keytext;   /**< owned key expression source */
+    char *fortext;   /**< owned FOR filter source, NULL when none */
+    rx_expr *key_e;  /**< lazily parsed keytext (owned) */
+    rx_expr *for_e;  /**< lazily parsed fortext (owned) */
+    int parsed;      /**< key_e/for_e compiled */
+} rx_idxexpr;
 
 
 void rx_ctx_init(rx_ctx *ctx, FILE *out, int test_mode);
@@ -432,6 +464,41 @@ int rx_cmd_dimension(rx_ctx *ctx, rx_stmt *s);
 int rx_cmd_private_public(rx_ctx *ctx, rx_stmt *s, int pub);
 int rx_cmd_release(rx_ctx *ctx, rx_stmt *s);
 int rx_cmd_parameters(rx_ctx *ctx, rx_stmt *s, int lpar);
+
+/* ---- M6 §8.4 index commands (cmds_index.c) ---- */
+int rx_cmd_index_on(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_seek(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_reindex(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_set_index(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_set_order(rx_ctx *ctx, rx_stmt *s);
+/** Parse one expression from a source string (used to re-compile index key
+ *  expressions stored as text in CDX tag headers). */
+int rx_parse_expr_str(const char *src, rx_expr **out, r_err *err);
+/** Locate tag (path, tag) among the attached files; returns R_OK + fi/ti. */
+int rx_index_find_tag(rx_dbf *dbf, const char *path, const char *tag, int *fi, int *ti);
+/** Nonzero when a controlling index order is active on dbf. */
+int rx_index_order_active(const rx_dbf *dbf);
+/** Clear + rebuild one tag by scanning all records (REINDEX, PACK). */
+int rx_index_rebuild_tag(rx_ctx *ctx, rx_dbf *dbf, int fi, int ti);
+/** Rebuild every tag of every attached file. */
+int rx_index_rebuild_all(rx_ctx *ctx, rx_dbf *dbf);
+/** Re-insert one record into every tag (REPLACE / APPEND maintenance);
+ *  the work area of dbf must be selected and the pointer at recno. */
+int rx_index_maintain_rec(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno);
+/** Drop registry entries for a table path (called on USE/CLOSE). */
+void rx_index_registry_purge(rx_ctx *ctx, const char *dbf_path);
+/** Ordered navigation (controlling index order): GO TOP/BOTTOM, SKIP. */
+int rx_nav_top(rx_ctx *ctx);
+int rx_nav_bottom(rx_ctx *ctx);
+int rx_nav_skip_ordered(rx_ctx *ctx, int32_t delta);
+/** First tag overall (structural CDX first) becomes controlling; natural when none. */
+void rx_index_default_order(rx_dbf *dbf);
+/** 1-based tag number across all attached files -> (fi, ti). */
+int rx_index_order_nth(rx_dbf *dbf, uint32_t n, int *fi, int *ti);
+/** Position at any logical recno (nrec+1 = EOF) without raising. */
+void rx_goto_logical(rx_dbf *dbf, uint32_t recno);
+/** Resolve an index file name per SET DEFAULT / SET PATH (.idx/.cdx/.ntx). */
+int resolve_index_m6(rx_ctx *ctx, const char *name, char *out, size_t outsz);
 
 /* ---- M5: memvar scopes, arrays, procedures, files ---- */
 /** Find a memvar walking the frame chain, then the global table. */

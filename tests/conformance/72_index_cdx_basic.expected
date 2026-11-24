@@ -1,0 +1,19 @@
+5  0
+5 records indexed.
+NM 1 UPPER(name)  5
+ NAME                
+ --------------------
+ Alice               
+ Bob                 
+ Carol               
+ Dave                
+ Eve                 
+T 3 Carol
+F T 6
+
+1 Alice
+1 Alice
+2 Bob
+5 Eve
+T
+5 Eve

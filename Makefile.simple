@@ -17,8 +17,9 @@ CORE = \
 	src/data/dbf.c src/data/dbf_create.c src/data/field.c src/data/memo_fpt.c \
 	src/data/memo_dbt.c src/data/codepage.c src/data/workarea.c src/data/rlock.c \
 	src/data/journal.c src/data/scope.c src/data/copyto.c \
+	src/data/cdx.c src/data/idx.c src/data/ntx_read.c \
 	src/lang/lexer.c src/lang/parser.c src/lang/expr_compile.c src/lang/vm.c \
-	src/lang/cmds_data.c src/lang/cmds_env.c src/lang/memvar.c src/lang/errhand.c \
+	src/lang/cmds_data.c src/lang/cmds_index.c src/lang/cmds_env.c src/lang/memvar.c src/lang/errhand.c \
 	src/lang/rxp.c src/lang/funcs_array.c \
 	src/lang/funcs_str.c src/lang/funcs_num.c src/lang/funcs_date.c \
 	src/lang/funcs_db.c src/lang/funcs_sys.c
@@ -93,6 +94,7 @@ test: all
 	./reynard-harness lockrace .test-work
 	./reynard-harness golden tests/golden $(CURDIR)/reynard testdata/gen .test-work
 	./reynard-harness browseperf .test-work $(CURDIR)/reynard
+	./reynard-harness cdx .test-work
 
 install: reynard
 	install -d $(DESTDIR)/usr/local/bin $(DESTDIR)/usr/local/share/man/man1

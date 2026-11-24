@@ -1,0 +1,11 @@
+USE people
+INDEX ON UPPER(name) TAG NM
+SEEK "car"
+? FOUND(), RECNO(), TRIM(name)
+SET EXACT ON
+SEEK "car"
+? FOUND(), EOF()
+SEEK "CAROL"
+? FOUND(), RECNO(), TRIM(name)
+SET EXACT OFF
+CLOSE ALL

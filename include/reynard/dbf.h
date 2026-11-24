@@ -21,8 +21,8 @@ extern "C" {
 #endif
 
 typedef struct rx_dbf rx_dbf;
-typedef struct rx_cursor rx_cursor;
 typedef struct rx_idx rx_idx;
+struct strbuf;
 
 /* open modes */
 #define RD_READONLY 0x1
@@ -153,12 +153,69 @@ int rx_begin(rx_dbf *dbf);
 int rx_commit(rx_dbf *dbf);
 int rx_rollback(rx_dbf *dbf);
 
-/* Indexes */
-int rx_index_attach(rx_dbf *dbf, const char *cdxpath, rx_idx **out);
-int rx_index_order(rx_dbf *dbf, const char *tag);
-int rx_seek(rx_cursor *cur, rval *key, int *found);
-int rx_index_create(rx_dbf *dbf, const char *tag, const char *expr,
-                    int descending, int unique);
+/* ---- Indexes (spec §8.4, finalized at M6) ----
+ * Attached index files are kept on the dbf; the first is the structural CDX
+ * (same stem as the DBF, auto-opened when present). One (file, tag) pair is
+ * the controlling order; (-1,-1) means natural (physical) order. Keys are
+ * rvals encoded to a canonical sortable form by the data layer; expression
+ * evaluation is the caller's (lang layer) job. */
+
+/** Open an index file (.cdx compound or .idx standalone) and attach it. */
+int rx_index_attach(rx_dbf *dbf, const char *path, rx_idx **out);
+/** Close and free all attached index files (called from rx_dbf_close). */
+int rx_index_close_all(rx_dbf *dbf);
+/** Close all attached index files except the structural CDX (SET INDEX TO). */
+int rx_index_close_nonsstructural(rx_dbf *dbf);
+/** Flush dirty index files to disk (called from rx_dbf_close / FLUSH). */
+int rx_index_flush(rx_dbf *dbf);
+
+/** Number of attached index files. */
+int rx_index_file_count(const rx_dbf *dbf);
+/** Path of attached index file fi. */
+int rx_index_file_path(const rx_dbf *dbf, int fi, const char **out);
+/** Nonzero when file fi is a compound .cdx (vs standalone .idx / .ntx). */
+int rx_index_file_is_cdx(const rx_dbf *dbf, int fi);
+
+/** Tag count of index file fi. */
+int rx_tag_count(const rx_dbf *dbf, int fi);
+#define RX_TAG_DESC 1   /**< descending flag */
+#define RX_TAG_UNIQUE 2 /**< unique flag */
+/** Tag name / key expression text / flags of tag ti in file fi. */
+int rx_tag_info(const rx_dbf *dbf, int fi, int ti, const char **name, const char **key,
+                int *flags);
+/** FOR filter expression text of tag ti in file fi ("" when none). */
+int rx_tag_for_expr(const rx_dbf *dbf, int fi, int ti, const char **for_expr);
+
+/** Set the controlling order to (fi, ti); (-1,-1) restores natural order. */
+int rx_index_order_set(rx_dbf *dbf, int fi, int ti);
+/** Read the controlling order. */
+int rx_index_order_get(const rx_dbf *dbf, int *fi, int *ti);
+
+/** Create a (possibly empty) tag; cdx_path NULL = structural CDX. The key
+ *  and FOR expressions are stored as text; the caller fills entries. */
+int rx_index_create(rx_dbf *dbf, const char *tag, const char *cdx_path, const char *expr,
+                    const char *for_expr, int flags, int additive);
+/** Drop all entries of tag (fi, ti). */
+int rx_index_clear(rx_dbf *dbf, int fi, int ti);
+/** Insert one (key, recno) entry into a tag (sorted insert; UNIQUE drops
+ *  exact duplicates). */
+int rx_index_insert(rx_dbf *dbf, int fi, int ti, const rval *key, uint32_t recno);
+/** Remove every entry with this recno from every tag of every file. */
+int rx_index_delete_rec(rx_dbf *dbf, uint32_t recno);
+/** Seek in tag (fi, ti): exact=1 requires equality; otherwise first key >=
+ *  the probe (FoxPro SEEK with SET EXACT OFF). *found set accordingly. */
+int rx_index_seek_tag(rx_dbf *dbf, int fi, int ti, const rval *key, int exact,
+                      uint32_t *recno_out, int *found);
+/** Seek in the controlling order. */
+int rx_index_seek(rx_dbf *dbf, const rval *key, int exact, uint32_t *recno_out, int *found);
+/** Number of entries in tag (fi, ti). */
+int rx_index_key_count(const rx_dbf *dbf, int fi, int ti, uint32_t *out);
+/** recno at 0-based ordered position pos in the controlling order. */
+int rx_index_recno_at(const rx_dbf *dbf, uint32_t pos, uint32_t *recno_out);
+/** 0-based ordered position of recno in the controlling order, -1 if absent. */
+int rx_index_pos_of(const rx_dbf *dbf, uint32_t recno, int64_t *pos_out);
+/** Encode an rval to the canonical sortable key form (internal, cdx.c). */
+int rx_key_encode(const rval *v, struct strbuf *out);
 
 /* Work areas (mirror SELECT()/USED()/ALIAS()); area 1..255, 0 = current */
 int rx_wa_select(int area);

@@ -1104,13 +1104,13 @@ int ui_browse_open(void *ud, rx_stmt *s)
             b->valid = s->clauses[i].e;
             s->clauses[i].e = NULL;
         } else if (strcmp(s->clauses[i].key, "VERR") == 0) {
-            snprintf(b->verr, sizeof(b->verr), "%s", s->clauses[i].word);
+            snprintf(b->verr, sizeof(b->verr), "%.159s", s->clauses[i].word);
         }
     }
 
     const char *alias;
     rx_dbf_alias(dbf, &alias);
-    snprintf(b->w.title, sizeof(b->w.title), "%s", title && *title ? title : alias);
+    snprintf(b->w.title, sizeof(b->w.title), "%.63s", title && *title ? title : alias);
     b->w.min_w = 10;
     b->w.min_h = 4;
     b->w.visible = 1;

@@ -68,6 +68,11 @@ struct rx_dbf {
     uint32_t *jrecs; /**< recnos already journaled this txn */
     size_t njrecs, capjrecs;
     int jhdr;        /**< header already journaled */
+    /* indexes (spec \u00a78.4, M6) */
+    struct rx_idx **idxs; /**< attached index files; [0] = structural CDX */
+    size_t nidxs, capidxs;
+    int order_file;       /**< idxs[] entry controlling order, -1 = natural */
+    int order_tag;        /**< tag within that file, -1 = natural */
 };
 
 /* ---- session state (set once from main via rx_data_session) ---- */
@@ -121,6 +126,10 @@ int rx_memo_dbt_write(rx_dbf *dbf, const char *data, size_t n, uint32_t old_blk,
 /** Read a G/B/P payload block raw (read-only v1.0). */
 int rx_memo_fpt_read_raw(rx_dbf *dbf, uint32_t blk, uint8_t **bytes, size_t *n);
 
+
+/* ---- cdx.c (spec \u00a78.4, M6) ---- */
+/** Attach the structural CDX (same stem as the DBF) if present (internal). */
+int rx_index_attach_structural(rx_dbf *dbf);
 
 /* ---- journal.c (spec \u00a78.6) ---- */
 /** Journal a record before-image (idempotent per recno per txn). */

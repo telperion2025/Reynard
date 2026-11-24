@@ -17,7 +17,9 @@
 /* POSIX system headers come before project headers here: <unistd.h>
    defines R_OK for access(2), and reynard/status.h must own R_OK (=0). */
 #include <dirent.h>
+#include <fcntl.h>
 #include <stdio.h>
+#include <time.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -1431,6 +1433,595 @@ static int rxp_mode(const char *dir, const char *bin, const char *fixtures, cons
     return bad ? 1 : 0;
 }
 
+
+/* ---------------- cdx (M6 gates: byte-level interop validator, deterministic
+   round-trip, CDX build perf < 2s for 100k keys, spec §11.3) ----------------
+   The validator below is an independent linear parser of the 500-byte block
+   format (docs/formats.md §4): it shares no code with src/data/cdx.c. */
+
+#define HBLOCK 500
+#define HSIG_CDX 0x58444352u /* "RCDX" */
+#define HSIG_IDX 0x58444449u /* "RIDX" */
+#define HTAG_HDR 236
+#define HDIR_HDR 24
+
+static uint16_t h_u16(const uint8_t *p) { return (uint16_t)(p[0] | (p[1] << 8)); }
+static uint32_t h_u32(const uint8_t *p)
+{
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+static uint64_t h_u64(const uint8_t *p)
+{
+    uint64_t u = 0;
+    for (int i = 7; i >= 0; i--) {
+        u = (u << 8) | p[i];
+    }
+    return u;
+}
+
+static int h_blk(int fd, uint32_t blk, uint8_t out[HBLOCK])
+{
+    off_t off = (off_t)blk * HBLOCK;
+    size_t got = 0;
+    while (got < HBLOCK) {
+        ssize_t r = pread(fd, out + got, HBLOCK - got, off + (off_t)got);
+        if (r <= 0) {
+            return -1;
+        }
+        got += (size_t)r;
+    }
+    return 0;
+}
+
+/* walk one B+tree: leftmost descent + sibling chain; verify node types,
+   page bounds, entry bounds, recno range, key ordering (asc/desc) and the
+   total key count against the tag header */
+static int h_tree_walk(int fd, uint32_t nblocks, uint32_t root, int desc, uint64_t expect_keys,
+                       uint32_t nrec, char *err, size_t errsz)
+{
+    uint8_t buf[HBLOCK];
+    if (root == 0 || root >= nblocks) {
+        snprintf(err, errsz, "root page %u out of range", root);
+        return -1;
+    }
+    uint32_t cur = root;
+    for (;;) {
+        if (h_blk(fd, cur, buf) != 0) {
+            snprintf(err, errsz, "read node %u", cur);
+            return -1;
+        }
+        uint16_t type = h_u16(buf);
+        uint16_t nk = h_u16(buf + 2);
+        if (type == 3) {
+            break; /* leaf */
+        }
+        if (type != 1 && type != 2) {
+            snprintf(err, errsz, "bad node type %u at %u", type, cur);
+            return -1;
+        }
+        if (nk == 0) {
+            snprintf(err, errsz, "empty internal node %u", cur);
+            return -1;
+        }
+        cur = h_u32(buf + 12); /* leftmost child (header field) */
+        if (cur == 0 || cur >= nblocks) {
+            snprintf(err, errsz, "child page %u out of range", cur);
+            return -1;
+        }
+    }
+    uint64_t count = 0;
+    uint32_t page = cur;
+    int guard = 0;
+    uint8_t prev[HBLOCK];
+    size_t prevlen = 0;
+    uint32_t prevrec = 0;
+    int have_prev = 0;
+    while (page) {
+        if (page >= nblocks || ++guard > (int)nblocks + 1) {
+            snprintf(err, errsz, "leaf sibling loop at %u", page);
+            return -1;
+        }
+        if (h_blk(fd, page, buf) != 0) {
+            snprintf(err, errsz, "read leaf %u", page);
+            return -1;
+        }
+        uint16_t type = h_u16(buf);
+        uint16_t nk = h_u16(buf + 2);
+        if (type != 3) {
+            snprintf(err, errsz, "non-leaf %u in leaf chain", page);
+            return -1;
+        }
+        uint32_t right = h_u32(buf + 8);
+        uint32_t left = h_u32(buf + 4);
+        if (left != 0 && left >= nblocks) {
+            snprintf(err, errsz, "left sibling %u out of range", left);
+            return -1;
+        }
+        size_t off = 16;
+        for (uint16_t i = 0; i < nk; i++) {
+            if (off + 2 > HBLOCK) {
+                snprintf(err, errsz, "entry overrun at leaf %u", page);
+                return -1;
+            }
+            uint16_t klen = h_u16(buf + off);
+            off += 2;
+            if (off + (size_t)klen + 4 > HBLOCK) {
+                snprintf(err, errsz, "entry key overrun at leaf %u", page);
+                return -1;
+            }
+            const uint8_t *key = buf + off;
+            off += klen;
+            uint32_t recno = h_u32(buf + off);
+            off += 4;
+            if (recno < 1 || recno > nrec) {
+                snprintf(err, errsz, "recno %u out of range 1..%u", recno, nrec);
+                return -1;
+            }
+            if (have_prev) {
+                size_t m = prevlen < klen ? prevlen : klen;
+                int c = memcmp(prev, key, m);
+                if (c == 0) {
+                    c = prevlen < klen ? -1 : prevlen > klen ? 1 : 0;
+                }
+                if (c == 0) {
+                    c = prevrec < recno ? -1 : prevrec > recno ? 1 : 0;
+                }
+                if (desc) {
+                    c = -c;
+                }
+                if (c > 0) {
+                    snprintf(err, errsz, "keys out of order at leaf %u entry %u", page, i);
+                    return -1;
+                }
+            }
+            if (klen > HBLOCK) {
+                snprintf(err, errsz, "key too long");
+                return -1;
+            }
+            memcpy(prev, key, klen);
+            prevlen = klen;
+            prevrec = recno;
+            have_prev = 1;
+            count++;
+        }
+        page = right;
+    }
+    if (count != expect_keys) {
+        snprintf(err, errsz, "key count %llu != header %llu", (unsigned long long)count,
+                 (unsigned long long)expect_keys);
+        return -1;
+    }
+    return 0;
+}
+
+/* validate one index file (CDX or IDX) end to end; returns tags/keys */
+static int cdxcheck_file(const char *path, uint32_t nrec, int *ntags_out, uint64_t *keys_out,
+                         char *err, size_t errsz)
+{
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        snprintf(err, errsz, "open %s", path);
+        return -1;
+    }
+    struct stat st;
+    if (fstat(fd, &st) != 0) {
+        snprintf(err, errsz, "fstat %s", path);
+        close(fd);
+        return -1;
+    }
+    if (st.st_size % HBLOCK != 0) {
+        snprintf(err, errsz, "%s: size %lld not a multiple of %d", path, (long long)st.st_size,
+                 HBLOCK);
+        close(fd);
+        return -1;
+    }
+    uint32_t nblocks = (uint32_t)(st.st_size / HBLOCK);
+    uint8_t buf[HBLOCK];
+    if (nblocks < 1 || h_blk(fd, 0, buf) != 0) {
+        snprintf(err, errsz, "%s: cannot read block 0", path);
+        close(fd);
+        return -1;
+    }
+    uint32_t sig = h_u32(buf);
+    int ntags = 0;
+    uint64_t keys = 0;
+    if (sig == HSIG_IDX) {
+        if (h_u16(buf + 4) != 1) {
+            snprintf(err, errsz, "%s: bad IDX version", path);
+            close(fd);
+            return -1;
+        }
+        int desc = (h_u16(buf + 200) & 1) != 0;
+        uint32_t root = h_u32(buf + 204);
+        uint64_t nk = h_u64(buf + 208);
+        if (h_tree_walk(fd, nblocks, root, desc, nk, nrec, err, errsz) != 0) {
+            close(fd);
+            return -1;
+        }
+        ntags = 1;
+        keys = nk;
+    } else if (sig == HSIG_CDX) {
+        if (h_u16(buf + 4) != 1) {
+            snprintf(err, errsz, "%s: bad CDX version", path);
+            close(fd);
+            return -1;
+        }
+        uint32_t blk = 0;
+        int guard = 0;
+        for (;;) {
+            if (blk >= nblocks || ++guard > (int)nblocks + 1) {
+                snprintf(err, errsz, "%s: dir chain out of range/loop", path);
+                close(fd);
+                return -1;
+            }
+            if (h_blk(fd, blk, buf) != 0) {
+                snprintf(err, errsz, "%s: read dir %u", path, blk);
+                close(fd);
+                return -1;
+            }
+            if (h_u32(buf) != HSIG_CDX || h_u16(buf + 4) != 1) {
+                snprintf(err, errsz, "%s: bad dir sig at %u", path, blk);
+                close(fd);
+                return -1;
+            }
+            uint16_t n = h_u16(buf + 6);
+            uint32_t next = h_u32(buf + 8);
+            if (n > (HBLOCK - HDIR_HDR) / HTAG_HDR) {
+                snprintf(err, errsz, "%s: dir count %u too large", path, n);
+                close(fd);
+                return -1;
+            }
+            for (uint16_t i = 0; i < n; i++) {
+                const uint8_t *h = buf + HDIR_HDR + (size_t)i * HTAG_HDR;
+                int desc = (h_u16(h + 204) & 1) != 0;
+                uint32_t root = h_u32(h + 206);
+                uint64_t nk = h_u64(h + 222);
+                if (h_tree_walk(fd, nblocks, root, desc, nk, nrec, err, errsz) != 0) {
+                    close(fd);
+                    return -1;
+                }
+                ntags++;
+                keys += nk;
+            }
+            if (next == 0) {
+                break;
+            }
+            blk = next;
+        }
+    } else {
+        snprintf(err, errsz, "%s: bad signature 0x%08x", path, sig);
+        close(fd);
+        return -1;
+    }
+    close(fd);
+    if (ntags_out) {
+        *ntags_out = ntags;
+    }
+    if (keys_out) {
+        *keys_out = keys;
+    }
+    return 0;
+}
+
+/* build a table of n records (NAME C20, SCORE N(8,2)) + fill the given tags;
+   *ms_out receives the index build (insert+flush) wall time */
+static int build_table(const char *dir, const char *stem, uint32_t n, const char **tags,
+                       const char **exprs, const int *tagflags, size_t ntags, double *ms_out)
+{
+    char path[700];
+    snprintf(path, sizeof(path), "%.660s/%.31s.dbf", dir, stem);
+    rx_fielddef flds[2];
+    memset(flds, 0, sizeof(flds));
+    snprintf(flds[0].name, sizeof(flds[0].name), "NAME");
+    flds[0].type = RFT_C;
+    flds[0].len = 20;
+    snprintf(flds[1].name, sizeof(flds[1].name), "SCORE");
+    flds[1].type = RFT_N;
+    flds[1].len = 8;
+    flds[1].dec = 2;
+    rx_dbf *dbf = NULL;
+    int rc = rx_dbf_create(path, flds, 2, &dbf);
+    if (rc != R_OK) {
+        return rc;
+    }
+    for (uint32_t i = 1; i <= n; i++) {
+        uint32_t h = i * 2654435761u;
+        uint32_t recno;
+        rc = rx_dbf_append(dbf, &recno);
+        if (rc != R_OK) {
+            break;
+        }
+        char nm[24];
+        snprintf(nm, sizeof(nm), "N%07u", h % 10000000u);
+        rval v;
+        rx_rval_undef(&v);
+        rval_set_str(&v, rx_strdup(nm), strlen(nm));
+        rc = rx_dbf_put(dbf, 0, &v);
+        rx_rval_free(&v);
+        if (rc != R_OK) {
+            break;
+        }
+        double score = (double)(h % 100000u) / 100.0;
+        rx_rval_undef(&v);
+        v.t = RX_T_N;
+        v.u.n.d = score;
+        v.u.n.dec = 2;
+        rc = rx_dbf_put(dbf, 1, &v);
+        rx_rval_free(&v);
+        if (rc != R_OK) {
+            break;
+        }
+        rc = rx_flush(dbf);
+        if (rc != R_OK) {
+            break;
+        }
+    }
+    if (rc != R_OK) {
+        rx_dbf_close(dbf);
+        return rc;
+    }
+    struct timespec t0, t1;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    for (size_t t = 0; t < ntags; t++) {
+        rc = rx_index_create(dbf, tags[t], NULL, exprs[t], NULL, tagflags[t], 0);
+        if (rc != R_OK) {
+            rx_dbf_close(dbf);
+            return rc;
+        }
+    }
+    for (uint32_t r = 1; r <= n; r++) {
+        rc = rx_dbf_goto(dbf, r);
+        if (rc != R_OK) {
+            break;
+        }
+        for (size_t t = 0; t < ntags; t++) {
+            int fi = 0, ti = (int)t; /* structural CDX tags in creation order */
+            size_t fld = strcmp(exprs[t], "NAME") == 0 ? 0 : 1;
+            rval v;
+            rx_rval_undef(&v);
+            rc = rx_dbf_get(dbf, fld, &v);
+            if (rc != R_OK) {
+                break;
+            }
+            rc = rx_index_insert(dbf, fi, ti, &v, r);
+            rx_rval_free(&v);
+            if (rc != R_OK) {
+                break;
+            }
+        }
+        if (rc != R_OK) {
+            break;
+        }
+    }
+    if (rc == R_OK) {
+        rc = rx_index_flush(dbf);
+    }
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    *ms_out = (double)(t1.tv_sec - t0.tv_sec) * 1000.0 + (double)(t1.tv_nsec - t0.tv_nsec) / 1e6;
+    rx_dbf_close(dbf);
+    return rc;
+}
+
+static int cdx_mode(const char *workroot)
+{
+    rx_data_session(1, 0x01); /* frozen header date: byte-identical output */
+    mkdir(workroot, 0755); /* may exist */
+    char dirA[700], dirB[700];
+    snprintf(dirA, sizeof(dirA), "%.687s/cdxA-XXXXXX", workroot);
+    snprintf(dirB, sizeof(dirB), "%.687s/cdxB-XXXXXX", workroot);
+    if (rx_mkdtemp(dirA) != 0 || rx_mkdtemp(dirB) != 0) {
+        perror("mkdtemp");
+        return 1;
+    }
+    int ran = 0, bad = 0;
+#define CDXCHK(cond, msg)                                                                      \
+    do {                                                                                       \
+        ran++;                                                                                 \
+        if (!(cond)) {                                                                         \
+            printf("FAIL %s\n", msg);                                                          \
+            bad++;                                                                             \
+        }                                                                                      \
+    } while (0)
+
+    /* 1. 100k-key structural CDX build, timed (spec §11.3 gate: < 2s for the
+       index build itself: tag create + key insert + tree write) */
+    const char *tags1[] = { "SCORE" };
+    const char *exprs1[] = { "SCORE" };
+    const int flags1[] = { 0 };
+    double ms = 0;
+    int rc = build_table(dirA, "big", 100000, tags1, exprs1, flags1, 1, &ms);
+    CDXCHK(rc == R_OK, "build big.dbf + big.cdx (100k keys)");
+    printf("cdx: 100k-key CDX build %.1f ms (gate < 2000 ms)\n", ms);
+    CDXCHK(ms < 2000.0, "perf gate: 100k CDX build < 2s");
+    char fA[800], dA[800];
+    snprintf(fA, sizeof(fA), "%.791s/big.cdx", dirA);
+    snprintf(dA, sizeof(dA), "%.791s/big.dbf", dirA);
+
+    /* 2. determinism: identical 5k multi-tag build in a second dir ->
+       byte-identical CDX and DBF */
+    const char *tags3[] = { "NM", "SCORE", "SCD" };
+    const char *exprs3[] = { "NAME", "SCORE", "SCORE" };
+    const int flags3[] = { 0, 0, 1 /* RX_TAG_DESC */ };
+    double ms3 = 0;
+    rc = build_table(dirA, "multi", 5000, tags3, exprs3, flags3, 3, &ms3);
+    CDXCHK(rc == R_OK, "build multi.dbf with 3 tags (dirA)");
+    double ms3b = 0;
+    rc = build_table(dirB, "multi", 5000, tags3, exprs3, flags3, 3, &ms3b);
+    CDXCHK(rc == R_OK, "build multi.dbf with 3 tags (dirB)");
+    char fM[800], fMB[800], dM[800], dMB[800];
+    snprintf(fM, sizeof(fM), "%.790s/multi.cdx", dirA);
+    snprintf(fMB, sizeof(fMB), "%.790s/multi.cdx", dirB);
+    snprintf(dM, sizeof(dM), "%.790s/multi.dbf", dirA);
+    snprintf(dMB, sizeof(dMB), "%.790s/multi.dbf", dirB);
+    char diff[300] = "";
+    CDXCHK(cmp_files(fM, fMB, diff, sizeof(diff)) == 0, "CDX byte-reproducible across runs");
+    CDXCHK(cmp_files(dM, dMB, diff, sizeof(diff)) == 0, "DBF byte-reproducible across runs");
+
+    /* 3. reopen + API verification: counts, monotonic order, seeks */
+    rx_dbf *dbf = NULL;
+    rc = rx_dbf_open(dA, RD_EXCLUSIVE, &dbf);
+    CDXCHK(rc == R_OK, "reopen big.dbf");
+    if (rc == R_OK) {
+        int nf = rx_index_file_count(dbf);
+        CDXCHK(nf == 1, "structural CDX auto-attached");
+        CDXCHK(rx_tag_count(dbf, 0) == 1, "one tag in structural CDX");
+        uint32_t kc = 0;
+        rx_index_key_count(dbf, 0, 0, &kc);
+        CDXCHK(kc == 100000, "KEYCOUNT == 100000");
+        int fi, ti;
+        rx_index_order_get(dbf, &fi, &ti);
+        CDXCHK(fi == 0 && ti == 0, "first structural tag is the default order");
+        /* monotonic scan of the controlling order */
+        double prev = -1.0;
+        int mono = 1;
+        for (uint32_t p = 0; p < kc; p++) {
+            uint32_t r = 0;
+            if (rx_index_recno_at(dbf, p, &r) != R_OK) {
+                mono = 0;
+                break;
+            }
+            if (rx_dbf_goto(dbf, r) != R_OK) {
+                mono = 0;
+                break;
+            }
+            rval v;
+            rx_rval_undef(&v);
+            if (rx_dbf_get(dbf, 1, &v) != R_OK || v.t != RX_T_N || v.u.n.d < prev) {
+                rx_rval_free(&v);
+                mono = 0;
+                break;
+            }
+            prev = v.u.n.d;
+            rx_rval_free(&v);
+        }
+        CDXCHK(mono, "controlling order is monotonic over 100k keys");
+        /* seeks: exact present + absent */
+        rval probe;
+        rx_rval_undef(&probe);
+        probe.t = RX_T_N;
+        probe.u.n.d = 500.00;
+        probe.u.n.dec = 2;
+        uint32_t recno = 0;
+        int found = 0;
+        rc = rx_index_seek(dbf, &probe, 0, &recno, &found); /* EXACT OFF: first >= probe */
+        CDXCHK(rc == R_OK && found && recno >= 1 && recno <= 100000, "SEEK approximate hit");
+        probe.u.n.d = -1.0;
+        rc = rx_index_seek(dbf, &probe, 1, &recno, &found);
+        CDXCHK(rc == R_OK && !found, "SEEK exact miss");
+        rx_dbf_close(dbf);
+    }
+
+    /* 4. byte-level interop validator on the CDX */
+    int ntags = 0;
+    uint64_t keys = 0;
+    char err[300] = "";
+    rc = cdxcheck_file(fA, 100000, &ntags, &keys, err, sizeof(err));
+    CDXCHK(rc == 0, "cdxcheck big.cdx structure");
+    if (rc != 0) {
+        printf("  cdxcheck: %s\n", err);
+    }
+    CDXCHK(ntags == 1 && keys == 100000, "cdxcheck tag/key counts");
+
+    /* 5. byte-level validator on the multi-tag CDX (asc + desc tags) */
+    rc = cdxcheck_file(fM, 5000, &ntags, &keys, err, sizeof(err));
+    CDXCHK(rc == 0, "cdxcheck multi.cdx (asc + desc tags)");
+    if (rc != 0) {
+        printf("  cdxcheck: %s\n", err);
+    }
+    CDXCHK(ntags == 3 && keys == 15000, "cdxcheck multi tag/key counts");
+
+    /* 6. standalone IDX round-trip through the public API */
+    {
+        char spath[700];
+        snprintf(spath, sizeof(spath), "%.689s/small.dbf", dirA);
+        rx_fielddef flds[1];
+        memset(flds, 0, sizeof(flds));
+        snprintf(flds[0].name, sizeof(flds[0].name), "K");
+        flds[0].type = RFT_N;
+        flds[0].len = 6;
+        flds[0].dec = 0;
+        rx_dbf *sd = NULL;
+        rc = rx_dbf_create(spath, flds, 1, &sd);
+        CDXCHK(rc == R_OK, "create small.dbf");
+        if (rc == R_OK) {
+            for (uint32_t i = 1; i <= 1000; i++) {
+                uint32_t rn;
+                rc = rx_dbf_append(sd, &rn);
+                rval v;
+                rx_rval_undef(&v);
+                v.t = RX_T_N;
+                v.u.n.d = (double)((i * 7919u) % 1000u);
+                v.u.n.dec = 0;
+                if (rc == R_OK) {
+                    rc = rx_dbf_put(sd, 0, &v);
+                }
+                rx_rval_free(&v);
+                if (rc == R_OK) {
+                    rc = rx_flush(sd);
+                }
+                if (rc != R_OK) {
+                    break;
+                }
+            }
+            char ipath[700];
+            snprintf(ipath, sizeof(ipath), "%.689s/small.idx", dirA);
+            rc = rx_index_create(sd, "SMALL", ipath, "K", NULL, 0, 0);
+            CDXCHK(rc == R_OK, "create standalone IDX tag");
+            int fi = rx_index_file_count(sd) - 1, ti = 0; /* attached IDX file */
+            for (uint32_t r = 1; r <= 1000 && rc == R_OK; r++) {
+                rx_dbf_goto(sd, r);
+                rval v;
+                rx_rval_undef(&v);
+                if (rx_dbf_get(sd, 0, &v) == R_OK) {
+                    rc = rx_index_insert(sd, fi, ti, &v, r);
+                    rx_rval_free(&v);
+                }
+            }
+            CDXCHK(rc == R_OK, "fill small.idx");
+            rx_index_flush(sd);
+            rx_dbf_close(sd);
+            rc = cdxcheck_file(ipath, 1000, &ntags, &keys, err, sizeof(err));
+            CDXCHK(rc == 0, "cdxcheck small.idx structure");
+            if (rc != 0) {
+                printf("  cdxcheck: %s\n", err);
+            }
+            CDXCHK(ntags == 1 && keys == 1000, "cdxcheck IDX counts");
+            /* reopen + attach + seek */
+            rx_dbf *sd2 = NULL;
+            rc = rx_dbf_open(spath, RD_EXCLUSIVE, &sd2);
+            CDXCHK(rc == R_OK, "reopen small.dbf");
+            if (rc == R_OK) {
+                rx_idx *ix = NULL;
+                rc = rx_index_attach(sd2, ipath, &ix);
+                CDXCHK(rc == R_OK, "attach small.idx");
+                if (rc == R_OK) {
+                    int sfi = rx_index_file_count(sd2) - 1; /* the attached IDX */
+                    uint32_t kc = 0;
+                    rx_index_key_count(sd2, sfi, 0, &kc);
+                    CDXCHK(kc == 1000, "IDX key count after reopen");
+                    rx_index_order_set(sd2, sfi, 0);
+                    rval probe;
+                    rx_rval_undef(&probe);
+                    probe.t = RX_T_N;
+                    probe.u.n.d = 500;
+                    probe.u.n.dec = 0;
+                    uint32_t recno = 0;
+                    int found = 0;
+                    rc = rx_index_seek(sd2, &probe, 0, &recno, &found); /* first >= 500 */
+                    CDXCHK(rc == R_OK && found, "IDX SEEK after reopen");
+                }
+                rx_dbf_close(sd2);
+            }
+        }
+    }
+
+    printf("cdx: %d checks, %d failures\n", ran, bad);
+    rm_rf(dirA);
+    rm_rf(dirB);
+    return bad ? 1 : 0;
+#undef CDXCHK
+}
+
 int main(int argc, char **argv)
 {
     rx_log_init();
@@ -1464,11 +2055,14 @@ int main(int argc, char **argv)
     if (argc >= 4 && strcmp(argv[1], "browseperf") == 0) {
         return browseperf(argv[2], argv[3]);
     }
+    if (argc >= 3 && strcmp(argv[1], "cdx") == 0) {
+        return cdx_mode(argv[2]);
+    }
     fprintf(stderr, "usage: %s selftest | conformance <dir> <reynard> <fixtures> <workroot>"
                     " | rxp <dir> <reynard> <fixtures> <workroot>"
                     " | roundtrip <fixtures> <workroot> | lockrace <workroot>"
                     " | golden <dir> <reynard> <fixtures> <workroot> [update]"
-                    " | browseperf <workroot> <reynard>\n",
+                    " | browseperf <workroot> <reynard> | cdx <workroot>\n",
             argv[0]);
     return 2;
 }

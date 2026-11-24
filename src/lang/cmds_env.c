@@ -191,19 +191,38 @@ void rx_rel_apply(rx_ctx *ctx, int driver, int via_skip)
             rx_rval_free(&v);
             continue;
         }
-        double d = 0;
-        rv_to_num(&v, &d);
-        rx_rval_free(&v);
-        uint32_t n;
-        rx_dbf_recount(target, &n);
-        long k = (long)d;
-        if (k < 1) {
-            k = 1; /* key below range: target at BOF */
+        if (rx_index_order_active(target)) {
+            /* M6 §8.4: index-keyed relation — SEEK the key in the target order */
+            uint32_t recno = 0;
+            int found = 0;
+            if (rx_index_seek(target, &v, ctx->set.exact, &recno, &found) == R_OK && found) {
+                rx_dbf_goto(target, recno);
+            } else {
+                uint32_t n;
+                rx_dbf_recount(target, &n);
+                if (n) {
+                    rx_dbf_goto(target, n);
+                    rx_dbf_skip(target, 1); /* key past end: EOF */
+                } else {
+                    rx_dbf_goto(target, 1);
+                }
+            }
+            rx_rval_free(&v);
+        } else {
+            double d = 0;
+            rv_to_num(&v, &d);
+            rx_rval_free(&v);
+            uint32_t n;
+            rx_dbf_recount(target, &n);
+            long k = (long)d;
+            if (k < 1) {
+                k = 1; /* key below range: target at BOF */
+            }
+            if (n && k > (long)n) {
+                k = (long)n + 1; /* key past end: target at EOF */
+            }
+            rx_dbf_goto(target, (uint32_t)k);
         }
-        if (n && k > (long)n) {
-            k = (long)n + 1; /* key past end: target at EOF */
-        }
-        rx_dbf_goto(target, (uint32_t)k);
     }
     rx_wa_select(saved);
 }
@@ -238,6 +257,7 @@ static int rx_cmd_set_relations(rx_ctx *ctx, rx_stmt *s)
             for (size_t j = 0; j < ctx->nrels; j++) {
                 if (ctx->rels[j].driver == driver) {
                     rx_expr_free(ctx->rels[j].e);
+                    free(ctx->rels[j].text);
                 } else {
                     ctx->rels[w++] = ctx->rels[j];
                 }
@@ -252,6 +272,7 @@ static int rx_cmd_set_relations(rx_ctx *ctx, rx_stmt *s)
             for (size_t j = 0; j < ctx->nrels; j++) {
                 if (ctx->rels[j].driver == driver && ctx->rels[j].target == area) {
                     rx_expr_free(ctx->rels[j].e);
+                    free(ctx->rels[j].text);
                 } else {
                     ctx->rels[w++] = ctx->rels[j];
                 }
@@ -261,7 +282,9 @@ static int rx_cmd_set_relations(rx_ctx *ctx, rx_stmt *s)
             int area = rx_rel_alias_area(c->word);
             if (area < 0) {
                 rx_expr_free(c->e);
+                free(c->text);
                 c->e = NULL;
+                c->text = NULL;
                 return rx_raise(ctx, R_ERR_FIELD, s->line, s->col, "Alias not found");
             }
             if (!additive && ctx->nrels == 0) {
@@ -272,6 +295,7 @@ static int rx_cmd_set_relations(rx_ctx *ctx, rx_stmt *s)
                 for (size_t j = 0; j < ctx->nrels; j++) {
                     if (ctx->rels[j].driver == driver) {
                         rx_expr_free(ctx->rels[j].e);
+                        free(ctx->rels[j].text);
                     } else {
                         ctx->rels[w++] = ctx->rels[j];
                     }
@@ -289,7 +313,10 @@ static int rx_cmd_set_relations(rx_ctx *ctx, rx_stmt *s)
                 ctx->caprels = nc;
             }
             ctx->rels[ctx->nrels].driver = driver;
-            ctx->rels[ctx->nrels].e = c->e; /* take ownership */
+            ctx->rels[ctx->nrels].e = c->e;     /* take ownership */
+            ctx->rels[ctx->nrels].text = c->text; /* M6: RELATION() text */
+            c->e = NULL;
+            c->text = NULL;
             ctx->rels[ctx->nrels].target = area;
             ctx->nrels++;
             c->e = NULL;
@@ -309,13 +336,27 @@ static int rx_cmd_set_relations(rx_ctx *ctx, rx_stmt *s)
 int rx_cmd_set(rx_ctx *ctx, rx_stmt *s)
 {
     int has_filter_clause = 0;
+    int has_idx_clause = 0, has_ord_clause = 0;
     for (size_t i = 0; i < s->nclause; i++) {
         if (strcmp(s->clauses[i].key, "FILTER") == 0) {
             has_filter_clause = 1;
         }
+        if (strcmp(s->clauses[i].key, "IDX") == 0 || strcmp(s->clauses[i].key, "IDX_CLEAR") == 0 ||
+            strcmp(s->clauses[i].key, "IDX_ADD") == 0) {
+            has_idx_clause = 1;
+        }
+        if (strncmp(s->clauses[i].key, "ORD_", 4) == 0) {
+            has_ord_clause = 1;
+        }
     }
     if (rel_clause_present(s)) {
         return rx_cmd_set_relations(ctx, s);
+    }
+    if (has_idx_clause) {
+        return rx_cmd_set_index(ctx, s); /* M6 §8.4: SET INDEX TO */
+    }
+    if (has_ord_clause) {
+        return rx_cmd_set_order(ctx, s); /* M6 §8.4: SET ORDER TO */
     }
     if (s->nstrs == 0 && !has_filter_clause) {
         return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "SET requires an option");
@@ -335,6 +376,11 @@ int rx_cmd_set(rx_ctx *ctx, rx_stmt *s)
                         return rc;
                     }
                     ctx->filter_on = 1;
+                    free(ctx->filter_text);
+                    ctx->filter_text = s->auxtext ? rx_strdup(s->auxtext) : NULL; /* FILTER() */
+                } else {
+                    free(ctx->filter_text);
+                    ctx->filter_text = NULL;
                 }
             }
         }
@@ -399,6 +445,8 @@ int rx_cmd_set(rx_ctx *ctx, rx_stmt *s)
         ctx->set.exclusive = val;
     } else if (rx_strcasecmp(opt, "MULTILOCKS") == 0 && val >= 0) {
         ctx->set.multilocks = val;
+    } else if (rx_strcasecmp(opt, "UNIQUE") == 0 && val >= 0) {
+        ctx->set.unique = val; /* M6 §8.4: UNIQUE index builds */
     } else if (rx_strcasecmp(opt, "REPROCESS") == 0 && toval) {
         long v = strtol(toval, NULL, 10);
         if (rx_strcasecmp(toval, "AUTOMATIC") == 0) {

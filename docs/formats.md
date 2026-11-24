@@ -90,14 +90,42 @@ Files are written in the DBF code page. Default extension: `.txt`.
 APPEND FROM parses the same layouts back; default extension lookup tries
 the name as given, then `.txt` (text) / `.dbf` (tables).
 
-## 4. CDX compound index (§8.4)
+## 4. CDX compound index (§8.4, implemented M6)
 
-500-byte B+tree nodes (FoxPro page size). Structural CDX opens
-automatically with the DBF (same stem); tag headers chain in the root
-page storing key expression, FOR filter, flags (descending/unique), page
-counts. Character keys have trailing spaces stripped. Reynard-written
-CDX must open in FoxPro 2.6a and VFP 9 (CI-verified against reference
-fixtures at M6). IDX read/write; NTX/NDX read-only.
+500-byte little-endian blocks; block 0..n-1 are the tag directory, then one
+B+tree per tag. See src/data/cdx_internal.h for the authoritative layout.
+
+- Directory block: `u32` sig `RCDX` @0, `u16` version (1) @4, `u16` entry
+  count @6, `u32` next dir block @8 (0 = last), `u32` first free page @12.
+  Tag headers are 236 bytes from offset 24: name[11] @0, key expression[128]
+  @12, FOR expression[64] @140, flags `u16` @204 (bit0 descending, bit1
+  unique), root page `u32` @206, page count `u32` @210, key count `u64` @222.
+- Node block: `u16` type @0 (1 root / 2 internal / 3 leaf), `u16` key count
+  @2, `u32` left sibling @4, `u32` right sibling @8, `u32` leftmost child @12
+  (internal nodes), entries from offset 16. Leaf entry: `u16` klen, key
+  bytes, `u32` recno. Internal entry: `u16` klen, separator key (first key of
+  the child), `u32` 0, `u32` child page. A single-leaf tree keeps LEAF type
+  at the root page.
+- Keys are the canonical sortable encoding (rx_key_encode): type byte then
+  payload; character keys are uppercased with trailing spaces stripped
+  (MACHINE collation); numerics are sign-flipped IEEE doubles; dates are
+  `YYYYMMDD` digits (empty = spaces, sorts first); logicals T/F. Equal keys
+  batch by ascending recno; UNIQUE tags drop exact duplicate keys.
+- Structural CDX (same stem as the DBF, `.cdx`) opens automatically with USE
+  and its first tag is the controlling order; structural writes happen only
+  under exclusive open (FoxPro rule). Non-structural CDX and IDX open via
+  USE ... INDEX / SET INDEX TO.
+- IDX standalone: block 0 is a "RIDX" header (sig @0, version @4, key
+  expression[128] @8, FOR[64] @136, flags @200, root page @204, key count
+  `u64` @208, page count @216); tree blocks from page 1, same node format.
+- NTX/NDX: read-only import of uncompressed dBase III indexes (1024-byte
+  pages); compressed variants produce the R_ERR_CDX_VARIANT (303)
+  diagnostic; users convert with INDEX ON ... TO new.
+- Reynard-written CDX/IDX must open in FoxPro 2.6a and VFP 9; byte-compat
+  against reference fixtures is a CI gate at M6+ (no reference fixtures are
+  checked into this tree yet — see DEVIATIONS #37). Our own files are
+  verified byte-reproducible and by an independent validator (harness `cdx`
+  mode: ctest cdx_engine).
 
 ## 5. Other formats
 

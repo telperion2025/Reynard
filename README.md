@@ -27,7 +27,13 @@ DBF files (including memos and CDX compound indexes).
 > PUBLIC/PRIVATE scopes, DIMENSION arrays + array functions, & macros at
 > execution time, ON ERROR/RETRY with ERROR()/MESSAGE(), WAIT/ACCEPT/INPUT,
 > TEXT...ENDTEXT, .RXP compiled-program cache with a byte-reproducibility
-> gate; 71-case conformance suite) are implemented. See
+> gate; 71-case conformance suite) and **M6** (index engine §8.4: CDX
+read/write with structural tags, standalone IDX, read-only NTX import,
+INDEX ON/SEEK/REINDEX/SET INDEX/SET ORDER/SET UNIQUE, tag-ordered
+navigation and scopes, automatic index maintenance on write, ORDER/TAG/
+TAGCOUNT/CDX/MDX/NDX/KEY/KEYCOUNT/TARGET/RELATION functions; include/reynard
+API frozen; interop validator + byte-reproducibility + 100k-key perf gate in
+CI; 81-case conformance suite) are implemented. See
 > [docs/DEVIATIONS.md](docs/DEVIATIONS.md) for the deviation log and
 > [CHANGELOG.md](CHANGELOG.md) for progress. The full specification this
 > project implements is summarized in [docs/language.md](docs/language.md)

@@ -1,0 +1,25 @@
+USE people
+? RECCOUNT(), ORDER(), TAGCOUNT()
+INDEX ON UPPER(name) TAG NM
+? ORDER(), TAGCOUNT(), KEY(1), KEYCOUNT()
+LIST OFF FIELDS name
+SEEK "carol"
+? FOUND(), RECNO(), TRIM(name)
+SEEK "zzz"
+? FOUND(), EOF(), RECNO()
+SET ORDER TO 0
+? ORDER()
+GO TOP
+? RECNO(), TRIM(name)
+SET ORDER TO TAG NM
+GO TOP
+? RECNO(), TRIM(name)
+SKIP
+? RECNO(), TRIM(name)
+GO BOTTOM
+? RECNO(), TRIM(name)
+SKIP
+? EOF()
+SKIP -1
+? RECNO(), TRIM(name)
+CLOSE ALL

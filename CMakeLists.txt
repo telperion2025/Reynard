@@ -59,11 +59,18 @@ set(RX_CORE_SOURCES
     src/data/journal.c
     src/data/scope.c
     src/data/copyto.c
+    src/data/cdx.c
+    src/data/idx.c
+    src/data/ntx_read.c
+    src/data/cdx.c
+    src/data/idx.c
+    src/data/ntx_read.c
     src/lang/lexer.c
     src/lang/parser.c
     src/lang/expr_compile.c
     src/lang/vm.c
     src/lang/cmds_data.c
+    src/lang/cmds_index.c
     src/lang/cmds_env.c
     src/lang/memvar.c
     src/lang/errhand.c
@@ -211,6 +218,10 @@ add_test(NAME browse_perf
     COMMAND reynard-harness browseperf
         ${CMAKE_CURRENT_BINARY_DIR}/test-work-perf
         $<TARGET_FILE:reynard>)
+
+add_test(NAME cdx_engine
+    COMMAND reynard-harness cdx
+        ${CMAKE_CURRENT_BINARY_DIR}/test-work-cdx)
 
 if(ENABLE_FUZZ)
     add_subdirectory(tests/fuzz)

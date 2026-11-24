@@ -8,4 +8,10 @@ memo sidecars (lazy, code-page converted); codepage.c: language-driver
 marks; workarea.c: the 1..255 work-area table; rlock.c: fcntl byte-range
 locks (§8.5); journal.c: .RJN before-image transactions (§8.6);
 scope.c: ALL/REST/NEXT/RECORD ranges (§8.7); copyto.c: SDF/DELIMITED
-serializers (§8.8). CDX/IDX/NTX land at M6.
+serializers (§8.8).
+
+M6 indexing: cdx.c (compound CDX read/write + B+tree bulk writer, lazy-sorted
+in-memory tags), idx.c (standalone IDX "RIDX" writer), ntx_read.c (read-only
+NTX import, compression → diagnostic 303), cdx_internal.h (shared on-disk
+layout). Public API frozen in include/reynard/dbf.h. Byte-level interop
+validator + perf gate: tests/harness.c `cdx` mode (ctest cdx_engine).

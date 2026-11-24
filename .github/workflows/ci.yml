@@ -41,6 +41,7 @@ jobs:
           ./reynard-harness roundtrip testdata/gen .test-work
           ./reynard-harness lockrace .test-work
           ./reynard-harness golden tests/golden "$PWD/reynard" testdata/gen .test-work
+          ./reynard-harness cdx .test-work
 
   conformance-index:
     name: Conformance index freshness

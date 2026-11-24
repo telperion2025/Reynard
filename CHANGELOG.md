@@ -3,7 +3,7 @@
 All notable changes per milestone (spec §0.5). Format: Keep a Changelog;
 Reynard is pre-1.0, versions are milestone tags M0..M10 then v1.0.0.
 
-## [Unreleased] — M0..M5
+## [Unreleased] — M0..M6
 
 ### M0 — Skeleton and term layer
 - CMake + Makefile.simple builds, zero warnings under -Wall -Wextra
@@ -238,3 +238,39 @@ Reynard is pre-1.0, versions are milestone tags M0..M10 then v1.0.0.
   per-case .stdin, & undefined-macro error); all green under -Werror and
   ASan/UBSan, plus Makefile.simple.
 
+### M6 — Index engine and API freeze (spec §8.4, gate §14)
+- Data layer (src/data/cdx.c, idx.c, ntx_read.c; internals in
+  cdx_internal.h): compound CDX read/write with 500-byte B+tree blocks and a
+  chained tag directory; standalone IDX read/write ("RIDX" header block);
+  read-only NTX/NDX import with a diagnostic for compressed variants.
+  Structural CDX (DBF stem) auto-attaches on USE and its first tag is the
+  controlling order; structural writes happen only under exclusive open.
+  In-memory tags are sorted lazily (append + qsort on first read), so a
+  100k-key build is linear (§11.3 gate: measured 72 ms, gate < 2000 ms).
+- Public API include/reynard/*.h frozen at M6: rx_index_attach,
+  rx_index_create/clear/insert/delete_rec, rx_index_seek(_tag),
+  rx_index_order_set/get, rx_tag_count/info/for_expr, rx_index_file_*,
+  rx_index_key_count/recno_at/pos_of, rx_index_flush/close_all/
+  close_nonsstructural, rx_key_encode. All public functions Doxygen'd.
+- Language (src/lang/cmds_index.c): INDEX ON e TO file | TAG t [OF cdx]
+  [FOR e] [UNIQUE] [DESCENDING] [ADDITIVE], SEEK e (EXACT-aware, SET DELETED
+  ON skips deleted entries), REINDEX, SET INDEX TO [list] [ADDITIVE],
+  SET ORDER TO [n | [TAG] t [OF cdx] | e], SET UNIQUE ON|OFF,
+  USE ... INDEX f1[,f2] [ORDER n|TAG t [OF cdx]].
+- Ordered navigation: with a controlling order, GO TOP/BOTTOM and SKIP move
+  in tag order (BOF/EOF rules preserved); LIST/DISPLAY/LOCATE/CONTINUE/
+  SCAN/REPLACE/DELETE iterate in tag order.
+- Maintenance: REPLACE / APPEND BLANK / APPEND FROM / COPY TO dbf re-insert
+  the record into every tag; PACK rebuilds all tags; ZAP clears them; FLUSH
+  and CLOSE write dirty index files; SET RELATION is index-keyed (SEEK in
+  the target's order) when the target has an active order.
+- Introspection functions: ORDER, TAG, TAGCOUNT, CDX, MDX, NDX, KEY,
+  KEYCOUNT, TARGET, RELATION, FILTER (real text now).
+- Tests: new `cdx` harness mode (ctest cdx_engine + Makefile.simple test) —
+  independent byte-level interop validator (walks dir chain + every B+tree,
+  checks node types, sibling links, key ordering incl. DESC, key counts,
+  recno ranges), byte-reproducible rebuild check, reopen + seek checks,
+  multi-tag + DESC validation, IDX round-trip, 100k perf gate; conformance
+  71 -> 81 cases (72–81 cover INDEX ON CDX/IDX, SEEK EXACT, UNIQUE, FOR
+  tags, maintenance, PACK/DELETE, order numbers, error 302, index-keyed
+  relations); all green under -Werror and ASan/UBSan, plus Makefile.simple.

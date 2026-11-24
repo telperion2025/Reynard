@@ -201,6 +201,8 @@ int rx_dbf_open(const char *path, int mode, rx_dbf **out)
         return R_ERR_IO_OPEN;
     }
     rx_dbf *dbf = calloc(1, sizeof(*dbf));
+    dbf->order_file = -1;
+    dbf->order_tag = -1;
     if (!dbf) {
         close(fd);
         RX_FATAL("out of memory");
@@ -388,6 +390,7 @@ int rx_dbf_open(const char *path, int mode, rx_dbf **out)
         }
     }
     *out = dbf;
+        rx_index_attach_structural(dbf);
     return R_OK;
 }
 
@@ -414,6 +417,7 @@ int rx_dbf_close(rx_dbf *dbf)
     free(dbf->foff);
     free(dbf->recbuf);
     free(dbf->locks);
+        rx_index_close_all(dbf);
     free(dbf);
     return R_OK;
 }
@@ -1424,40 +1428,7 @@ int rx_dbf_codepage(const rx_dbf *dbf, int *out)
     return R_OK;
 }
 
-/* ---- locks / transactions / indexes live in rlock.c / journal.c / M6 ---- */
-
-int rx_index_attach(rx_dbf *dbf, const char *cdxpath, rx_idx **out)
-{
-    (void)dbf;
-    (void)cdxpath;
-    (void)out;
-    return R_ERR_DBF_UNSUPPORTED;
-}
-
-int rx_index_order(rx_dbf *dbf, const char *tag)
-{
-    (void)dbf;
-    (void)tag;
-    return R_ERR_DBF_UNSUPPORTED;
-}
-
-int rx_seek(rx_cursor *cur, rval *key, int *found)
-{
-    (void)cur;
-    (void)key;
-    (void)found;
-    return R_ERR_DBF_UNSUPPORTED;
-}
-
-int rx_index_create(rx_dbf *dbf, const char *tag, const char *expr, int descending, int unique)
-{
-    (void)dbf;
-    (void)tag;
-    (void)expr;
-    (void)descending;
-    (void)unique;
-    return R_ERR_DBF_UNSUPPORTED;
-}
+/* ---- locks / transactions in rlock.c / journal.c; indexes in cdx.c ---- */
 
 int rx_dbf_is_exclusive(const rx_dbf *dbf)
 {

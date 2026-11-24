@@ -58,15 +58,18 @@ Status legend: ✅ implemented (milestone noted), 🚧 partial, ⏳ planned (mil
 
 | Command | Status |
 | --- | --- |
-| `USE [table] [IN n\|alias] [ALIAS a] [AGAIN] [EXCLUSIVE\|SHARED] [NOUPDATE] [INDEX ...] [ORDER ...]` | ✅ (INDEX/ORDER accepted, applied at M6) |
+| `USE [table] [IN n\|alias] [ALIAS a] [AGAIN] [EXCLUSIVE\|SHARED] [NOUPDATE] [INDEX f1[,f2...]] [ORDER n\|TAG t [OF cdx]]` | ✅ M6 (INDEX/ORDER attach + controlling order) |
 | `CLOSE [ALL\|DATABASES]` | ✅ |
 | `SELECT n\|alias` | ✅ |
 | `GO\|GOTO TOP\|BOTTOM\|RECORD n\|expr` | ✅ |
 | `SKIP [n]` | ✅ (FoxPro BOF/EOF rules, §7.6) |
 | `LIST [scope] [FOR/WHILE] [FIELDS ...] [OFF]` / `DISPLAY [scope] ...` | ✅ M2: scopes, FOR/WHILE, FIELDS, OFF, SET FILTER/HEADINGS/DELETED, deleted `*` marker |
 | `BROWSE [FIELDS f[:H="t"][:W=n][:P="p"][:V=e[:E="m"]][:F][:R], ...] [PARTITION n] [LEDIT|REDIT] [FREEZE f] [LOCK n] [WIDTH n] [NOAPPEND] [NODELETE] [NOEDIT|NOMODIFY] [NOWAIT] [TITLE "t"] [FOR e] [WHEN e] [VALID[:F] e[:E="m"]]` / `CHANGE` | ✅ M4 interactive grid (§9.1: nav/edit/:V/FREEZE/PARTITION/LEDIT/REDIT/mouse; raises R_ERR_NOUI 601 in batch); header popover sort/filter ⏳ M6; memo-cell editing ⏳ M7 |
-| `LOCATE [scope] FOR e [WHILE e]` / `CONTINUE` | ✅ M2 (FOUND(), `Record = n`); SEEK/SET ORDER/SET INDEX ⏳ M6 |
-| `APPEND BLANK` / `APPEND FROM f [TYPE] SDF\|DELIMITED [WITH c\|BLANK\|TAB]` (bare APPEND ✅ M4: append-mode BROWSE grid interactively, R_ERR_NOUI 601 in batch) / `REPLACE [scope] [FOR/WHILE] f WITH e, ...` / `DELETE` / `RECALL` / `PACK` / `ZAP` / `COPY TO f [FIELDS..] [scope] [TYPE SDF\|DELIMITED [WITH..]]` / `COPY STRUCTURE TO f [FIELDS..] [EXTENDED]` / `CREATE f FROM struct` / `FLUSH` / `UNLOCK [ALL]` | ✅ M2; INDEX ON/REINDEX/SORT TO/TOTAL TO/COUNT/SUM/AVERAGE/CALCULATE/SCATTER/GATHER ⏳ M4/M5 |
+| `LOCATE [scope] FOR e [WHILE e]` / `CONTINUE` | ✅ M2 (FOUND(), `Record = n`); scans in tag order when an index order is active |
+| `SEEK e` | ✅ M6 (controlling order; SET EXACT ON = exact match, OFF = first key >= e; miss → EOF, FOUND()=.F.; SET DELETED ON skips deleted entries) |
+| `INDEX ON e TO file \| TAG t [OF cdx] [FOR e] [UNIQUE] [DESCENDING] [ADDITIVE]` / `REINDEX` | ✅ M6 (structural CDX tag or standalone .idx; new tag becomes controlling; REINDEX rebuilds all tags) |
+| `SET INDEX TO [f1[,f2...]] [ADDITIVE]` / `SET ORDER TO [n \| [TAG] t [OF cdx] \| e]` / `SET UNIQUE ON\|OFF` | ✅ M6 (SET INDEX TO bare closes non-structural files; ORDER 0 = natural order) |
+| `APPEND BLANK` / `APPEND FROM f [TYPE] SDF\|DELIMITED [WITH c\|BLANK\|TAB]` (bare APPEND ✅ M4: append-mode BROWSE grid interactively, R_ERR_NOUI 601 in batch) / `REPLACE [scope] [FOR/WHILE] f WITH e, ...` / `DELETE` / `RECALL` / `PACK` / `ZAP` / `COPY TO f [FIELDS..] [scope] [TYPE SDF\|DELIMITED [WITH..]]` / `COPY STRUCTURE TO f [FIELDS..] [EXTENDED]` / `CREATE f FROM struct` / `FLUSH` / `UNLOCK [ALL]` | ✅ M2; SORT TO/TOTAL TO/COUNT/SUM/AVERAGE/CALCULATE/SCATTER/GATHER ⏳ M7+ |
 | alias prefixes `alias->field`, `m.var` | ✅ |
 
 ### Environment
@@ -116,7 +119,8 @@ RESUME interactive (batch: note only).
   DTOS, DTOC, CTOD, GOMONTH, MDY, DMY, QUARTER, WEEK, HOUR, MINUTE, SEC.
 - **Database**: RECNO, RECCOUNT, BOF, EOF, DELETED, ALIAS, SELECT, USED,
   FCOUNT, FIELD, FSIZE, HEADER, RECSIZE, FOUND (M2), LUPDATE (M2),
-  FLOCK, RLOCK/LOCK (M2), FILTER, ORDER, TAG.
+  FLOCK, RLOCK/LOCK (M2), FILTER (M6). **M6**: ORDER, TAG, TAGCOUNT,
+  CDX, MDX, NDX, KEY, KEYCOUNT, TARGET, RELATION.
 - **System**: OS, VERSION, GETENV, MEMORY, DISKSPACE, SYS, CAPSLOCK,
   NUMLOCK, INSMODE, INKEY, LASTKEY, READKEY, SET, SCOLS, SROWS, CURDIR,
   FILE; **M5**: ERROR, MESSAGE.

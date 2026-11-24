@@ -46,6 +46,7 @@ void rx_ctx_init(rx_ctx *ctx, FILE *out, int test_mode)
     ctx->set.exclusive = 1; /* FoxPro default: SET EXCLUSIVE ON */
     ctx->set.reprocess = 0;
     ctx->set.multilocks = 0;
+    ctx->set.unique = 0;    /* SET UNIQUE OFF (M6) */
     char cwd[260];
     if (getcwd(cwd, sizeof(cwd))) {
         snprintf(ctx->set.defdir, sizeof(ctx->set.defdir), "%s", cwd);
@@ -59,8 +60,17 @@ void rx_ctx_free(rx_ctx *ctx)
     }
     for (size_t i = 0; i < ctx->nrels; i++) {
         rx_expr_free(ctx->rels[i].e);
+        free(ctx->rels[i].text);
     }
     free(ctx->rels);
+    for (size_t i = 0; i < ctx->nidxexprs; i++) {
+        free(ctx->idxexprs[i].keytext);
+        free(ctx->idxexprs[i].fortext);
+        rx_expr_free(ctx->idxexprs[i].key_e);
+        rx_expr_free(ctx->idxexprs[i].for_e);
+    }
+    free(ctx->idxexprs);
+    free(ctx->filter_text);
     for (size_t i = 0; i < ctx->nprocs; i++) {
         for (size_t j = 0; j < ctx->procs[i].nbody; j++) {
             rx_stmt_free(ctx->procs[i].body[j]);
@@ -1957,6 +1967,15 @@ static int exec_one(rx_ctx *ctx, rx_stmt *s)
         break;
     case ST_CONTINUE:
         rc = rx_cmd_locate(ctx, s, 1);
+        break;
+    case ST_INDEX:
+        rc = rx_cmd_index_on(ctx, s);
+        break;
+    case ST_SEEK:
+        rc = rx_cmd_seek(ctx, s);
+        break;
+    case ST_REINDEX:
+        rc = rx_cmd_reindex(ctx, s);
         break;
     case ST_COPY:
         rc = rx_cmd_copy(ctx, s);

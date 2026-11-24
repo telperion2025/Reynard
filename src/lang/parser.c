@@ -651,6 +651,7 @@ void rx_stmt_free(rx_stmt *s)
     s->nexpr = s->capexpr = 0;
     for (size_t i = 0; i < s->nclause; i++) {
         rx_expr_free(s->clauses[i].e);
+        free(s->clauses[i].text);
     }
     free(s->clauses);
     for (size_t i = 0; i < s->nstrs; i++) {
@@ -668,6 +669,8 @@ void rx_stmt_free(rx_stmt *s)
     }
     free(s->kids);
     free(s->raw);
+    free(s->keytext);
+    free(s->auxtext);
     memset(s, 0, sizeof(*s));
 }
 
@@ -701,6 +704,8 @@ static const kw keywords[] = {
     { "ENDIF", ST_ENDMARK }, { "ENDDO", ST_ENDMARK }, { "ENDFOR", ST_ENDMARK },
     { "ENDCASE", ST_ENDMARK }, { "ENDSCAN", ST_ENDMARK }, { "ENDPROC", ST_ENDMARK },
     { "ENDFUNC", ST_ENDMARK }, { "ENDTEXT", ST_ENDMARK },
+    /* M6 §8.4 index statements */
+    { "INDEX", ST_INDEX }, { "SEEK", ST_SEEK }, { "REINDEX", ST_REINDEX },
 };
 
 const char *const *rx_keyword_list(size_t *n)
@@ -783,6 +788,28 @@ static void skip_to_eol(parser *p)
     while (!pk_is(p, TK_NEWLINE) && !pk_is(p, TK_EOF)) {
         pk_adv(p);
     }
+}
+
+/* M6: byte offset of the current token (or end of source) */
+static size_t cur_off(parser *p)
+{
+    return p->pos < p->n ? p->toks[p->pos].off : (p->src ? strlen(p->src) : 0);
+}
+
+/* M6: capture the raw source span [off0, off1) as an owned string (NULL when
+   the source text is unavailable, e.g. rx_parse without src) */
+static char *capture_src(parser *p, size_t off0, size_t off1)
+{
+    if (!p->src || off1 <= off0 || off1 > strlen(p->src)) {
+        return NULL;
+    }
+    char *s = malloc(off1 - off0 + 1);
+    if (!s) {
+        RX_FATAL("out of memory");
+    }
+    memcpy(s, p->src + off0, off1 - off0);
+    s[off1 - off0] = '\0';
+    return s;
 }
 
 /* gather a path-like token sequence (WORD . WORD / WORD NUM...) into an
@@ -1459,8 +1486,54 @@ static int parse_stmt(parser *p)
                                pk_word_is(p, "SHARED") || pk_word_is(p, "NOUPDATE")) {
                         st_add_str(&s, pk_cur(p)->text);
                         pk_adv(p);
-                    } else if (pk_word_is(p, "INDEX") || pk_word_is(p, "ORDER")) {
-                        skip_to_eol(p); /* index clauses land at M6 */
+                    } else if (pk_word_is(p, "INDEX")) {
+                        /* USE t INDEX f1 [, f2 ...] [ORDER e] (M6 §8.4) */
+                        pk_adv(p);
+                        static const char *istop[] = { "ORDER", "ASCENDING", "DESCENDING", NULL };
+                        for (;;) {
+                            char *path = parse_path_until(p, istop);
+                            st_add_clause(&s, "IDXFILE", path, NULL);
+                            free(path);
+                            if (pk_op(p, OP_COMMA)) {
+                                pk_adv(p);
+                                continue;
+                            }
+                            break;
+                        }
+                    } else if (pk_word_is(p, "ORDER")) {
+                        /* USE t ... ORDER n | ORDER TAG name [OF cdx] */
+                        pk_adv(p);
+                        if (pk_word_is(p, "TAG")) {
+                            pk_adv(p);
+                            if (pk_cur(p)->kind != TK_WORD) {
+                                return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                               "Expected tag name in USE ORDER");
+                            }
+                            st_add_clause(&s, "ORDER", pk_cur(p)->text, NULL);
+                            pk_adv(p);
+                            if (pk_word_is(p, "OF")) {
+                                pk_adv(p);
+                                static const char *ostop[] = { "ASCENDING", "DESCENDING", NULL };
+                                char *path = parse_path_until(p, ostop);
+                                st_add_clause(&s, "OF", path, NULL);
+                                free(path);
+                            }
+                        } else if (end_of_line(p)) {
+                            st_add_clause(&s, "ORDER", "0", NULL);
+                        } else if (pk_cur(p)->kind == TK_WORD || pk_cur(p)->kind == TK_NUM) {
+                            st_add_clause(&s, "ORDER", pk_cur(p)->text, NULL);
+                            pk_adv(p);
+                        } else {
+                            rx_expr *e = NULL;
+                            rc = parse_expr(p, &e);
+                            if (rc != R_OK) {
+                                return rc;
+                            }
+                            st_add_clause(&s, "ORDER", "", e);
+                        }
+                    } else if (pk_word_is(p, "ASCENDING") || pk_word_is(p, "DESCENDING")) {
+                        st_add_str(&s, pk_cur(p)->text);
+                        pk_adv(p);
                     } else {
                         return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in USE");
                     }
@@ -1614,23 +1687,28 @@ static int parse_stmt(parser *p)
                         break;
                     }
                     for (;;) {
+                        size_t e0 = cur_off(p);
                         rx_expr *e = NULL;
                         rc = parse_expr(p, &e);
                         if (rc != R_OK) {
                             return rc;
                         }
+                        char *etext = capture_src(p, e0, cur_off(p)); /* RELATION() */
                         if (!pk_word_is(p, "INTO")) {
                             rx_expr_free(e);
+                            free(etext);
                             return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
                                            "Expected INTO in SET RELATION");
                         }
                         pk_adv(p);
                         if (pk_cur(p)->kind != TK_WORD) {
                             rx_expr_free(e);
+                            free(etext);
                             return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
                                            "Expected an alias after INTO");
                         }
                         st_add_clause(&s, "REL", pk_cur(p)->text, e);
+                        s.clauses[s.nclause - 1].text = etext;
                         pk_adv(p);
                         if (pk_op(p, OP_COMMA)) {
                             pk_adv(p);
@@ -1677,6 +1755,85 @@ static int parse_stmt(parser *p)
                     }
                     break;
                 }
+                if (pk_word_is(p, "INDEX")) {
+                    /* SET INDEX TO [f1 [, f2 ...]] [ADDITIVE] | SET INDEX TO (clear)
+                       (M6 §8.4); files other than the structural CDX */
+                    pk_adv(p);
+                    if (!pk_word_is(p, "TO")) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected TO after SET INDEX");
+                    }
+                    pk_adv(p);
+                    if (end_of_line(p)) {
+                        st_add_clause(&s, "IDX_CLEAR", "", NULL);
+                    } else {
+                        static const char *stop[] = { "ADDITIVE", NULL };
+                        for (;;) {
+                            char *path = parse_path_until(p, stop);
+                            st_add_clause(&s, "IDX", path, NULL);
+                            free(path);
+                            if (pk_op(p, OP_COMMA)) {
+                                pk_adv(p);
+                                continue;
+                            }
+                            break;
+                        }
+                        if (pk_word_is(p, "ADDITIVE")) {
+                            st_add_clause(&s, "IDX_ADD", "1", NULL);
+                            pk_adv(p);
+                        }
+                    }
+                    if (!end_of_line(p)) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in SET INDEX");
+                    }
+                    break;
+                }
+                if (pk_word_is(p, "ORDER")) {
+                    /* SET ORDER TO [n | [TAG] name [OF cdx] | e] [ASC|DESC] (M6) */
+                    pk_adv(p);
+                    if (pk_word_is(p, "TO")) {
+                        pk_adv(p);
+                    }
+                    if (end_of_line(p)) {
+                        st_add_clause(&s, "ORD_CLEAR", "", NULL); /* natural order */
+                        break;
+                    }
+                    if (pk_word_is(p, "TAG")) {
+                        pk_adv(p);
+                        if (pk_cur(p)->kind != TK_WORD) {
+                            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                           "Expected tag name after SET ORDER TAG");
+                        }
+                        st_add_clause(&s, "ORD_TAG", pk_cur(p)->text, NULL);
+                        pk_adv(p);
+                        if (pk_word_is(p, "OF")) {
+                            pk_adv(p);
+                            static const char *stop[] = { "ASCENDING", "DESCENDING", NULL };
+                            char *path = parse_path_until(p, stop);
+                            st_add_clause(&s, "OF", path, NULL);
+                            free(path);
+                        }
+                    } else if (pk_cur(p)->kind == TK_WORD || pk_cur(p)->kind == TK_NUM) {
+                        st_add_clause(&s, "ORD_NUM", pk_cur(p)->text, NULL);
+                        pk_adv(p);
+                    } else {
+                        size_t e0 = cur_off(p);
+                        rx_expr *e = NULL;
+                        rc = parse_expr(p, &e);
+                        if (rc != R_OK) {
+                            return rc;
+                        }
+                        st_add_clause(&s, "ORD_EXPR", "", e);
+                        s.clauses[s.nclause - 1].text = capture_src(p, e0, cur_off(p));
+                    }
+                    if (pk_word_is(p, "ASCENDING") || pk_word_is(p, "DESCENDING")) {
+                        st_add_str(&s, pk_cur(p)->text);
+                        pk_adv(p);
+                    }
+                    if (!end_of_line(p)) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in SET ORDER");
+                    }
+                    break;
+                }
                 if (pk_word_is(p, "FILTER")) {
                     /* SET FILTER TO [expr] — the expr is compiled at runtime */
                     pk_adv(p);
@@ -1687,12 +1844,14 @@ static int parse_stmt(parser *p)
                     if (end_of_line(p)) {
                         st_add_clause(&s, "FILTER", "", NULL); /* clear the filter */
                     } else {
+                        size_t f0 = cur_off(p);
                         rx_expr *e = NULL;
                         rc = parse_expr(p, &e);
                         if (rc != R_OK) {
                             return rc;
                         }
                         st_add_clause(&s, "FILTER", "", e);
+                        s.auxtext = capture_src(p, f0, cur_off(p)); /* FILTER() text (M6) */
                     }
                     if (!end_of_line(p)) {
                         return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
@@ -1843,6 +2002,88 @@ static int parse_stmt(parser *p)
                 }
                 break;
             case ST_CONTINUE:
+                skip_to_eol(p);
+                break;
+            case ST_INDEX: {
+                /* INDEX ON e TO file | TAG t [OF cdx] [FOR e] [UNIQUE]
+                   [DESCENDING] [ADDITIVE] (M6 §8.4) */
+                if (!pk_word_is(p, "ON")) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected ON after INDEX");
+                }
+                pk_adv(p);
+                size_t k0 = cur_off(p);
+                rx_expr *e = NULL;
+                rc = parse_expr(p, &e);
+                if (rc != R_OK) {
+                    return rc;
+                }
+                st_add_expr(&s, e);
+                s.keytext = capture_src(p, k0, cur_off(p));
+                static const char *tstop[] = { "FOR",   "UNIQUE", "DESCENDING", "ADDITIVE",
+                                               "COMPACT", "EVALUATE", NULL };
+                if (pk_word_is(p, "TO")) {
+                    pk_adv(p);
+                    char *path = parse_path_until(p, tstop);
+                    st_add_str(&s, "TO");
+                    st_add_str(&s, path);
+                    free(path);
+                } else if (pk_word_is(p, "TAG")) {
+                    pk_adv(p);
+                    if (pk_cur(p)->kind != TK_WORD) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected tag name");
+                    }
+                    st_add_str(&s, "TAG");
+                    st_add_str(&s, pk_cur(p)->text);
+                    pk_adv(p);
+                    if (pk_word_is(p, "OF")) {
+                        pk_adv(p);
+                        char *path = parse_path_until(p, tstop);
+                        st_add_str(&s, "OF");
+                        st_add_str(&s, path);
+                        free(path);
+                    }
+                } else {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                   "Expected TO or TAG after the index expression");
+                }
+                while (!end_of_line(p)) {
+                    if (pk_word_is(p, "FOR")) {
+                        pk_adv(p);
+                        size_t f0 = cur_off(p);
+                        rx_expr *fe = NULL;
+                        rc = parse_expr(p, &fe);
+                        if (rc != R_OK) {
+                            return rc;
+                        }
+                        st_add_clause(&s, "FOR", "", fe);
+                        s.auxtext = capture_src(p, f0, cur_off(p));
+                    } else if (pk_word_is(p, "UNIQUE") || pk_word_is(p, "DESCENDING") ||
+                               pk_word_is(p, "ADDITIVE") || pk_word_is(p, "COMPACT") ||
+                               pk_word_is(p, "EVALUATE")) {
+                        st_add_str(&s, pk_cur(p)->text);
+                        pk_adv(p);
+                    } else {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in INDEX ON");
+                    }
+                }
+                break;
+            }
+            case ST_SEEK: {
+                if (end_of_line(p)) {
+                    return pk_fail(p, s.line, s.col, "SEEK requires an expression");
+                }
+                rx_expr *e = NULL;
+                rc = parse_expr(p, &e);
+                if (rc != R_OK) {
+                    return rc;
+                }
+                st_add_expr(&s, e);
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in SEEK");
+                }
+                break;
+            }
+            case ST_REINDEX:
                 skip_to_eol(p);
                 break;
             case ST_COPY: {
@@ -2658,4 +2899,36 @@ int rx_parse_src(rx_tok *toks, size_t ntok, const char *src, rx_stmt **out, size
 int rx_parse(rx_tok *toks, size_t ntok, rx_stmt **out, size_t *nout, r_err *err)
 {
     return rx_parse_src(toks, ntok, NULL, out, nout, err);
+}
+
+/* M6 §8.4: parse one expression from a source string. Used to re-compile
+   index key expressions stored as text in CDX tag headers (REINDEX and
+   REPLACE/APPEND maintenance re-evaluate them per record). */
+int rx_parse_expr_str(const char *src, rx_expr **out, r_err *err)
+{
+    rx_tok *toks = NULL;
+    size_t ntok = 0;
+    int rc = rx_lex(src, "<expr>", &toks, &ntok, err);
+    if (rc != R_OK) {
+        return rc;
+    }
+    parser p;
+    memset(&p, 0, sizeof(p));
+    p.toks = toks;
+    p.n = ntok;
+    p.pos = 0;
+    p.src = src;
+    p.err = err;
+    rx_expr *e = NULL;
+    rc = parse_expr(&p, &e);
+    if (rc == R_OK && !pk_is(&p, TK_NEWLINE) && !pk_is(&p, TK_EOF)) {
+        rx_expr_free(e);
+        rc = R_ERR_SYNTAX;
+        snprintf(err->msg, sizeof(err->msg), "Syntax error in expression");
+    }
+    rx_lex_free(toks, ntok);
+    if (rc == R_OK) {
+        *out = e;
+    }
+    return rc;
 }

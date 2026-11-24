@@ -183,12 +183,108 @@ int rx_cmd_use(rx_ctx *ctx, rx_stmt *s)
             mode = RD_READONLY;
         }
     }
-    return rx_wa_open(area, path, mode, alias);
+    int rc2 = rx_wa_open(area, path, mode, alias);
+    if (rc2 != R_OK) {
+        return rc2;
+    }
+    /* M6 §8.4: USE ... INDEX f1 [, f2] [ORDER n|TAG t [OF cdx]] */
+    rx_dbf *dbf;
+    if (rx_wa_dbf(area, &dbf) == R_OK) {
+        rx_index_registry_purge(ctx, path);
+        int nidx = 0;
+        for (size_t i = 0; i < s->nclause; i++) {
+            if (strcmp(s->clauses[i].key, "IDXFILE") != 0) {
+                continue;
+            }
+            nidx++;
+            char ipath[600];
+            int rc3 = resolve_index_m6(ctx, s->clauses[i].word, ipath, sizeof(ipath));
+            if (rc3 != R_OK) {
+                return rx_raise(ctx, R_ERR_IO_NOTFOUND, s->line, s->col, "File %s not found",
+                                s->clauses[i].word);
+            }
+            rc3 = rx_index_attach(dbf, ipath, NULL);
+            if (rc3 != R_OK) {
+                return rx_raise(ctx, rc3, s->line, s->col, "Cannot open index %s", ipath);
+            }
+        }
+        int has_order = 0;
+        const char *ofpath = NULL;
+        char ofbuf[600];
+        for (size_t i = 0; i < s->nclause; i++) {
+            if (strcmp(s->clauses[i].key, "OF") == 0) {
+                if (resolve_index_m6(ctx, s->clauses[i].word, ofbuf, sizeof(ofbuf)) == R_OK) {
+                    ofpath = ofbuf;
+                } else {
+                    ofpath = s->clauses[i].word;
+                }
+            }
+        }
+        for (size_t i = 0; i < s->nclause; i++) {
+            if (strcmp(s->clauses[i].key, "ORDER") == 0) {
+                has_order = 1;
+                rx_clause *oc = &s->clauses[i];
+                const char *w = oc->word;
+                int numeric = w[0] != '\0';
+                for (const char *q = w; *q; q++) {
+                    if (*q < '0' || *q > '9') {
+                        numeric = 0;
+                        break;
+                    }
+                }
+                if (oc->e) {
+                    rval v;
+                    rx_rval_undef(&v);
+                    int rc3 = rx_eval(ctx, oc->e, &v, &ctx->err);
+                    if (rc3 != R_OK) {
+                        return rc3;
+                    }
+                    double d = 0;
+                    rv_to_num(&v, &d);
+                    rx_rval_free(&v);
+                    long n = (long)d;
+                    if (n <= 0) {
+                        rx_index_order_set(dbf, -1, -1);
+                    } else {
+                        int fi, ti;
+                        if (rx_index_order_nth(dbf, (uint32_t)n, &fi, &ti) != R_OK) {
+                            return rx_raise(ctx, R_ERR_RANGE, s->line, s->col,
+                                            "Invalid index number %ld", n);
+                        }
+                        rx_index_order_set(dbf, fi, ti);
+                    }
+                } else if (numeric) {
+                    long n = strtol(w, NULL, 10);
+                    if (n <= 0) {
+                        rx_index_order_set(dbf, -1, -1);
+                    } else {
+                        int fi, ti;
+                        if (rx_index_order_nth(dbf, (uint32_t)n, &fi, &ti) != R_OK) {
+                            return rx_raise(ctx, R_ERR_RANGE, s->line, s->col,
+                                            "Invalid index number %ld", n);
+                        }
+                        rx_index_order_set(dbf, fi, ti);
+                    }
+                } else {
+                    int fi, ti;
+                    if (rx_index_find_tag(dbf, ofpath, w, &fi, &ti) != R_OK) {
+                        return rx_raise(ctx, R_ERR_CDX_TAG, s->line, s->col, "Tag %s not found", w);
+                    }
+                    rx_index_order_set(dbf, fi, ti);
+                }
+            }
+        }
+        if (!has_order && nidx > 0) {
+            rx_index_default_order(dbf); /* first tag of the first file */
+        } else if (!has_order) {
+            rx_index_default_order(dbf); /* structural CDX tag, when present */
+        }
+    }
+    return R_OK;
 }
 
 int rx_cmd_close(rx_ctx *ctx, rx_stmt *s)
 {
-    (void)ctx;
     int all = 0;
     for (size_t i = 0; i < s->nstrs; i++) {
         if (rx_strcasecmp(s->strs[i], "ALL") == 0 || rx_strcasecmp(s->strs[i], "DATABASES") == 0 ||
@@ -198,9 +294,23 @@ int rx_cmd_close(rx_ctx *ctx, rx_stmt *s)
     }
     if (all) {
         for (int i = 1; i <= 255; i++) {
+            rx_dbf *d;
+            if (rx_wa_used(i) && rx_wa_dbf(i, &d) == R_OK) {
+                const char *p;
+                if (rx_dbf_path(d, &p) == R_OK) {
+                    rx_index_registry_purge(ctx, p); /* M6: drop key-expr cache */
+                }
+            }
             rx_wa_close(i);
         }
         return R_OK;
+    }
+    rx_dbf *d;
+    if (rx_wa_dbf(0, &d) == R_OK) {
+        const char *p;
+        if (rx_dbf_path(d, &p) == R_OK) {
+            rx_index_registry_purge(ctx, p);
+        }
     }
     return rx_wa_close(0);
 }
@@ -399,9 +509,92 @@ static int iterate(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, int default_kind, rx_re
     uint32_t saved, nrec;
     rx_dbf_recno(dbf, &saved);
     rx_dbf_recount(dbf, &nrec);
+    /* M6 §8.4: with a controlling index order the scope runs in tag order;
+       build the record-number sequence up front (ordered positions for
+       ALL/REST/NEXT, physical RECORD n), then walk it. */
+    int ordered = rx_index_order_active(dbf);
+    uint32_t *seq = NULL;
+    size_t nseq = 0;
+    int64_t endpos = -1; /* ordered: position one past the scope end */
+    if (ordered) {
+        int fi, ti;
+        rx_index_order_get(dbf, &fi, &ti);
+        uint32_t nk = 0;
+        rx_index_key_count(dbf, fi, ti, &nk);
+        int64_t from = 0, to = -1;
+        if (sc.kind == 4) {
+            restore = 1;
+            if (sc.n >= 1 && sc.n <= nrec) {
+                nseq = 1;
+            }
+            seq = malloc((nseq ? nseq : 1) * sizeof(uint32_t));
+            if (!seq) {
+                RX_FATAL("out of memory");
+            }
+            if (nseq) {
+                seq[0] = sc.n;
+            }
+        } else {
+            int64_t curpos;
+            int eof;
+            rx_dbf_eof(dbf, &eof);
+            if (eof) {
+                curpos = (int64_t)nk;
+            } else {
+                int64_t pp = -1;
+                rx_index_pos_of(dbf, saved, &pp);
+                curpos = pp >= 0 ? pp : (int64_t)(saved ? saved - 1 : 0);
+            }
+            switch (sc.kind) {
+            case 1:
+                from = 0;
+                to = (int64_t)nk - 1;
+                break;
+            case 2:
+                from = curpos;
+                to = (int64_t)nk - 1;
+                break;
+            case 3:
+                from = curpos;
+                to = curpos + (int64_t)sc.n - 1;
+                break;
+            default:
+                from = curpos;
+                to = curpos;
+                break;
+            }
+            if (to >= (int64_t)nk) {
+                to = (int64_t)nk - 1;
+            }
+            if (from < 0) {
+                from = 0;
+            }
+            nseq = to >= from ? (size_t)(to - from + 1) : 0;
+            seq = malloc((nseq ? nseq : 1) * sizeof(uint32_t));
+            if (!seq) {
+                RX_FATAL("out of memory");
+            }
+            for (size_t i = 0; i < nseq; i++) {
+                uint32_t r = 0;
+                rx_index_recno_at(dbf, (uint32_t)(from + (int64_t)i), &r);
+                seq[i] = r;
+            }
+            endpos = sc.kind == 3 ? from + (int64_t)sc.n : (int64_t)nk;
+        }
+    } else {
+        nseq = end >= start ? (size_t)(end - start + 1) : 0;
+        seq = malloc((nseq ? nseq : 1) * sizeof(uint32_t));
+        if (!seq) {
+            RX_FATAL("out of memory");
+        }
+        for (size_t i = 0; i < nseq; i++) {
+            seq[i] = start + (uint32_t)i;
+        }
+    }
     int stop = 0;
     int cnt = 0;
-    for (uint32_t r = start; r >= 1 && r <= end; r++) {
+    for (size_t si = 0; si < nseq; si++) {
+        uint32_t r = seq[si];
         if (r > nrec) {
             break;
         }
@@ -461,7 +654,20 @@ static int iterate(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, int default_kind, rx_re
         cnt++;
     }
     if (restore) {
-        rx_dbf_goto(dbf, saved);
+        rx_dbf_goto(dbf, saved); /* RECORD n restores; a past-end save is a no-op */
+    } else if (!stop && ordered) {
+        /* M6: leave the pointer one past the scope in tag order (EOF at end) */
+        int fi, ti;
+        rx_index_order_get(dbf, &fi, &ti);
+        uint32_t nk = 0;
+        rx_index_key_count(dbf, fi, ti, &nk);
+        if (endpos >= (int64_t)nk || nk == 0) {
+            rx_goto_logical(dbf, nrec ? nrec + 1 : 1);
+        } else {
+            uint32_t r = 0;
+            rx_index_recno_at(dbf, (uint32_t)endpos, &r);
+            rx_dbf_goto(dbf, r);
+        }
     } else if (!stop && end >= 1 && end <= nrec) {
         rx_dbf_goto(dbf, end);
         rx_dbf_skip(dbf, 1);
@@ -470,6 +676,7 @@ static int iterate(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, int default_kind, rx_re
     } else if (!stop) {
         rx_dbf_goto(dbf, saved);
     }
+    free(seq);
     if (has_for) {
         rx_code_free(&for_code);
     }
@@ -751,6 +958,9 @@ int rx_nav_skip(rx_ctx *ctx, int32_t delta)
     if (rc != R_OK) {
         return rc;
     }
+    if (rx_index_order_active(dbf)) {
+        return rx_nav_skip_ordered(ctx, delta); /* M6: move in tag order */
+    }
     rc = rx_dbf_skip(dbf, delta);
     if (rc != R_OK) {
         return rc;
@@ -769,9 +979,15 @@ int rx_cmd_go(rx_ctx *ctx, rx_stmt *s)
     for (size_t i = 0; i < s->nclause; i++) {
         if (strcmp(s->clauses[i].key, "TARGET") == 0) {
             if (strcmp(s->clauses[i].word, "TOP") == 0) {
+                if (rx_index_order_active(dbf)) {
+                    return rx_nav_top(ctx); /* M6: first in tag order */
+                }
                 return rx_nav_goto(ctx, 1);
             }
             if (strcmp(s->clauses[i].word, "BOTTOM") == 0) {
+                if (rx_index_order_active(dbf)) {
+                    return rx_nav_bottom(ctx); /* M6: last in tag order */
+                }
                 uint32_t n;
                 rx_dbf_recount(dbf, &n);
                 return rx_nav_goto(ctx, n ? n : 1);
@@ -920,6 +1136,12 @@ int rx_cmd_pack(rx_ctx *ctx, rx_stmt *s)
     if (rc != R_OK) {
         return data_raise(ctx, s, rc, "PACK");
     }
+    /* M6: PACK renumbers records — rebuild every tag */
+    rc = rx_index_rebuild_all(ctx, dbf);
+    if (rc != R_OK) {
+        return data_raise(ctx, s, rc, "PACK");
+    }
+    rx_index_flush(dbf);
     return R_OK;
 }
 
@@ -934,6 +1156,17 @@ int rx_cmd_zap(rx_ctx *ctx, rx_stmt *s)
     if (rc != R_OK) {
         return data_raise(ctx, s, rc, "ZAP");
     }
+    /* M6: ZAP empties the table — clear every tag */
+    {
+        int nf = rx_index_file_count(dbf);
+        for (int fi = 0; fi < nf; fi++) {
+            int nt = rx_tag_count(dbf, fi);
+            for (int ti = 0; ti < nt; ti++) {
+                rx_index_clear(dbf, fi, ti);
+            }
+        }
+        rx_index_flush(dbf);
+    }
     return R_OK;
 }
 
@@ -945,6 +1178,7 @@ typedef struct {
     rx_dbf *main_dbf;
     int exclusive;
     int nrec_done;
+    int alias_area; /**< nonzero when an alias->field target was written (M6) */
 } repl_ud;
 
 static int find_area_by_alias(const char *alias)
@@ -980,7 +1214,7 @@ static int cb_replace(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud)
             continue;
         }
         char fname[140];
-        snprintf(fname, sizeof(fname), "%s", c->word);
+        snprintf(fname, sizeof(fname), "%.139s", c->word);
         rx_dbf *target = dbf;
         char *arrow = strstr(fname, "->");
         if (arrow) {
@@ -996,6 +1230,7 @@ static int cb_replace(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud)
             }
             /* alias->field writes at the alias work area's CURRENT record */
             memmove(fname, arrow + 2, strlen(arrow + 2) + 1);
+            u->alias_area = area;
         }
         size_t fidx;
         if (rx_dbf_field_index(target, fname, &fidx) != R_OK) {
@@ -1024,6 +1259,26 @@ static int cb_replace(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud)
     if (rc != R_OK) {
         return rc;
     }
+    /* M6 §8.4: re-insert the record into every attached index tag */
+    rc = rx_index_maintain_rec(ctx, dbf, recno);
+    if (rc != R_OK) {
+        return rc;
+    }
+    if (u->alias_area) {
+        /* index maintenance for the alias target at its current record */
+        int saved = rx_wa_current();
+        rx_wa_select(u->alias_area);
+        rx_dbf *tdbf;
+        if (rx_wa_dbf(u->alias_area, &tdbf) == R_OK) {
+            uint32_t tr;
+            rx_dbf_recno(tdbf, &tr);
+            rc = rx_index_maintain_rec(ctx, tdbf, tr);
+        }
+        rx_wa_select(saved);
+        if (rc != R_OK) {
+            return rc;
+        }
+    }
     u->nrec_done++;
     return R_OK;
 }
@@ -1036,7 +1291,7 @@ int rx_cmd_replace(rx_ctx *ctx, rx_stmt *s)
         return rc;
     }
     int exclusive = rx_dbf_is_exclusive(dbf);
-    repl_ud ud = { ctx, s, dbf, exclusive, 0 };
+    repl_ud ud = { ctx, s, dbf, exclusive, 0, 0 };
     rc = iterate(ctx, s, dbf, default_scope_m2(s, 3), cb_replace, &ud, NULL);
     if (rc != R_OK) {
         return data_raise(ctx, s, rc, "REPLACE");
@@ -1117,7 +1372,84 @@ int rx_cmd_locate(rx_ctx *ctx, rx_stmt *s, int cont)
     }
     int found = 0;
     uint32_t found_rec = 0;
-    for (uint32_t r = start; r >= 1 && r <= end; r++) {
+    /* M6 §8.4: with a controlling order, LOCATE/CONTINUE scan in tag order */
+    int ordered = rx_index_order_active(dbf);
+    uint32_t *oseq = NULL;
+    size_t onseq = 0;
+    if (ordered) {
+        int fi, ti;
+        rx_index_order_get(dbf, &fi, &ti);
+        uint32_t nk = 0;
+        rx_index_key_count(dbf, fi, ti, &nk);
+        int64_t from = 0, to = (int64_t)nk - 1;
+        if (!cont) {
+            int64_t curpos;
+            int eof;
+            rx_dbf_eof(dbf, &eof);
+            uint32_t cur0;
+            rx_dbf_recno(dbf, &cur0);
+            if (eof) {
+                curpos = (int64_t)nk;
+            } else {
+                int64_t pp = -1;
+                rx_index_pos_of(dbf, cur0, &pp);
+                curpos = pp >= 0 ? pp : (int64_t)(cur0 ? cur0 - 1 : 0);
+            }
+            if (ctx->locate_kind == 1) {
+                from = 0;
+            } else if (ctx->locate_kind == 3) {
+                from = curpos;
+                to = curpos + (int64_t)ctx->locate_n - 1;
+            } else if (ctx->locate_kind == 4) {
+                from = -2; /* RECORD n: physical single */
+                to = -2;
+            } else {
+                from = curpos; /* REST */
+            }
+            if (from == -2) {
+                onseq = ctx->locate_n >= 1 && ctx->locate_n <= nrec ? 1 : 0;
+                oseq = malloc((onseq ? onseq : 1) * sizeof(uint32_t));
+                if (!oseq) {
+                    RX_FATAL("out of memory");
+                }
+                if (onseq) {
+                    oseq[0] = ctx->locate_n;
+                }
+            }
+        }
+        if (!oseq) {
+            if (cont) {
+                uint32_t cur0;
+                rx_dbf_recno(dbf, &cur0);
+                int eof;
+                rx_dbf_eof(dbf, &eof);
+                int64_t pp = -1;
+                if (!eof) {
+                    rx_index_pos_of(dbf, cur0, &pp);
+                }
+                from = eof ? (int64_t)nk : (pp >= 0 ? pp + 1 : (int64_t)cur0);
+            }
+            if (to >= (int64_t)nk) {
+                to = (int64_t)nk - 1;
+            }
+            if (from < 0) {
+                from = 0;
+            }
+            onseq = to >= from ? (size_t)(to - from + 1) : 0;
+            oseq = malloc((onseq ? onseq : 1) * sizeof(uint32_t));
+            if (!oseq) {
+                RX_FATAL("out of memory");
+            }
+            for (size_t i = 0; i < onseq; i++) {
+                uint32_t r = 0;
+                rx_index_recno_at(dbf, (uint32_t)(from + (int64_t)i), &r);
+                oseq[i] = r;
+            }
+        }
+    }
+    size_t nscan = ordered ? onseq : (end >= start ? (size_t)(end - start + 1) : 0);
+    for (size_t si = 0; si < nscan; si++) {
+        uint32_t r = ordered ? oseq[si] : start + (uint32_t)si;
         if (r > nrec) {
             break;
         }
@@ -1151,6 +1483,7 @@ int rx_cmd_locate(rx_ctx *ctx, rx_stmt *s, int cont)
         found_rec = r;
         break;
     }
+    free(oseq);
     rx_code_free(&for_code);
     if (has_while) {
         rx_code_free(&while_code);
@@ -1353,6 +1686,9 @@ static int append_from_text(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, const char *pa
         if (rc == R_OK) {
             rc = rx_flush(dbf);
         }
+        if (rc == R_OK) {
+            rc = rx_index_maintain_rec(ctx, dbf, recno); /* M6 index maintenance */
+        }
         if (rc != R_OK) {
             free(rec);
             free(flds);
@@ -1433,6 +1769,9 @@ static int append_from_dbf(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, const char *pat
         if (rc == R_OK) {
             rc = rx_flush(dbf);
         }
+        if (rc == R_OK) {
+            rc = rx_index_maintain_rec(ctx, dbf, recno); /* M6 index maintenance */
+        }
         if (rc != R_OK) {
             break;
         }
@@ -1487,6 +1826,10 @@ int rx_cmd_append(rx_ctx *ctx, rx_stmt *s)
         if (!exclusive) {
             rx_funlock(dbf);
         }
+        if (rc != R_OK) {
+            return data_raise(ctx, s, rc, "APPEND BLANK");
+        }
+        rc = rx_index_maintain_rec(ctx, dbf, recno); /* M6: blank keys inserted */
         if (rc != R_OK) {
             return data_raise(ctx, s, rc, "APPEND BLANK");
         }
@@ -1631,6 +1974,10 @@ static int cb_copy(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud)
             }
         }
         rc = rx_flush(u->dst);
+        if (rc != R_OK) {
+            return rc;
+        }
+        rc = rx_index_maintain_rec(u->ctx, u->dst, nr); /* M6 */
         if (rc != R_OK) {
             return rc;
         }
@@ -1995,6 +2342,10 @@ int rx_cmd_flush(rx_ctx *ctx, rx_stmt *s)
             rx_dbf *d;
             if (rx_wa_dbf(a, &d) == R_OK) {
                 int rc = rx_flush(d);
+                if (rc != R_OK) {
+                    return data_raise(ctx, s, rc, "FLUSH");
+                }
+                rc = rx_index_flush(d); /* M6: write dirty index files */
                 if (rc != R_OK) {
                     return data_raise(ctx, s, rc, "FLUSH");
                 }
