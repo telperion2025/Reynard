@@ -33,7 +33,7 @@ INDEX ON/SEEK/REINDEX/SET INDEX/SET ORDER/SET UNIQUE, tag-ordered
 navigation and scopes, automatic index maintenance on write, ORDER/TAG/
 TAGCOUNT/CDX/MDX/NDX/KEY/KEYCOUNT/TARGET/RELATION functions; include/reynard
 API frozen; interop validator + byte-reproducibility + 100k-key perf gate in
-CI; 81-case conformance suite) are implemented. See
+CI; 81-case conformance suite), **M7** (forms §9.2: @ SAY/GET/READ with WHEN/VALID/RANGE/PICTURE/SIZE/DEFAULT, CYCLE, mouse, golden-tested; PICTURE/TRANSFORM engine; screen builder CREATE/MODIFY/GENERATE SCREEN with .SCR/.RSO formats and the build→generate→execute round-trip gate; COUNT/SUM/AVERAGE/CALCULATE, SORT TO, TOTAL TO, SCATTER/GATHER; 90-case conformance suite, 21 golden scenarios) are implemented. See
 > [docs/DEVIATIONS.md](docs/DEVIATIONS.md) for the deviation log and
 > [CHANGELOG.md](CHANGELOG.md) for progress. The full specification this
 > project implements is summarized in [docs/language.md](docs/language.md)

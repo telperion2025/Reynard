@@ -136,3 +136,45 @@ B+tree per tag. See src/data/cdx_internal.h for the authoritative layout.
   formats specified here at their milestones (M7-M9).
 - Import/export: SDF, DELIMITED [WITH del|BLANK|TAB], XLS (BIFF5) —
   spec §8.8.
+
+
+## 6. Screen files: .SCR text and .RSO compiled form (spec \u00a79.2, M7)
+
+Not FoxPro .SCX (binary table) \u2014 Reynard uses its own formats.
+
+**.SCR (text, canonical, one directive per line):**
+
+```
+REYNARD SCREEN 1
+NAME <NAME>
+SIZE <h>,<w>
+ITEM SAY <r>,<c> SCHEME <n> "<text>"
+ITEM GET <r>,<c> VAR <var> [SAY "<label>"] SIZE <h>,<w> [PICTURE "<p>"] [FUNCTION "<f>"] [WHEN <e>] [VALID <e>] [RANGE <a>[,<b>]] [DEFAULT <e>] SCHEME <n>
+ITEM BOX <r1>,<c1> TO <r2>,<c2> SCHEME <n>
+ITEM LINE <r1>,<c1> TO <r2>,<c2> SCHEME <n>
+ITEM BUTTON|RADIO|CHECK|POPUP <r>,<c> PROMPT "<p>" VAR <var> SCHEME <n>
+ITEM SPIN <r>,<c> VAR <var> SCHEME <n>
+ITEM INVB <r>,<c> SIZE <h>,<w> VAR <var> SCHEME <n>
+END
+```
+
+The writer emits exactly this field order, so load\u2192save is
+byte-identical (gate: harness `scrcheck`). Strings are double-quoted with
+`\\` and `\"` escapes. WHEN/VALID/RANGE/DEFAULT are raw expression text
+running to the next clause keyword (canonical order WHEN, VALID, RANGE,
+DEFAULT, SCHEME).
+
+**.RSO (binary, byte-reproducible):** header 120 bytes \u2014 u32 LE magic
+`RRSO` (0x4F535252), u32 LE version=1, name[64] NUL-padded, u32 h, u32 w,
+u32 nitems, u32 item record size (896), sha256[32] of the canonical .SCR
+bytes; then nitems fixed 896-byte records, all integers LE: u16 type
+(SAY=1 GET=2 BOX=3 LINE=4 BUTTON=5 RADIO=6 CHECK=7 POPUP=8 SPIN=9 INVB=10),
+u16 row, u16 col, u16 row2, u16 col2, u16 h, u16 w, u16 scheme, then NUL-padded
+strings at fixed offsets: text[256] @16, var[64] @272, pic[64] @336,
+func[16] @400, when[128] @416, valid[128] @544, rang[96] @672, deflt[96]
+@768.
+
+**GENERATE SCREEN** emits .PRG: `@ r,c SAY "t"`, `@ r,c [SAY "l"] GET var
+SIZE h,w [PICTURE..] [WHEN..] [VALID..] [RANGE..] [DEFAULT..]`,
+`@ r1,c1 BOX TO r2,c2`, controls as comments (DEVIATIONS #46), and a final
+`READ CYCLE`.

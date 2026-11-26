@@ -1,0 +1,13 @@
+5 records sorted.
+ NAME                 AGE
+ -------------------- ---
+ Carol                 41
+ Dave                  35
+ Alice                 30
+ Eve                   28
+ Bob                   25
+2
+ NAME                 AGE MARRIED
+ -------------------- --- -------
+ Bob                   60 F      
+ Alice                 99 T      

@@ -706,6 +706,15 @@ static const kw keywords[] = {
     { "ENDFUNC", ST_ENDMARK }, { "ENDTEXT", ST_ENDMARK },
     /* M6 §8.4 index statements */
     { "INDEX", ST_INDEX }, { "SEEK", ST_SEEK }, { "REINDEX", ST_REINDEX },
+    /* M7 §7.1 aggregates / restructuring */
+    { "COUNT", ST_COUNT }, { "SUM", ST_SUM }, { "AVERAGE", ST_AVERAGE },
+    { "CALCULATE", ST_CALCULATE }, { "SORT", ST_SORT }, { "TOTAL", ST_TOTAL },
+    { "SCATTER", ST_SCATTER }, { "GATHER", ST_GATHER },
+    /* M7 §9.2 forms */
+    { "READ", ST_READ },
+    { "READ", ST_READ },
+    /* M7 9.2 screen builder */
+    { "MODIFY", ST_MODIFY_SCREEN }, { "GENERATE", ST_GENERATE_SCREEN },
 };
 
 const char *const *rx_keyword_list(size_t *n)
@@ -855,9 +864,9 @@ static char *parse_path_until(parser *p, const char **stopkw)
 
 /* scope + FOR/WHILE clauses shared by LIST/DISPLAY/DELETE/RECALL/REPLACE/
    LOCATE/COPY */
-static int parse_scope_fw(parser *p, rx_stmt *s)
+/* FOR expr / WHILE expr clause tail (shared by all scoped commands) */
+static int parse_fw_tail(parser *p, rx_stmt *s)
 {
-    parse_scope(p, s);
     while (!end_of_line(p)) {
         if (pk_word_is(p, "FOR") || pk_word_is(p, "WHILE")) {
             const char *key = pk_cur(p)->text;
@@ -872,6 +881,36 @@ static int parse_scope_fw(parser *p, rx_stmt *s)
             break;
         }
     }
+    return R_OK;
+}
+
+static int parse_scope_fw(parser *p, rx_stmt *s)
+{
+    parse_scope(p, s);
+    return parse_fw_tail(p, s);
+}
+
+/* M7: TO var | TO ARRAY name tail for aggregate commands */
+static int parse_to_target(parser *p, rx_stmt *s)
+{
+    if (!pk_word_is(p, "TO")) {
+        return R_OK;
+    }
+    pk_adv(p);
+    if (pk_word_is(p, "ARRAY")) {
+        pk_adv(p);
+        if (pk_cur(p)->kind != TK_WORD) {
+            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected array name after TO ARRAY");
+        }
+        st_add_clause(s, "TOARRAY", pk_cur(p)->text, NULL);
+        pk_adv(p);
+        return R_OK;
+    }
+    if (pk_cur(p)->kind != TK_WORD) {
+        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected variable or ARRAY after TO");
+    }
+    st_add_clause(s, "TOVAR", pk_cur(p)->text, NULL);
+    pk_adv(p);
     return R_OK;
 }
 
@@ -1327,6 +1366,233 @@ static int parse_text(parser *p, rx_stmt *s)
     return stmt_finish(p, s);
 }
 
+/* M7 §9.2: READ [CYCLE] | CLEAR GETS | CLEAR READ [ALL] clause tail */
+static int parse_read_clauses(parser *p, rx_stmt *s)
+{
+    if (pk_word_is(p, "CYCLE")) {
+        st_add_clause(s, "CYCLE", "", NULL);
+        pk_adv(p);
+    } else if (pk_word_is(p, "CLEAR")) {
+        pk_adv(p);
+        if (pk_word_is(p, "GETS")) {
+            st_add_clause(s, "CLEARGETS", "", NULL);
+            pk_adv(p);
+        } else if (pk_word_is(p, "READ")) {
+            st_add_clause(s, "CLEARREAD", "", NULL);
+            pk_adv(p);
+            if (pk_word_is(p, "ALL")) {
+                st_add_clause(s, "ALL", "", NULL);
+                pk_adv(p);
+            }
+        } else {
+            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected GETS or READ after CLEAR");
+        }
+    }
+    if (!end_of_line(p)) {
+        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in READ");
+    }
+    return R_OK;
+}
+
+/* M7 §9.2: @ r,c [SAY e [PICTURE p] [FUNCTION f]] [GET var [PICTURE..]
+   [FUNCTION..] [DEFAULT e] [WHEN e] [VALID e[:E="m"]] [RANGE a[,b]]
+   [SIZE h,w]] | @ r,c CLEAR | @ r,c BOX [TO r2,c2] */
+static int parse_sayget(parser *p, rx_stmt *s)
+{
+    rx_expr *r = NULL, *c = NULL;
+    int rc = parse_expr(p, &r);
+    if (rc != R_OK) {
+        return rc;
+    }
+    if (!pk_op(p, OP_COMMA)) {
+        rx_expr_free(r);
+        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected , after @ row");
+    }
+    pk_adv(p);
+    rc = parse_expr(p, &c);
+    if (rc != R_OK) {
+        rx_expr_free(r);
+        return rc;
+    }
+    st_add_expr(s, r);
+    st_add_expr(s, c);
+    int got_get = 0; /* PICTURE/FUNCTION/SIZE before GET belong to SAY, after GET to the GET */
+    while (!end_of_line(p)) {
+        if (pk_word_is(p, "CLEAR")) {
+            st_add_clause(s, "CLEAR", "", NULL);
+            pk_adv(p);
+            continue;
+        }
+        if (pk_word_is(p, "BOX")) {
+            st_add_clause(s, "BOX", "", NULL);
+            pk_adv(p);
+            if (pk_word_is(p, "TO")) {
+                pk_adv(p);
+                rx_expr *r2 = NULL, *c2 = NULL;
+                rc = parse_expr(p, &r2);
+                if (rc != R_OK) {
+                    return rc;
+                }
+                if (pk_op(p, OP_COMMA)) {
+                    pk_adv(p);
+                }
+                rc = parse_expr(p, &c2);
+                if (rc != R_OK) {
+                    rx_expr_free(r2);
+                    return rc;
+                }
+                st_add_clause(s, "BOXTO", "", r2);
+                st_add_clause(s, "BOXTO2", "", c2);
+            }
+            continue;
+        }
+        if (pk_word_is(p, "SAY")) {
+            pk_adv(p);
+            rx_expr *e = NULL;
+            rc = parse_expr(p, &e);
+            if (rc != R_OK) {
+                return rc;
+            }
+            st_add_clause(s, "SAY", "", e);
+            continue;
+        }
+        if (pk_word_is(p, "GET")) {
+            pk_adv(p);
+            if (pk_cur(p)->kind != TK_WORD) {
+                return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected variable after GET");
+            }
+            char vname[80];
+            snprintf(vname, sizeof(vname), "%s", pk_cur(p)->text);
+            pk_adv(p);
+            if (pk_op(p, OP_DOT) && pk_ahead(p, 1)->kind == TK_WORD) {
+                /* m.var memvar reference */
+                snprintf(vname, sizeof(vname), "M.%s", pk_ahead(p, 1)->text);
+                pk_adv(p);
+                pk_adv(p);
+            }
+            st_add_clause(s, "GET", vname, NULL);
+            got_get = 1;
+            continue;
+        }
+        if (pk_word_is(p, "PICTURE")) {
+            pk_adv(p);
+            if (pk_cur(p)->kind != TK_STR && pk_cur(p)->kind != TK_WORD) {
+                return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected PICTURE string");
+            }
+            st_add_clause(s, got_get ? "PICTURE" : "SAYPICTURE", pk_cur(p)->text, NULL);
+            pk_adv(p);
+            continue;
+        }
+        if (pk_word_is(p, "FUNCTION")) {
+            pk_adv(p);
+            if (pk_cur(p)->kind != TK_STR && pk_cur(p)->kind != TK_WORD) {
+                return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected FUNCTION string");
+            }
+            st_add_clause(s, got_get ? "FUNCTION" : "SAYFUNCTION", pk_cur(p)->text, NULL);
+            pk_adv(p);
+            continue;
+        }
+        if (pk_word_is(p, "DEFAULT")) {
+            pk_adv(p);
+            rx_expr *e = NULL;
+            rc = parse_expr(p, &e);
+            if (rc != R_OK) {
+                return rc;
+            }
+            st_add_clause(s, "DEFAULT", "", e);
+            continue;
+        }
+        if (pk_word_is(p, "WHEN")) {
+            pk_adv(p);
+            rx_expr *e = NULL;
+            rc = parse_expr(p, &e);
+            if (rc != R_OK) {
+                return rc;
+            }
+            st_add_clause(s, "WHEN", "", e);
+            continue;
+        }
+        if (pk_word_is(p, "VALID")) {
+            pk_adv(p);
+            rx_expr *e = NULL;
+            rc = parse_expr(p, &e);
+            if (rc != R_OK) {
+                return rc;
+            }
+            st_add_clause(s, "VALID", "", e);
+            if (pk_op(p, OP_COLON)) {
+                pk_adv(p);
+                if (pk_word_is(p, "E")) {
+                    pk_adv(p);
+                    if (pk_op(p, OP_EQ)) {
+                        pk_adv(p);
+                        if (pk_cur(p)->kind == TK_STR) {
+                            st_add_clause(s, "VERR", pk_cur(p)->text, NULL);
+                            pk_adv(p);
+                        }
+                    }
+                }
+            }
+            continue;
+        }
+        if (pk_word_is(p, "RANGE")) {
+            pk_adv(p);
+            rx_expr *a = NULL, *b = NULL;
+            rc = parse_expr(p, &a);
+            if (rc != R_OK) {
+                return rc;
+            }
+            st_add_clause(s, "RANGE", "", a);
+            if (pk_op(p, OP_COMMA)) {
+                pk_adv(p);
+                rc = parse_expr(p, &b);
+                if (rc != R_OK) {
+                    return rc;
+                }
+                st_add_clause(s, "RANGE2", "", b);
+            }
+            continue;
+        }
+        if (pk_word_is(p, "SIZE")) {
+            pk_adv(p);
+            rx_expr *h = NULL, *w = NULL;
+            rc = parse_expr(p, &h);
+            if (rc != R_OK) {
+                return rc;
+            }
+            if (pk_op(p, OP_COMMA)) {
+                pk_adv(p);
+            }
+            rc = parse_expr(p, &w);
+            if (rc != R_OK) {
+                rx_expr_free(h);
+                return rc;
+            }
+            st_add_clause(s, "SIZEH", "", h);
+            st_add_clause(s, "SIZEW", "", w);
+            continue;
+        }
+        if (pk_word_is(p, "COLOR")) {
+            /* accepted, ignored (v1 palette via config) */
+            pk_adv(p);
+            while (!end_of_line(p) && !pk_word_is(p, "SAY") && !pk_word_is(p, "GET")) {
+                pk_adv(p);
+            }
+            continue;
+        }
+        if (pk_word_is(p, "SCHEME")) {
+            /* COLOR SCHEME n: accepted, ignored (v1 palette via config) */
+            pk_adv(p);
+            if (pk_cur(p)->kind == TK_NUM || pk_cur(p)->kind == TK_WORD) {
+                pk_adv(p);
+            }
+            continue;
+        }
+        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in @ SAY/GET");
+    }
+    return R_OK;
+}
+
 static int parse_stmt(parser *p)
 {
     rx_stmt s;
@@ -1368,6 +1634,17 @@ static int parse_stmt(parser *p)
     }
     if (pk_word_is(p, "TEXT")) {
         return parse_text(p, &s);
+    }
+
+    /* M7 §9.2: @ SAY/GET statement */
+    if (pk_op(p, OP_AT)) {
+        pk_adv(p);
+        s.kind = ST_SAYGET;
+        int rc = parse_sayget(p, &s);
+        if (rc != R_OK) {
+            return rc;
+        }
+        return stmt_finish(p, &s);
     }
 
     if (pk_op(p, OP_Q)) {
@@ -1880,6 +2157,21 @@ static int parse_stmt(parser *p)
             }
             case ST_QUIT:
             case ST_CLEAR:
+                if (pk_word_is(p, "GETS") || pk_word_is(p, "READ")) {
+                    /* CLEAR GETS / CLEAR READ [ALL] (M7 §9.2) */
+                    s.kind = ST_READ;
+                    rc = parse_read_clauses(p, &s);
+                    if (rc != R_OK) {
+                        return rc;
+                    }
+                    break;
+                }
+                /* fall through to plain CLEAR */
+                while (!end_of_line(p)) {
+                    st_add_str(&s, pk_cur(p)->text);
+                    pk_adv(p);
+                }
+                break;
             case ST_FLUSH:
             case ST_PACK:
             case ST_ZAP:
@@ -2086,6 +2378,278 @@ static int parse_stmt(parser *p)
             case ST_REINDEX:
                 skip_to_eol(p);
                 break;
+            /* ---------------- M7 §7.1 aggregates ---------------- */
+            case ST_COUNT:
+                rc = parse_scope_fw(p, &s);
+                if (rc != R_OK) {
+                    return rc;
+                }
+                rc = parse_to_target(p, &s);
+                if (rc != R_OK) {
+                    return rc;
+                }
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in COUNT");
+                }
+                break;
+            case ST_SUM:
+            case ST_AVERAGE:
+                parse_scope(p, &s);
+                /* optional expr list before FOR/WHILE/TO */
+                while (!end_of_line(p) && !pk_word_is(p, "FOR") && !pk_word_is(p, "WHILE") &&
+                       !pk_word_is(p, "TO")) {
+                    rx_expr *e = NULL;
+                    rc = parse_expr(p, &e);
+                    if (rc != R_OK) {
+                        return rc;
+                    }
+                    st_add_expr(&s, e);
+                    if (pk_op(p, OP_COMMA)) {
+                        pk_adv(p);
+                        continue;
+                    }
+                    break;
+                }
+                rc = parse_fw_tail(p, &s);
+                if (rc != R_OK) {
+                    return rc;
+                }
+                rc = parse_to_target(p, &s);
+                if (rc != R_OK) {
+                    return rc;
+                }
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in SUM/AVERAGE");
+                }
+                break;
+            case ST_CALCULATE:
+                parse_scope(p, &s);
+                rc = parse_fw_tail(p, &s);
+                if (rc != R_OK) {
+                    return rc;
+                }
+                for (;;) {
+                    if (pk_cur(p)->kind != TK_WORD) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                       "Expected CNT/SUM/AVG/MIN/MAX in CALCULATE");
+                    }
+                    char fn[16];
+                    snprintf(fn, sizeof(fn), "%.15s", pk_cur(p)->text);
+                    for (char *c = fn; *c; c++) {
+                        *c = (char)toupper((unsigned char)*c);
+                    }
+                    pk_adv(p);
+                    rx_expr *e = NULL;
+                    if (pk_op(p, OP_LP)) {
+                        pk_adv(p);
+                        if (!pk_op(p, OP_RP)) { /* CNT() allows empty parens */
+                            rc = parse_expr(p, &e);
+                            if (rc != R_OK) {
+                                return rc;
+                            }
+                        }
+                        if (!pk_op(p, OP_RP)) {
+                            rx_expr_free(e);
+                            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected ) in CALCULATE");
+                        }
+                        pk_adv(p);
+                    }
+                    st_add_clause(&s, "CALC", fn, e);
+                    if (pk_op(p, OP_COMMA)) {
+                        pk_adv(p);
+                        continue;
+                    }
+                    break;
+                }
+                rc = parse_to_target(p, &s);
+                if (rc != R_OK) {
+                    return rc;
+                }
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in CALCULATE");
+                }
+                break;
+            case ST_SORT: {
+                /* SORT TO path ON f [/A|/D|/C] [, ...] [ASCENDING|DESCENDING]
+                   [scope] [FOR/WHILE] [FIELDS ...] */
+                if (!pk_word_is(p, "TO")) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected TO after SORT");
+                }
+                pk_adv(p);
+                static const char *onstop[] = { "ON", NULL };
+                char *path = parse_path_until(p, onstop);
+                st_add_clause(&s, "TO", path, NULL);
+                free(path);
+                if (!pk_word_is(p, "ON")) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected ON after SORT TO file");
+                }
+                pk_adv(p);
+                for (;;) {
+                    if (pk_cur(p)->kind != TK_WORD) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected field name in SORT ON");
+                    }
+                    char fld[16];
+                    snprintf(fld, sizeof(fld), "%.15s", pk_cur(p)->text);
+                    pk_adv(p);
+                    char flag[8] = "";
+                    if (pk_op(p, OP_DIV)) { /* /A /C /D */
+                        pk_adv(p);
+                        if (pk_cur(p)->kind == TK_WORD) {
+                            snprintf(flag, sizeof(flag), "/%c", toupper((unsigned char)pk_cur(p)->text[0]));
+                            pk_adv(p);
+                        }
+                    }
+                    char *fl = rx_strdup(flag);
+                    st_add_clause(&s, "SORTFLD", fld, NULL);
+                    s.clauses[s.nclause - 1].text = fl;
+                    if (pk_op(p, OP_COMMA)) {
+                        pk_adv(p);
+                        continue;
+                    }
+                    break;
+                }
+                if (pk_word_is(p, "ASCENDING") || pk_word_is(p, "DESCENDING")) {
+                    st_add_clause(&s, pk_cur(p)->text, "", NULL);
+                    pk_adv(p);
+                }
+                rc = parse_scope_fw(p, &s);
+                if (rc != R_OK) {
+                    return rc;
+                }
+                parse_fields(p, &s);
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in SORT");
+                }
+                break;
+            }
+            case ST_TOTAL: {
+                /* TOTAL TO path ON expr [FIELDS ...] [scope] [FOR/WHILE] */
+                if (!pk_word_is(p, "TO")) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected TO after TOTAL");
+                }
+                pk_adv(p);
+                static const char *onstop2[] = { "ON", NULL };
+                char *path = parse_path_until(p, onstop2);
+                st_add_clause(&s, "TO", path, NULL);
+                free(path);
+                if (!pk_word_is(p, "ON")) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected ON after TOTAL TO file");
+                }
+                pk_adv(p);
+                rx_expr *e = NULL;
+                rc = parse_expr(p, &e);
+                if (rc != R_OK) {
+                    return rc;
+                }
+                st_add_expr(&s, e);
+                parse_fields(p, &s);
+                rc = parse_scope_fw(p, &s);
+                if (rc != R_OK) {
+                    return rc;
+                }
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in TOTAL");
+                }
+                break;
+            }
+            case ST_SCATTER:
+                while (!end_of_line(p)) {
+                    if (pk_word_is(p, "FIELDS")) {
+                        if (parse_fields(p, &s) < 0) {
+                            return R_ERR_SYNTAX;
+                        }
+                    } else if (pk_word_is(p, "MEMO")) {
+                        st_add_clause(&s, "MEMO", "", NULL);
+                        pk_adv(p);
+                    } else {
+                        break;
+                    }
+                }
+                if (pk_word_is(p, "TO")) {
+                    pk_adv(p);
+                }
+                if (pk_word_is(p, "ARRAY")) {
+                    pk_adv(p);
+                    if (pk_cur(p)->kind != TK_WORD) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected array name");
+                    }
+                    st_add_clause(&s, "TOARRAY", pk_cur(p)->text, NULL);
+                    pk_adv(p);
+                } else if (pk_word_is(p, "MEMVAR")) {
+                    st_add_clause(&s, "MEMVAR", "", NULL);
+                    pk_adv(p);
+                    if (pk_word_is(p, "BLANK")) {
+                        st_add_clause(&s, "BLANK", "", NULL);
+                        pk_adv(p);
+                    }
+                } else {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                   "Expected ARRAY or MEMVAR after SCATTER TO");
+                }
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in SCATTER");
+                }
+                break;
+            case ST_GATHER:
+                if (pk_word_is(p, "FROM")) {
+                    pk_adv(p);
+                }
+                if (pk_word_is(p, "ARRAY")) {
+                    pk_adv(p);
+                    if (pk_cur(p)->kind != TK_WORD) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected array name");
+                    }
+                    st_add_clause(&s, "FROMARRAY", pk_cur(p)->text, NULL);
+                    pk_adv(p);
+                } else if (pk_word_is(p, "MEMVAR")) {
+                    st_add_clause(&s, "MEMVAR", "", NULL);
+                    pk_adv(p);
+                } else {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                   "Expected ARRAY or MEMVAR after GATHER FROM");
+                }
+                while (!end_of_line(p)) {
+                    if (pk_word_is(p, "FIELDS")) {
+                        if (parse_fields(p, &s) < 0) {
+                            return R_ERR_SYNTAX;
+                        }
+                    } else if (pk_word_is(p, "MEMO")) {
+                        st_add_clause(&s, "MEMO", "", NULL);
+                        pk_adv(p);
+                    } else {
+                        break;
+                    }
+                }
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in GATHER");
+                }
+                break;
+            case ST_READ:
+                rc = parse_read_clauses(p, &s);
+                if (rc != R_OK) {
+                    return rc;
+                }
+                break;
+            case ST_MODIFY_SCREEN:
+            case ST_GENERATE_SCREEN: {
+                if (!pk_word_is(p, "SCREEN")) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected SCREEN");
+                }
+                pk_adv(p);
+                char *nm = parse_path_until(p, (const char *[]) { "TO", NULL });
+                st_add_str(&s, nm);
+                free(nm);
+                if (pk_word_is(p, "TO")) {
+                    pk_adv(p);
+                    char *tp = parse_path_until(p, NULL);
+                    st_add_str(&s, tp);
+                    free(tp);
+                }
+                if (!end_of_line(p)) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in screen command");
+                }
+                break;
+            }
             case ST_COPY: {
                 if (pk_word_is(p, "STRUCTURE")) {
                     st_add_str(&s, "STRUCTURE");
@@ -2148,6 +2712,15 @@ static int parse_stmt(parser *p)
                 break;
             }
             case ST_CREATE: {
+                if (pk_word_is(p, "SCREEN")) {
+                    s.kind = ST_CREATE_SCREEN;
+                    pk_adv(p);
+                    char *nm = parse_path_until(p, NULL);
+                    st_add_str(&s, nm);
+                    free(nm);
+                    skip_to_eol(p);
+                    break;
+                }
                 static const char *stop[] = { "FROM", NULL };
                 char *path = parse_path_until(p, stop);
                 st_add_str(&s, path);
@@ -2178,10 +2751,16 @@ static int parse_stmt(parser *p)
                     return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected procedure name after DO");
                 }
                 snprintf(s.target, sizeof(s.target), "%s", pk_cur(p)->text);
-                for (char *c = s.target; *c; c++) {
-                    *c = (char)toupper((unsigned char)*c);
-                }
                 pk_adv(p);
+                if (pk_op(p, OP_DOT) && pk_ahead(p, 1)->kind == TK_WORD) {
+                    /* file name with extension: DO foo.prg (case preserved:
+                       find_proc() uppercases for the procedure lookup, the
+                       file fallback needs the on-disk case) */
+                    size_t tl = strlen(s.target);
+                    snprintf(s.target + tl, sizeof(s.target) - tl, ".%s", pk_ahead(p, 1)->text);
+                    pk_adv(p);
+                    pk_adv(p);
+                }
                 if (pk_word_is(p, "WITH")) {
                     pk_adv(p);
                     for (;;) {

@@ -1,0 +1,17 @@
+# M7 \u00a79.2: VALID failure blocks navigation (message line), fixing the
+# value lets the READ complete; field GET is stored on commit
+text USE people
+key enter
+text @ 2,2 SAY "Age:" GET age SIZE 1,4 VALID age < 50
+key enter
+text READ
+key enter
+text 99
+key tab
+key bs
+key bs
+text 42
+key enter
+text ? age
+key enter
+eof

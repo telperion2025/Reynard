@@ -240,6 +240,10 @@ typedef struct rx_ui {
     int caps, num;  /**< status indicators */
     int paused;     /**< Ctrl+S pause */
     int dirty;
+    /* M7 §9.2: pending @ SAY texts painted on the desktop */
+    char **says;
+    int (*say_xy)[2];
+    size_t nsays, capsays;
 } rx_ui;
 
 rx_ui *rx_ui_current(void);
@@ -250,6 +254,16 @@ void ui_msgline_hook(void *ud, const char *s);
 /* ============================ browse (browse.c, M4 §9.1) ============================ */
 /** rx_ctx->browse_fn hook: open a BROWSE/APPEND grid window for the stmt. */
 int ui_browse_open(void *ud, rx_stmt *s);
+
+/* M7 §9.2 forms: @ SAY painting + modal READ loop */
+int ui_say(void *ud, int row, int col, const char *text);
+/* M7 9.2 screen builder designer (screenb.c); the .SCR/.RSO model and codegen
+   live in util/scrfmt.h */
+int ui_screen_designer(void *ud, struct rx_stmt *s);
+void ui_says_render(rx_ui *ui);
+void ui_gets_render(rx_ui *ui);
+void ui_says_free(rx_ui *ui);
+int ui_read(void *ud);
 
 #ifdef __cplusplus
 }

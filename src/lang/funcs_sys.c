@@ -416,12 +416,59 @@ static int f_message(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
     return R_OK;
 }
 
+/* M7 §9.2 form introspection */
+static int f_row(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
+{
+    (void)argc;
+    (void)argv;
+    if (c->ngets > 0) {
+        f_num(c, out, (double)c->gets[c->cur_obj >= 0 && (size_t)c->cur_obj < c->ngets ? (size_t)c->cur_obj : 0].row);
+    } else {
+        f_num(c, out, 0);
+    }
+    (void)err;
+    return R_OK;
+}
+static int f_col(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
+{
+    (void)argc;
+    (void)argv;
+    if (c->ngets > 0) {
+        f_num(c, out, (double)c->gets[c->cur_obj >= 0 && (size_t)c->cur_obj < c->ngets ? (size_t)c->cur_obj : 0].col);
+    } else {
+        f_num(c, out, 0);
+    }
+    (void)err;
+    return R_OK;
+}
+static int f_rdlevel(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
+{
+    (void)argc;
+    (void)argv;
+    (void)err;
+    f_num(c, out, c->read_active ? 1 : 0);
+    return R_OK;
+}
+static int f_objnum(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
+{
+    (void)argc;
+    (void)argv;
+    (void)err;
+    f_num(c, out, c->cur_obj + 1);
+    return R_OK;
+}
+static int f_curobj(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
+{
+    return f_objnum(c, argc, argv, out, err);
+}
+
 const rx_funcdef rx_funcs_sys[] = {
     { "OS", f_os },           { "VERSION", f_version }, { "GETENV", f_getenv },
     { "ERROR", f_error },     { "MESSAGE", f_message },
     { "MEMORY", f_memory },   { "DISKSPACE", f_diskspace }, { "SYS", f_sys },
     { "CAPSLOCK", f_capslock }, { "NUMLOCK", f_numlock }, { "INSMODE", f_insmode },
     { "INKEY", f_inkey },     { "LASTKEY", f_lastkey }, { "READKEY", f_readkey },
+    { "ROW", f_row }, { "COL", f_col }, { "RDLEVEL", f_rdlevel }, { "OBJNUM", f_objnum }, { "CUROBJ", f_curobj },
     { "SET", f_set },         { "SCOLS", f_scols },     { "SROWS", f_srows },
     { "CURDIR", f_curdir },   { "FILE", f_file },
 };

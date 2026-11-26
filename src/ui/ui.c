@@ -60,6 +60,8 @@ static void render_stack_rec(rx_ui *ui, rx_win *w)
 void ui_render(rx_ui *ui)
 {
     scr_fill(&ui->scr, 0, 1, ui->scr.w, ui->scr.h - 2, ' ', RXA_DESKTOP);
+    ui_says_render(ui); /* M7: @ SAY labels on the desktop */
+    ui_gets_render(ui); /* M7: GET values stay visible after READ */
     render_stack_rec(ui, ui->wins);
     menubar_render(ui); /* menubar + open pulldown float above windows */
     statusbar_render(ui);
@@ -220,6 +222,12 @@ int rx_ui_run(rx_ctx *ctx, const term_backend *tb)
     ctx->msg_ud = &ui;
     ctx->browse_fn = ui_browse_open; /* M4: BROWSE / bare APPEND open the grid */
     ctx->browse_ud = &ui;
+    ctx->read_fn = ui_read; /* M7 §9.2: READ modal loop */
+    ctx->read_ud = &ui;
+    ctx->say_fn = ui_say; /* M7 §9.2: @ SAY paints on the desktop */
+    ctx->screen_fn = ui_screen_designer; /* M7 9.2: CREATE/MODIFY SCREEN designer */
+    ctx->say_ud = &ui;
+    ctx->screen_ud = &ui;
 
     cmdwin_out(ui.cmd, "Reynard 0.1.0 — the clever fox of terminals\n",
                strlen("Reynard 0.1.0 — the clever fox of terminals\n"));
@@ -300,6 +308,13 @@ done:
     ctx->msg_ud = NULL;
     ctx->browse_fn = NULL;
     ctx->browse_ud = NULL;
+    ctx->read_fn = NULL;
+    ctx->read_ud = NULL;
+    ctx->say_fn = NULL;
+    ctx->say_ud = NULL;
+    ctx->screen_fn = NULL;
+    ctx->screen_ud = NULL;
+    ui_says_free(&ui);
     while (ui.wins) {
         rx_win *w = ui.wins;
         win_remove(&ui, w);

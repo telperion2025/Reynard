@@ -1,0 +1,19 @@
+# M7 \u00a79.2: READ CYCLE wraps around; Ctrl+W commits and exits; memvar GETs
+text m.a = 1
+key enter
+text m.b = "x"
+key enter
+text @ 2,2 SAY "A:" GET m.a SIZE 1,5
+key enter
+text @ 3,2 SAY "B:" GET m.b SIZE 1,5
+key enter
+text READ CYCLE
+key enter
+text 99
+key tab
+text yy
+key tab
+key ctrl-w
+text ? m.a, m.b
+key enter
+eof

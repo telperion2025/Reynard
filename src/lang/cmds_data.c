@@ -433,7 +433,7 @@ static int eval_scope(rx_ctx *ctx, rx_stmt *s, int default_kind, rx_scope *sc)
 }
 
 /* shared scope iteration with SET DELETED, SET FILTER, FOR and WHILE */
-typedef int (*rx_rec_cb)(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud);
+
 
 /* internal sentinel: callback asks iterate() to stop scanning without error
    (SCAN body hit EXIT/RETURN) */
@@ -474,7 +474,7 @@ static int compile_clause(rx_ctx *ctx, rx_stmt *s, const char *key, rx_code *cod
    record pointer ends per FoxPro rules (RECORD n restores, WHILE stops on
    the first false record, ALL/REST/NEXT run to the scope end) */
 static int iterate(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, int default_kind, rx_rec_cb cb, void *ud,
-                   int *count)
+                   int *count, int keep_pos)
 {
     rx_scope sc;
     int rc = eval_scope(ctx, s, default_kind, &sc);
@@ -653,8 +653,10 @@ static int iterate(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, int default_kind, rx_re
         }
         cnt++;
     }
-    if (restore) {
-        rx_dbf_goto(dbf, saved); /* RECORD n restores; a past-end save is a no-op */
+    if (restore || (keep_pos && !stop)) {
+        /* RECORD n restores; REPLACE/DELETE/RECALL leave the pointer put
+           (FoxPro semantics); a past-end save is a no-op */
+        rx_dbf_goto(dbf, saved);
     } else if (!stop && ordered) {
         /* M6: leave the pointer one past the scope in tag order (EOF at end) */
         int fi, ti;
@@ -928,7 +930,7 @@ int rx_cmd_list(rx_ctx *ctx, rx_stmt *s, int display)
     }
 
     list_ud ud = { ctx, flds, nsel, widths, recw, off };
-    rc = iterate(ctx, s, dbf, display ? 3 : 1, cb_list, &ud, NULL);
+    rc = iterate(ctx, s, dbf, display ? 3 : 1, cb_list, &ud, NULL, 0);
     free(widths);
     free(flds);
     return rc;
@@ -1113,7 +1115,7 @@ int rx_cmd_delete(rx_ctx *ctx, rx_stmt *s, int recall)
         return rc;
     }
     int n = 0;
-    rc = iterate(ctx, s, dbf, default_scope_m2(s, 3), cb_delete, &recall, &n);
+    rc = iterate(ctx, s, dbf, default_scope_m2(s, 3), cb_delete, &recall, &n, 1);
     if (rc != R_OK) {
         return data_raise(ctx, s, rc, "DELETE");
     }
@@ -1292,7 +1294,7 @@ int rx_cmd_replace(rx_ctx *ctx, rx_stmt *s)
     }
     int exclusive = rx_dbf_is_exclusive(dbf);
     repl_ud ud = { ctx, s, dbf, exclusive, 0, 0 };
-    rc = iterate(ctx, s, dbf, default_scope_m2(s, 3), cb_replace, &ud, NULL);
+    rc = iterate(ctx, s, dbf, default_scope_m2(s, 3), cb_replace, &ud, NULL, 1);
     if (rc != R_OK) {
         return data_raise(ctx, s, rc, "REPLACE");
     }
@@ -1545,7 +1547,7 @@ int rx_cmd_scan(rx_ctx *ctx, rx_stmt *s)
         return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "SCAN without body");
     }
     scan_ud ud = { s->kids[0] };
-    rc = iterate(ctx, s, dbf, 1 /* ALL */, scan_cb, &ud, NULL);
+    rc = iterate(ctx, s, dbf, 1 /* ALL */, scan_cb, &ud, NULL, 0);
     if (ctx->loop_ctl == RX_CTL_EXIT) {
         ctx->loop_ctl = RX_CTL_NONE; /* EXIT leaves the SCAN, not the program */
     }
@@ -2162,7 +2164,7 @@ int rx_cmd_copy(rx_ctx *ctx, rx_stmt *s)
             return rx_raise(ctx, R_ERR_IO_OPEN, s->line, s->col, "Cannot create %s", target);
         }
         copy_ud ud = { ctx, s, dbf, fd, NULL, flds, nsel, is_sdf, delim, quote, 0 };
-        rc = iterate(ctx, s, dbf, 1 /* ALL */, cb_copy, &ud, NULL);
+        rc = iterate(ctx, s, dbf, 1 /* ALL */, cb_copy, &ud, NULL, 0);
         close(fd);
         free(flds);
         if (rc != R_OK) {
@@ -2195,7 +2197,7 @@ int rx_cmd_copy(rx_ctx *ctx, rx_stmt *s)
         return data_raise(ctx, s, rc, target);
     }
     copy_ud ud = { ctx, s, dbf, -1, nd, flds, nsel, 0, ',', 1, 0 };
-    rc = iterate(ctx, s, dbf, 1 /* ALL */, cb_copy, &ud, NULL);
+    rc = iterate(ctx, s, dbf, 1 /* ALL */, cb_copy, &ud, NULL, 0);
     rx_dbf_close(nd);
     free(flds);
     if (rc != R_OK) {
@@ -2407,4 +2409,16 @@ int rx_cmd_unlock(rx_ctx *ctx, rx_stmt *s)
     }
     rx_unlock(dbf, 0);
     return R_OK;
+}
+
+/* ---- M7 exports (cmds_aggr.c shares scope iteration) ---- */
+int rx_iterate(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, int default_kind, rx_rec_cb cb, void *ud,
+               int *count)
+{
+    return iterate(ctx, s, dbf, default_kind, cb, ud, count, 0);
+}
+
+int rx_default_scope(rx_stmt *s, int dflt)
+{
+    return default_scope_m2(s, dflt);
 }

@@ -1,0 +1,3 @@
+Error in line 3 col 1 of case.prg: READ requires the interactive UI
+READ
+^

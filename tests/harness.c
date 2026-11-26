@@ -31,6 +31,7 @@
 #include "term/mouse.h"
 #include "term/term_if.h"
 #include "util/util.h"
+#include "util/scrfmt.h"
 
 static int failures = 0;
 
@@ -376,6 +377,14 @@ static int conformance(const char *dir, const char *bin, const char *fixtures, c
         char caseprg[1200];
         snprintf(caseprg, sizeof(caseprg), "%s/case.prg", wd);
         copy_file(prg, caseprg);
+        /* a per-case .scr sibling (e.g. for GENERATE SCREEN) ships as case.scr */
+        char casescr[1200];
+        snprintf(casescr, sizeof(casescr), "%s.scr", base);
+        if (access(casescr, F_OK) == 0) {
+            char dstscr[1200];
+            snprintf(dstscr, sizeof(dstscr), "%s/case.scr", wd);
+            copy_file(casescr, dstscr);
+        }
         int has_stdin = access(stdinf, F_OK) == 0;
         if (has_stdin) {
             char stdind[1200];
@@ -2022,6 +2031,127 @@ static int cdx_mode(const char *workroot)
 #undef CDXCHK
 }
 
+/* ---------------- scrcheck (M7 gate: .SCR round-trip + .RSO + codegen) ---------------- */
+
+static int filter_scr(const struct dirent *d)
+{
+    size_t n = strlen(d->d_name);
+    return n > 4 && strcmp(d->d_name + n - 4, ".scr") == 0;
+}
+
+static int scrcheck(const char *dir, const char *workroot)
+{
+    char absroot[1000];
+    abs_path(workroot, absroot, sizeof(absroot));
+    mkdir(absroot, 0755);
+    struct dirent **names = NULL;
+    int n = scandir(dir, &names, filter_scr, NULL);
+    if (n < 0) {
+        perror("scandir");
+        return 1;
+    }
+    for (int i = 0; i < n; i++) {
+        for (int j = i + 1; j < n; j++) {
+            if (strcmp(names[i]->d_name, names[j]->d_name) > 0) {
+                struct dirent *t = names[i];
+                names[i] = names[j];
+                names[j] = t;
+            }
+        }
+    }
+    int ran = 0;
+    for (int i = 0; i < n; i++) {
+        char base[1100], scrp[1200], goldp[1200];
+        snprintf(base, sizeof(base), "%s/%s", dir, names[i]->d_name);
+        base[strlen(base) - 4] = '\0';
+        snprintf(scrp, sizeof(scrp), "%s.scr", base);
+        snprintf(goldp, sizeof(goldp), "%s.prg.golden", base);
+        char wd[1100];
+        snprintf(wd, sizeof(wd), "%s/scr-XXXXXX", absroot);
+        if (rx_mkdtemp(wd) != 0) {
+            perror("mkdtemp");
+            failures++;
+            continue;
+        }
+        ran++;
+        char rt[1200], rso[1200], rt2[1200], prg[1200];
+        snprintf(rt, sizeof(rt), "%s/rt.scr", wd);
+        snprintf(rso, sizeof(rso), "%s/x.rso", wd);
+        snprintf(rt2, sizeof(rt2), "%s/rt2.scr", wd);
+        snprintf(prg, sizeof(prg), "%s/x.prg", wd);
+        char diff[300] = "";
+        int bad = 0;
+        scr_file sf;
+        int rc = scrf_load(scrp, &sf);
+        if (rc != R_OK) {
+            snprintf(diff, sizeof(diff), "load failed rc=%d", rc);
+            bad = 1;
+        } else {
+            /* 1. .SCR text round-trip must be byte-identical */
+            if (scrf_save(rt, &sf) != R_OK || cmp_files(scrp, rt, diff, sizeof(diff)) != 0) {
+                if (!diff[0]) {
+                    snprintf(diff, sizeof(diff), "save failed");
+                }
+                bad = 1;
+            }
+            /* 2. .RSO compile + load must serialize identically */
+            if (!bad && (scrf_compile(rso, &sf) != R_OK)) {
+                snprintf(diff, sizeof(diff), "rso compile failed");
+                bad = 1;
+            }
+            if (!bad) {
+                scr_file sf2;
+                if (scrf_load_rso(rso, &sf2) != R_OK) {
+                    snprintf(diff, sizeof(diff), "rso load failed");
+                    bad = 1;
+                } else if (scrf_save(rt2, &sf2) != R_OK || cmp_files(rt, rt2, diff, sizeof(diff)) != 0) {
+                    if (!diff[0]) {
+                        snprintf(diff, sizeof(diff), "rso round-trip differs");
+                    }
+                    bad = 1;
+                    scrf_free(&sf2);
+                } else {
+                    scrf_free(&sf2);
+                }
+            }
+            /* 3. codegen snapshot */
+            if (!bad) {
+                strbuf sb;
+                sb_init(&sb);
+                if (scrf_generate(&sf, &sb) != R_OK) {
+                    snprintf(diff, sizeof(diff), "generate failed");
+                    bad = 1;
+                } else {
+                    FILE *f = fopen(prg, "w");
+                    if (!f || fwrite(sb.buf ? sb.buf : "", 1, sb.len, f) != sb.len) {
+                        snprintf(diff, sizeof(diff), "prg write failed");
+                        bad = 1;
+                    }
+                    if (f) {
+                        fclose(f);
+                    }
+                    sb_free(&sb);
+                }
+                if (!bad && access(goldp, F_OK) == 0 && cmp_files(prg, goldp, diff, sizeof(diff)) != 0) {
+                    bad = 1;
+                }
+            }
+            scrf_free(&sf);
+        }
+        if (bad) {
+            printf("FAIL %s: %s\n", names[i]->d_name, diff);
+            failures++;
+        } else {
+            printf("PASS %s\n", names[i]->d_name);
+        }
+        rm_rf(wd);
+        free(names[i]);
+    }
+    free(names);
+    printf("scrcheck: %d cases, %d failures\n", ran, failures);
+    return failures ? 1 : 0;
+}
+
 int main(int argc, char **argv)
 {
     rx_log_init();
@@ -2058,11 +2188,14 @@ int main(int argc, char **argv)
     if (argc >= 3 && strcmp(argv[1], "cdx") == 0) {
         return cdx_mode(argv[2]);
     }
+    if (argc >= 4 && strcmp(argv[1], "scrcheck") == 0) {
+        return scrcheck(argv[2], argv[3]);
+    }
     fprintf(stderr, "usage: %s selftest | conformance <dir> <reynard> <fixtures> <workroot>"
                     " | rxp <dir> <reynard> <fixtures> <workroot>"
                     " | roundtrip <fixtures> <workroot> | lockrace <workroot>"
                     " | golden <dir> <reynard> <fixtures> <workroot> [update]"
-                    " | browseperf <workroot> <reynard> | cdx <workroot>\n",
+                    " | browseperf <workroot> <reynard> | cdx <workroot> | scrcheck <dir> <workroot>\n",
             argv[0]);
     return 2;
 }

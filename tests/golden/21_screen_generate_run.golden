@@ -1,0 +1,24 @@
+ System  File  Edit  Database  Record  Program  Window  Help
+
+
+  Name: Zed
+        Age: 42
+
+
+
+
+
+
+
+
+
+
+  ┌─ Command ───────────────────────────────────────────────────────────────×┐
+  │GENERATE SCREEN demo                                                      │
+  │Screen demo generated to demo.prg.                                        │
+  │DO demo.prg                                                               │
+  │? name, age                                                               │
+  │Zed                  42                                                   │
+  │                                                                          │
+  └──────────────────────────────────────────────────────────────────────────┘
+Screen demo saved (demo.scr, demo.rso)                         NUM 1 PEOPLE 1/5

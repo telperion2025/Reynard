@@ -274,3 +274,43 @@ Reynard is pre-1.0, versions are milestone tags M0..M10 then v1.0.0.
   71 -> 81 cases (72–81 cover INDEX ON CDX/IDX, SEEK EXACT, UNIQUE, FOR
   tags, maintenance, PACK/DELETE, order numbers, error 302, index-keyed
   relations); all green under -Werror and ASan/UBSan, plus Makefile.simple.
+
+### M7 \u2014 Forms (\u00a79.2) + aggregates/restructuring (\u00a77.1)
+- @ r,c SAY e [PICTURE/FUNCTION] paints on the desktop interactively; in batch
+  each @ SAY prints one stdout line (DEVIATIONS #47). @ r,c [SAY e] GET var
+  [SIZE h,w] [PICTURE] [FUNCTION] [WHEN] [VALID [:E]] [RANGE lo[,hi]]
+  [DEFAULT] [COLOR SCHEME n] registers a pending GET; SAY-side and GET-side
+  PICTURE/FUNCTION are distinguished by position relative to GET.
+- READ [CYCLE] runs the modal editor loop (src/ui/read.c): full keyboard
+  nav (Tab/Shift-Tab/Enter/arrows), mouse click on field hitboxes, whole-field
+  highlight on entry (first printable key replaces), Esc aborts (READKEY 27),
+  Ctrl+W commits and exits; CLEAR GETS / CLEAR READ [ALL] supported. READ with
+  no pending GETs is a no-op; READ with GETs and no UI raises 601.
+- Commit semantics: VALID/WHEN evaluate against the *edited* value (staged
+  into the field/memvar, restored on rejection); RANGE checked numerically;
+  on exit all GETs store back to field (with index maintenance) or memvar.
+- PICTURE/TRANSFORM engine (src/lang/picture.c): codes A X 9 # $ * . , L Y
+  N ! R I B, @D/@E dates; numeric templates space-fill '9' slots, keep comma
+  slots, float $, consume a sign slot for negatives, fill *** on overflow,
+  @B left-justifies. Input validation via rx_picture_input_ok.
+- Screen builder (spec \u00a79.2): CREATE/MODIFY SCREEN name opens the designer
+  (src/ui/screenb.c: arrows move, S say, G get, B box, X delete, mouse click,
+  Ctrl+W saves, Esc cancels); GENERATE SCREEN name [TO f.prg] emits @ SAY/GET
+  + READ CYCLE .PRG (headless, conformance-tested). Formats in
+  docs/formats.md \u00a76: canonical text .SCR (byte-identical load/save
+  round-trip) and compiled .RSO (magic RRSO + sha256-of-.SCR + fixed-width LE
+  item records, byte-reproducible). DO foo falls back to running foo.prg.
+- Aggregates/restructuring (\u00a77.1): COUNT/SUM/AVERAGE/CALCULATE
+  (CNT/SUM/AVG/MIN/MAX TO var|ARRAY), SORT TO ... ON f [/A|/D|/C] multi-key,
+  TOTAL TO ... ON expr (group sums into a full-structure target),
+  SCATTER [FIELDS] [MEMO] TO ARRAY|MEMVAR [BLANK], GATHER FROM ARRAY|MEMVAR.
+- Data fix: reading a dirty record buffer now sees pending rx_dbf_put writes
+  (was: unconditional disk reload); REPLACE/DELETE/RECALL leave the record
+  pointer put (FoxPro semantics; LIST/DISPLAY/SCAN still end at scope end).
+- Tests: conformance 82\u201390 (aggregates, SORT/TOTAL, SCATTER/GATHER,
+  PICTURE numeric/char, batch @ SAY, READ-no-UI 601, GENERATE SCREEN);
+  golden scenarios 17\u201321 (READ field/memvar/VALID/CYCLE, designer,
+  build\u2192generate\u2192execute gate); new `scrcheck` harness mode (M7
+  builder round-trip gate: .SCR byte-identical re-save, .RSO compile/load,
+  codegen snapshot). 90 conformance cases, 21 golden scenarios, 9 ctest
+  targets \u2014 all green under -Werror and ASan/UBSan, plus Makefile.simple.

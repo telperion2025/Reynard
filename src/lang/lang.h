@@ -40,7 +40,7 @@ enum {
     OP_PLUS, OP_MINUS, OP_MUL, OP_DIV, OP_MOD, OP_POW,
     OP_EQ, OP_EEQ, OP_NE, OP_LT, OP_LE, OP_GT, OP_GE, OP_IN, /* $ */
     OP_LP, OP_RP, OP_COMMA, OP_DOT, OP_AMP, OP_ARROW,           /* ( ) , . & -> */
-    OP_LB, OP_RB, OP_COLON, OP_SEMI, OP_Q,                      /* ? */
+    OP_LB, OP_RB, OP_COLON, OP_SEMI, OP_Q, OP_AT,               /* ? @ */
     OP_AND_LOGICAL, OP_OR_LOGICAL, OP_NOT_LOGICAL               /* .AND. AND etc. */
 };
 
@@ -143,6 +143,22 @@ typedef enum {
     ST_INDEX,    /**< INDEX ON e TO file | TAG t [OF cdx] [FOR e] [UNIQUE] [DESC] [ADDITIVE] */
     ST_SEEK,     /**< SEEK e */
     ST_REINDEX,  /**< REINDEX */
+    /* M7 §7.1 aggregates / restructuring */
+    ST_COUNT,    /**< COUNT [scope] [FOR/WHILE] [TO var] */
+    ST_SUM,      /**< SUM [scope] [exprs] [FOR/WHILE] TO var|ARRAY a */
+    ST_AVERAGE,  /**< AVERAGE ... TO var|ARRAY a */
+    ST_CALCULATE,/**< CALCULATE [scope] CNT()|SUM(e)|AVG(e)|MIN(e)|MAX(e),... TO var|ARRAY */
+    ST_SORT,     /**< SORT TO f ON fld [/A|/D|/C],... [scope] [FOR/WHILE] [FIELDS..] */
+    ST_TOTAL,    /**< TOTAL TO f ON e [FIELDS..] [scope] [FOR/WHILE] */
+    ST_SCATTER,  /**< SCATTER [FIELDS..] [MEMO] TO ARRAY a | MEMVAR [BLANK] */
+    ST_GATHER,   /**< GATHER FROM ARRAY a | MEMVAR [FIELDS..] [MEMO] */
+    /* M7 §9.2 forms: @ SAY/GET, READ */
+    ST_SAYGET,   /**< @ r,c [SAY e [PICTURE..]] [GET var ...] | @ r,c CLEAR | @ r,c BOX ... */
+    ST_READ,     /**< READ [CYCLE] | CLEAR GETS | CLEAR READ [ALL] */
+    /* M7 \u00a79.2 screen builder: CREATE/MODIFY/GENERATE SCREEN (strs[0]=name, strs[1]=TO path) */
+    ST_CREATE_SCREEN,
+    ST_MODIFY_SCREEN,
+    ST_GENERATE_SCREEN,
     ST_ENDMARK   /**< stray ENDIF/ENDDO/... at top level: syntax error */
 } st_kind;
 
@@ -281,6 +297,8 @@ typedef struct rx_frame {
 
 rx_memvar *rx_memvar_find(struct rx_ctx *ctx, const char *name);
 int rx_memvar_set(struct rx_ctx *ctx, const char *name, const rval *v);
+/** Deep copy of an rval (strings/memos duplicated). */
+void rx_rval_deep(rval *dst, const rval *src);
 /** M5 scoping: PUBLIC writes the global table; PRIVATE declares in the
  *  current frame (hiding outer scopes); RELEASE removes from any scope. */
 int rx_memvar_set_public(struct rx_ctx *ctx, const char *name, const rval *v);
@@ -311,6 +329,28 @@ typedef struct rx_set {
     char defdir[260];
     char path[1024];
 } rx_set;
+
+/* ============================ M7 §9.2 GET objects ============================ */
+
+/** One pending @ ... GET object (spec §9.2). Values are owned. */
+typedef struct rx_get {
+    char var[64];       /**< memvar or field name (uppercased) */
+    int is_field;       /**< var names a field of the current work area */
+    rval val;           /**< current value (owned) */
+    int row, col;       /**< GET field position on the desktop */
+    int size_h, size_w; /**< SIZE h,w (display width = size_w) */
+    char *say;          /**< SAY label text (owned, may be NULL) */
+    int say_row, say_col;
+    char *picture;      /**< PICTURE template (owned) */
+    char *function;     /**< FUNCTION codes (owned) */
+    rx_code when, valid;/**< compiled WHEN/VALID */
+    int has_when, has_valid;
+    rval range_lo, range_hi; /**< RANGE bounds (owned) */
+    int has_range;
+    rval deflt;         /**< DEFAULT value (owned) */
+    int has_default;
+    int enabled;        /**< WHEN() currently true */
+} rx_get;
 
 struct rx_ctx {
     FILE *out;          /**< batch stdout (or -o file); NULL in interactive */
@@ -357,6 +397,20 @@ struct rx_ctx {
     int returning;       /**< RETURN seen: unwind current body */
     rval retval;         /**< RETURN expr value (owned) */
     FILE *in;            /**< input stream for INPUT/ACCEPT/WAIT (default stdin) */
+    /* M7 §9.2: pending GETs + UI hooks (NULL in batch -> NOUI 601) */
+    rx_get *gets;
+    size_t ngets, capgets;
+    int read_active;     /**< inside a READ loop (RDLEVEL) */
+    int read_cycle;      /**< READ CYCLE wraps at the ends */
+    int read_clear;      /**< CLEAR READ requested: leave the loop */
+    int read_abort;      /**< Esc pressed: terminate READ (READKEY 27) */
+    int cur_obj;         /**< OBJNUM() of the current GET (1-based) */
+    int (*read_fn)(void *ud);          /**< run the modal READ loop (ui) */
+    void *read_ud;
+    int (*say_fn)(void *ud, int row, int col, const char *text); /**< paint @ SAY (ui) */
+    void *say_ud;
+    int (*screen_fn)(void *ud, struct rx_stmt *s); /**< CREATE/MODIFY SCREEN builder */
+    void *screen_ud;
 };
 
 /** One SET RELATION (spec §8.1, M4): moving the driver work area
@@ -482,6 +536,36 @@ int rx_index_order_active(const rx_dbf *dbf);
 int rx_index_rebuild_tag(rx_ctx *ctx, rx_dbf *dbf, int fi, int ti);
 /** Rebuild every tag of every attached file. */
 int rx_index_rebuild_all(rx_ctx *ctx, rx_dbf *dbf);
+/** Record callback for rx_iterate (scope iteration honoring DELETED/FILTER/FOR/WHILE). */
+typedef int (*rx_rec_cb)(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud);
+/** Iterate the statement's scope over dbf, calling cb per record. */
+int rx_iterate(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, int default_kind, rx_rec_cb cb, void *ud,
+               int *count);
+/** The scope implied by a statement's clauses with a default kind (0/1/2/3/4). */
+int rx_default_scope(rx_stmt *s, int dflt);
+
+/* M7 §7.1 aggregate / restructuring commands */
+int rx_cmd_count(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_sum(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_average(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_calculate(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_sort(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_total(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_scatter(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_gather(rx_ctx *ctx, rx_stmt *s);
+
+/* M7 §9.2 @ SAY/GET + READ */
+int rx_cmd_sayget(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_read(rx_ctx *ctx, rx_stmt *s);
+int rx_cmd_screen(rx_ctx *ctx, rx_stmt *s); /**< CREATE/MODIFY/GENERATE SCREEN (M7 \u00a79.2) */
+void rx_form_free_ctx(rx_ctx *ctx);
+int rx_form_store(rx_ctx *ctx, rx_get *g);
+
+struct strbuf; /* util/util.h */
+/* picture.c (M7 §9.2 PICTURE/FUNCTION codes) */
+int rx_picture_render(rx_ctx *ctx, const rval *v, const char *pic, const char *func, struct strbuf *out);
+int rx_picture_input_ok(const char *pic, const char *func, const char *input);
+
 /** Re-insert one record into every tag (REPLACE / APPEND maintenance);
  *  the work area of dbf must be selected and the pointer at recno. */
 int rx_index_maintain_rec(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno);

@@ -636,9 +636,14 @@ int rx_dbf_get(rx_dbf *dbf, size_t fldidx, rval *out)
         }
         return R_OK;
     }
-    int rc = rx_dbf_load_rec(dbf);
-    if (rc != R_OK) {
-        return rc;
+    /* a dirty buffer holds not-yet-flushed writes (rx_dbf_put); do not
+       reload it from disk, or reads would not see pending writes */
+    int rc;
+    if (!dbf->dirty) {
+        rc = rx_dbf_load_rec(dbf);
+        if (rc != R_OK) {
+            return rc;
+        }
     }
     const uint8_t *raw = dbf->recbuf + dbf->foff[fldidx];
     if (f->type == RFT_M) {

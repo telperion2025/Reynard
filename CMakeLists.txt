@@ -26,6 +26,7 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/license_text.c"
 set(RX_CORE_SOURCES
     ${CMAKE_CURRENT_BINARY_DIR}/license_text.c
     src/util/strbuf.c
+    src/util/scrfmt.c
     src/util/str.c
     src/util/utf8.c
     src/util/cp_tables.c
@@ -47,6 +48,8 @@ set(RX_CORE_SOURCES
     src/ui/dialog.c
     src/ui/helpwin.c
     src/ui/browse.c
+    src/ui/read.c
+    src/ui/screenb.c
     src/ui/ui.c
     src/data/dbf.c
     src/data/dbf_create.c
@@ -71,6 +74,10 @@ set(RX_CORE_SOURCES
     src/lang/vm.c
     src/lang/cmds_data.c
     src/lang/cmds_index.c
+    src/lang/cmds_aggr.c
+    src/lang/cmds_form.c
+    src/lang/cmds_screen.c
+    src/lang/picture.c
     src/lang/cmds_env.c
     src/lang/memvar.c
     src/lang/errhand.c
@@ -219,6 +226,10 @@ add_test(NAME browse_perf
         ${CMAKE_CURRENT_BINARY_DIR}/test-work-perf
         $<TARGET_FILE:reynard>)
 
+add_test(NAME scr_roundtrip
+    COMMAND reynard-harness scrcheck
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/scr
+        ${CMAKE_CURRENT_BINARY_DIR}/test-work-scr)
 add_test(NAME cdx_engine
     COMMAND reynard-harness cdx
         ${CMAKE_CURRENT_BINARY_DIR}/test-work-cdx)

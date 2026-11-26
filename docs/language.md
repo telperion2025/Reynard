@@ -96,9 +96,16 @@ ASCAN/ASORT/AFIELDS/ADIR/ALEN, & macro (execution-time expansion, depth 16),
 ON ERROR DO + ERROR()/MESSAGE(), TEXT...ENDTEXT, INPUT, ACCEPT, WAIT
 (non-blocking in -t), .RXP compiled cache (byte-reproducible, sha256-keyed).
 
-⏳ remaining (later milestones): DEFINE WINDOW/MENU/POPUP/BAR,
+\u2705 M7 forms (spec {U}9.2): `@ r,c [SAY e [PICTURE p] [FUNCTION f]] [GET var
+[SIZE h,w] [PICTURE p] [FUNCTION f] [WHEN e] [VALID e[:E="m"]] [RANGE a[,b]]
+[DEFAULT e] [COLOR SCHEME n]]`, `READ [CYCLE]`, `CLEAR GETS`, `CLEAR READ`,
+`@ r,c CLEAR`, `@ r,c BOX [TO r2,c2]`, `TRANSFORM(e, pic[, func])`,
+`CREATE|MODIFY|GENERATE SCREEN name [TO f.prg]` (designer + .SCR/.RSO +
+.PRG codegen, docs/formats.md {U}6), `DO file.prg` file fallback.
+
+\u23f3 remaining (later milestones): DEFINE WINDOW/MENU/POPUP/BAR,
 ACTIVATE/DEACTIVATE/SHOW/HIDE, ON KEY LABEL dispatch, ON ESCAPE,
-PUSH/POP, READ EVENTS, CLEAR EVENTS, @ SAY/GET, READ, REPORT FORM,
+PUSH/POP, READ EVENTS, CLEAR EVENTS, REPORT FORM,
 LABEL FORM, SET PRINTER, SET ALTERNATE, EVALUATE(), GETEXPR, SUSPEND/
 RESUME interactive (batch: note only).
 

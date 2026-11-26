@@ -86,3 +86,12 @@ by CI (`.github/workflows/ci.yml` conformance-index job).
 | 79_order_numbers | §8.4 M6 SET ORDER TO n / TAG, SET INDEX TO ... ADDITIVE, TAG(n), multi-file order numbering |
 | 80_err_seek_noorder | App. D 302 SEEK without an active index order |
 | 81_rel_index | §8.1 M6 index-keyed SET RELATION (SEEK in target order), RELATION(), TARGET() |
+| 82_aggr_count_sum | §7.1 M7 COUNT [scope] [FOR] [TO var], SUM/AVERAGE expr-list TO var|ARRAY, CALCULATE CNT/SUM/AVG/MIN/MAX TO ARRAY |
+| 83_sort_total | §7.1 M7 SORT TO ... ON f /D (+ multi-key, FIELDS), TOTAL TO ... ON expr (group sums, full target structure) |
+| 84_scatter_gather | §7.1 M7 SCATTER TO ARRAY/MEMVAR [FIELDS] [BLANK], GATHER FROM ARRAY/MEMVAR (index maintenance via SEEK after write; memvar shadows field) |
+| 85_aggr_scope | §7.1 M7 scope+FUR on aggregates: COUNT FOR, SUM FOR, COUNT/AVERAGE NEXT n |
+| 86_picture_numeric | §9.2 M7 TRANSFORM/PICTURE numeric templates: 9/# fill+space-pad, comma slots, $, neg sign slot, *** overflow, @B left, decimals |
+| 87_picture_char | §9.2 M7 char/logical/date templates: !!!, XXX, @!, @R literals, L, @D/@E dates |
+| 88_say_batch | §9.2 M7 @ SAY in batch prints one line per SAY (DEVIATIONS #47), SAY-side PICTURE |
+| 89_read_noui |
+| 90_generate_screen | §9.2 M7 GENERATE SCREEN case TO out.prg (codegen from .SCR sibling), TYPE out.prg snapshot, MODIFY SCREEN recompiles .RSO (builder round-trip) | §9.2 M7 READ with pending GETs and no UI → error 601 (App. D) |

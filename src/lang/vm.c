@@ -71,6 +71,7 @@ void rx_ctx_free(rx_ctx *ctx)
     }
     free(ctx->idxexprs);
     free(ctx->filter_text);
+    rx_form_free_ctx(ctx); /* M7: pending GETs */
     for (size_t i = 0; i < ctx->nprocs; i++) {
         for (size_t j = 0; j < ctx->procs[i].nbody; j++) {
             rx_stmt_free(ctx->procs[i].body[j]);
@@ -1263,6 +1264,21 @@ int rx_call_proc(rx_ctx *ctx, const char *name, size_t argc, const rval *argv, r
 
 int rx_cmd_do(rx_ctx *ctx, rx_stmt *s)
 {
+    /* FoxPro: DO foo runs procedure foo, or loads and runs foo.prg when no
+       procedure of that name is defined (file fallback, M7 screen gate) */
+    if (!find_proc(ctx, s->target)) {
+        char path[600];
+        if (strchr(s->target, '.') || strchr(s->target, '/')) {
+            snprintf(path, sizeof(path), "%s", s->target);
+        } else {
+            snprintf(path, sizeof(path), "%s.prg", s->target);
+        }
+        int rc = rx_run_file(ctx, path);
+        if (rc != R_OK) {
+            return rx_raise(ctx, rc, s->line, s->col, "Cannot run %s", path);
+        }
+        return R_OK;
+    }
     rval *args = NULL;
     size_t na = s->nexpr;
     if (na) {
@@ -1976,6 +1992,43 @@ static int exec_one(rx_ctx *ctx, rx_stmt *s)
         break;
     case ST_REINDEX:
         rc = rx_cmd_reindex(ctx, s);
+        break;
+    /* M7 §7.1 aggregates / restructuring */
+    case ST_COUNT:
+        rc = rx_cmd_count(ctx, s);
+        break;
+    case ST_SUM:
+        rc = rx_cmd_sum(ctx, s);
+        break;
+    case ST_AVERAGE:
+        rc = rx_cmd_average(ctx, s);
+        break;
+    case ST_CALCULATE:
+        rc = rx_cmd_calculate(ctx, s);
+        break;
+    case ST_SORT:
+        rc = rx_cmd_sort(ctx, s);
+        break;
+    case ST_TOTAL:
+        rc = rx_cmd_total(ctx, s);
+        break;
+    case ST_SCATTER:
+        rc = rx_cmd_scatter(ctx, s);
+        break;
+    case ST_GATHER:
+        rc = rx_cmd_gather(ctx, s);
+        break;
+    /* M7 §9.2 forms */
+    case ST_SAYGET:
+        rc = rx_cmd_sayget(ctx, s);
+        break;
+    case ST_READ:
+        rc = rx_cmd_read(ctx, s);
+        break;
+    case ST_CREATE_SCREEN:
+    case ST_MODIFY_SCREEN:
+    case ST_GENERATE_SCREEN:
+        rc = rx_cmd_screen(ctx, s);
         break;
     case ST_COPY:
         rc = rx_cmd_copy(ctx, s);

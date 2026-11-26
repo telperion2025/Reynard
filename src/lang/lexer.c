@@ -323,6 +323,7 @@ int rx_lex(const char *src, const char *fname, rx_tok **out, size_t *nout, r_err
             case ':': op = OP_COLON; break;
             case ';': op = OP_SEMI; break;
             case '?': op = OP_Q; break;
+            case '@': op = OP_AT; break;
             default:
                 return lx_fail(&lx, "Unexpected character");
             }

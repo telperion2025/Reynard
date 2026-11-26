@@ -976,7 +976,16 @@ static int f_transform(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_er
         snprintf(err->msg, sizeof(err->msg), "TRANSFORM() picture must be character");
         return err->code;
     }
-    /* M1 supports the common codes; full PICTURE engine lands at M7. */
+    /* M7: full PICTURE/FUNCTION engine (spec §9.2 codes) */
+    if (pic[0]) {
+        strbuf sb;
+        sb_init(&sb);
+        rx_picture_render(c, &argv[0], pic, NULL, &sb);
+        f_str(out, sb.buf ? sb.buf : rx_strdup(""), sb.len);
+        sb.buf = NULL;
+        sb_free(&sb);
+        return R_OK;
+    }
     if (argv[0].t == RX_T_C && np >= 2 && pic[0] == '@' && pic[1] == '!') {
         const char *s;
         size_t n;

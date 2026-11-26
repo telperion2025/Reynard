@@ -71,7 +71,12 @@ static void free_memvar(rx_memvar *mv)
 }
 
 /* deep copy of a value (strings/memos duplicated) */
-static void rval_deep(rval *dst, const rval *src)
+static void rval_deep_impl(rval *dst, const rval *src);
+void rx_rval_deep(rval *dst, const rval *src)
+{
+    rval_deep_impl(dst, src);
+}
+static void rval_deep_impl(rval *dst, const rval *src)
 {
     *dst = *src;
     if (src->t == RX_T_C) {
@@ -137,7 +142,7 @@ int rx_memvar_set(rx_ctx *ctx, const char *name, const rval *v)
         mv = memvar_new(ctx, name);
     }
     free_memvar(mv);
-    rval_deep(&mv->val, v);
+    rx_rval_deep(&mv->val, v);
     return R_OK;
 }
 
@@ -151,7 +156,7 @@ int rx_memvar_set_public(rx_ctx *ctx, const char *name, const rval *v)
         mv = memvar_slot(&ctx->vars, &ctx->nvars, &ctx->capvars, name);
     }
     free_memvar(mv);
-    rval_deep(&mv->val, v);
+    rx_rval_deep(&mv->val, v);
     return R_OK;
 }
 
@@ -280,7 +285,7 @@ int rx_array_get(rx_ctx *ctx, const char *name, size_t i, size_t j, rval *out)
     if (i < 1 || i > mv->adim[0] || (mv->adim[1] && (j < 1 || j > mv->adim[1]))) {
         return R_ERR_RANGE;
     }
-    rval_deep(out, &mv->aelem[array_off(mv, i, j)]);
+    rx_rval_deep(out, &mv->aelem[array_off(mv, i, j)]);
     return R_OK;
 }
 
@@ -295,6 +300,6 @@ int rx_array_set(rx_ctx *ctx, const char *name, size_t i, size_t j, const rval *
     }
     rval *slot = &mv->aelem[array_off(mv, i, j)];
     rx_rval_free(slot);
-    rval_deep(slot, v);
+    rx_rval_deep(slot, v);
     return R_OK;
 }
