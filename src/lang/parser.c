@@ -715,6 +715,8 @@ static const kw keywords[] = {
     { "READ", ST_READ },
     /* M7 9.2 screen builder */
     { "MODIFY", ST_MODIFY_SCREEN }, { "GENERATE", ST_GENERATE_SCREEN },
+    /* M8 9.3/9.4 reports and labels */
+    { "REPORT", ST_REPORT_FORM }, { "LABEL", ST_LABEL_FORM },
 };
 
 const char *const *rx_keyword_list(size_t *n)
@@ -2632,8 +2634,12 @@ static int parse_stmt(parser *p)
                 break;
             case ST_MODIFY_SCREEN:
             case ST_GENERATE_SCREEN: {
-                if (!pk_word_is(p, "SCREEN")) {
-                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected SCREEN");
+                if (s.kind == ST_MODIFY_SCREEN && pk_word_is(p, "REPORT")) {
+                    s.kind = ST_MODIFY_REPORT;
+                } else if (s.kind == ST_MODIFY_SCREEN && pk_word_is(p, "LABEL")) {
+                    s.kind = ST_MODIFY_LABEL;
+                } else if (!pk_word_is(p, "SCREEN")) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected SCREEN/REPORT/LABEL");
                 }
                 pk_adv(p);
                 char *nm = parse_path_until(p, (const char *[]) { "TO", NULL });
@@ -2647,6 +2653,100 @@ static int parse_stmt(parser *p)
                 }
                 if (!end_of_line(p)) {
                     return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in screen command");
+                }
+                break;
+            }
+            case ST_REPORT_FORM:
+            case ST_LABEL_FORM: {
+                if (!pk_word_is(p, "FORM")) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected FORM");
+                }
+                pk_adv(p);
+                static const char *rstop[] = { "ENVIRONMENT", "PLAIN", "SUMMARY", "NOEJECT",
+                                                "NOCONSOLE",   "PDSETUP", "SAMPLE",  "TO",
+                                                "HEADING",     "RANGE",  "ALL",     "REST",
+                                                "NEXT",        "RECORD", "FOR",     "WHILE",
+                                                NULL };
+                char *nm = parse_path_until(p, rstop);
+                st_add_str(&s, nm);
+                free(nm);
+                /* clauses in any order: flags, TO, HEADING, RANGE, scope, FOR/WHILE */
+                for (;;) {
+                    if (end_of_line(p)) {
+                        break;
+                    }
+                    if (pk_word_is(p, "ENVIRONMENT") || pk_word_is(p, "PLAIN") ||
+                        pk_word_is(p, "SUMMARY") || pk_word_is(p, "NOEJECT") ||
+                        pk_word_is(p, "NOCONSOLE") || pk_word_is(p, "PDSETUP") ||
+                        (s.kind == ST_LABEL_FORM && pk_word_is(p, "SAMPLE"))) {
+                        st_add_clause(&s, pk_cur(p)->text, "", NULL);
+                        pk_adv(p);
+                        continue;
+                    }
+                    if (pk_word_is(p, "TO")) {
+                        pk_adv(p);
+                        if (pk_word_is(p, "PRINTER")) {
+                            st_add_clause(&s, "TOPRINTER", "", NULL);
+                            pk_adv(p);
+                        } else if (pk_word_is(p, "PREVIEW")) {
+                            st_add_clause(&s, "TOPREVIEW", "", NULL);
+                            pk_adv(p);
+                        } else if (pk_word_is(p, "FILE")) {
+                            pk_adv(p);
+                            char *fp = parse_path_until(p, rstop);
+                            st_add_clause(&s, "TOFILE", fp, NULL);
+                            free(fp);
+                        } else {
+                            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                           "Expected PRINTER|FILE|PREVIEW after TO");
+                        }
+                        continue;
+                    }
+                    if (pk_word_is(p, "HEADING")) {
+                        pk_adv(p);
+                        rx_expr *e = NULL;
+                        rc = parse_expr(p, &e);
+                        if (rc != R_OK) {
+                            return rc;
+                        }
+                        st_add_clause(&s, "HEADING", "", e);
+                        continue;
+                    }
+                    if (pk_word_is(p, "RANGE")) {
+                        pk_adv(p);
+                        rx_expr *a = NULL, *b = NULL;
+                        rc = parse_expr(p, &a);
+                        if (rc != R_OK) {
+                            return rc;
+                        }
+                        st_add_clause(&s, "RANGE", "", a);
+                        if (pk_op(p, OP_COMMA)) {
+                            pk_adv(p);
+                            rc = parse_expr(p, &b);
+                            if (rc != R_OK) {
+                                return rc;
+                            }
+                            st_add_clause(&s, "RANGE2", "", b);
+                        }
+                        continue;
+                    }
+                    if (pk_word_is(p, "ALL") || pk_word_is(p, "REST") || pk_word_is(p, "NEXT") ||
+                        pk_word_is(p, "RECORD")) {
+                        parse_scope(p, &s);
+                        continue;
+                    }
+                    if (pk_word_is(p, "FOR") || pk_word_is(p, "WHILE")) {
+                        const char *key = pk_cur(p)->text;
+                        pk_adv(p);
+                        rx_expr *e = NULL;
+                        rc = parse_expr(p, &e);
+                        if (rc != R_OK) {
+                            return rc;
+                        }
+                        st_add_clause(&s, key, "", e);
+                        continue;
+                    }
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in REPORT/LABEL FORM");
                 }
                 break;
             }
@@ -2712,8 +2812,14 @@ static int parse_stmt(parser *p)
                 break;
             }
             case ST_CREATE: {
-                if (pk_word_is(p, "SCREEN")) {
-                    s.kind = ST_CREATE_SCREEN;
+                if (pk_word_is(p, "SCREEN") || pk_word_is(p, "REPORT") || pk_word_is(p, "LABEL")) {
+                    if (pk_word_is(p, "SCREEN")) {
+                        s.kind = ST_CREATE_SCREEN;
+                    } else if (pk_word_is(p, "REPORT")) {
+                        s.kind = ST_CREATE_REPORT;
+                    } else {
+                        s.kind = ST_CREATE_LABEL;
+                    }
                     pk_adv(p);
                     char *nm = parse_path_until(p, NULL);
                     st_add_str(&s, nm);

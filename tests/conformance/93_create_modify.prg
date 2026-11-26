@@ -1,0 +1,5 @@
+CREATE REPORT newr
+TYPE newr.frm
+MODIFY REPORT newr
+CREATE LABEL newl
+TYPE newl.rlb

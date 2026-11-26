@@ -178,3 +178,37 @@ func[16] @400, when[128] @416, valid[128] @544, rang[96] @672, deflt[96]
 SIZE h,w [PICTURE..] [WHEN..] [VALID..] [RANGE..] [DEFAULT..]`,
 `@ r1,c1 BOX TO r2,c2`, controls as comments (DEVIATIONS #46), and a final
 `READ CYCLE`.
+
+
+## 7. Report (.FRM) and label (.RLB) text forms (spec \u00a79.3/9.4, M8)
+
+Canonical line-based text (writer emits exactly what the parser accepts;
+load\u2192save round-trips byte-identically):
+
+```
+REYNARD REPORT 1
+NAME <NAME>
+PAGE <w>,<h>            # default 80,66
+MARGIN <l>,<r>,<t>,<b>
+BAND TITLE <height>
+BAND PAGEHEADER <height>
+BAND GROUPHEADER <height> "<group expr>"
+BAND DETAIL <height>
+BAND GROUPFOOTER <height> "<group expr>"
+BAND PAGEFOOTER <height>
+BAND SUMMARY <height>
+OBJ TEXT <row>,<col> "<literal>"
+OBJ FIELD <row>,<col> <expr>          # raw expression text
+OBJ LINE <r>,<c> TO <r2>,<c2>
+OBJ BOX <r1>,<c1> TO <r2>,<c2>
+VAR <name> SUM|COUNT|AVG|MIN|MAX|NONE <expr> RESET REPORT|PAGE|GROUP [INITIAL <e>]
+END
+```
+
+Labels (.RLB): `REYNARD LABEL 1`, NAME, `STOCK <name>`,
+`SIZE <h>,<w> SPACING <r>,<c> MARGINS <l>,<t>`, then one `BAND DETAIL <h>`
+with OBJ lines, `END`. One label per page at runtime (DEVIATIONS #51).
+
+Emitters: TO FILE extension picks text (.txt) / PostScript (.ps) / PDF (.pdf,
+minimal writer, base-14 Helvetica, content-hash /ID) / HTML (.html, tables) /
+CSV (.csv, detail-band field rows). TO PRINTER spools text to reynard.prn.

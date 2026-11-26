@@ -27,6 +27,7 @@ set(RX_CORE_SOURCES
     ${CMAKE_CURRENT_BINARY_DIR}/license_text.c
     src/util/strbuf.c
     src/util/scrfmt.c
+    src/util/rptfmt.c
     src/util/str.c
     src/util/utf8.c
     src/util/cp_tables.c
@@ -50,6 +51,8 @@ set(RX_CORE_SOURCES
     src/ui/browse.c
     src/ui/read.c
     src/ui/screenb.c
+    src/ui/preview.c
+    src/ui/rptb.c
     src/ui/ui.c
     src/data/dbf.c
     src/data/dbf_create.c
@@ -77,6 +80,9 @@ set(RX_CORE_SOURCES
     src/lang/cmds_aggr.c
     src/lang/cmds_form.c
     src/lang/cmds_screen.c
+    src/lang/cmds_rpt.c
+    src/lang/rpt.c
+    src/lang/rpt_emit.c
     src/lang/picture.c
     src/lang/cmds_env.c
     src/lang/memvar.c
@@ -226,6 +232,12 @@ add_test(NAME browse_perf
         ${CMAKE_CURRENT_BINARY_DIR}/test-work-perf
         $<TARGET_FILE:reynard>)
 
+add_test(NAME rpt_emitters
+    COMMAND reynard-harness rptcheck
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/rpt
+        $<TARGET_FILE:reynard>
+        ${CMAKE_CURRENT_SOURCE_DIR}/testdata/gen
+        ${CMAKE_CURRENT_BINARY_DIR}/test-work-rpt)
 add_test(NAME scr_roundtrip
     COMMAND reynard-harness scrcheck
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/scr

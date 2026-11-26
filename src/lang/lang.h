@@ -159,6 +159,13 @@ typedef enum {
     ST_CREATE_SCREEN,
     ST_MODIFY_SCREEN,
     ST_GENERATE_SCREEN,
+    /* M8 9.3/9.4 report/label: REPORT FORM / LABEL FORM, CREATE/MODIFY REPORT/LABEL */
+    ST_REPORT_FORM,
+    ST_LABEL_FORM,
+    ST_CREATE_REPORT,
+    ST_MODIFY_REPORT,
+    ST_CREATE_LABEL,
+    ST_MODIFY_LABEL,
     ST_ENDMARK   /**< stray ENDIF/ENDDO/... at top level: syntax error */
 } st_kind;
 
@@ -411,6 +418,11 @@ struct rx_ctx {
     void *say_ud;
     int (*screen_fn)(void *ud, struct rx_stmt *s); /**< CREATE/MODIFY SCREEN builder */
     void *screen_ud;
+    /* M8 9.3/9.4: report/label designer + preview hooks (NULL in batch) */
+    int (*rptb_fn)(void *ud, struct rx_stmt *s);
+    void *rptb_ud;
+    int (*preview_fn)(void *ud, const char *title, const char *text); /**< report preview window */
+    void *preview_ud;
 };
 
 /** One SET RELATION (spec §8.1, M4): moving the driver work area
@@ -558,6 +570,8 @@ int rx_cmd_gather(rx_ctx *ctx, rx_stmt *s);
 int rx_cmd_sayget(rx_ctx *ctx, rx_stmt *s);
 int rx_cmd_read(rx_ctx *ctx, rx_stmt *s);
 int rx_cmd_screen(rx_ctx *ctx, rx_stmt *s); /**< CREATE/MODIFY/GENERATE SCREEN (M7 \u00a79.2) */
+int rx_cmd_report(rx_ctx *ctx, rx_stmt *s, int is_label); /**< REPORT/LABEL FORM (M8 9.3/9.4) */
+int rx_cmd_rptb(rx_ctx *ctx, rx_stmt *s); /**< CREATE/MODIFY REPORT/LABEL designer (M8) */
 void rx_form_free_ctx(rx_ctx *ctx);
 int rx_form_store(rx_ctx *ctx, rx_get *g);
 

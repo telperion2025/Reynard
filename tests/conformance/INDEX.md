@@ -94,4 +94,7 @@ by CI (`.github/workflows/ci.yml` conformance-index job).
 | 87_picture_char | §9.2 M7 char/logical/date templates: !!!, XXX, @!, @R literals, L, @D/@E dates |
 | 88_say_batch | §9.2 M7 @ SAY in batch prints one line per SAY (DEVIATIONS #47), SAY-side PICTURE |
 | 89_read_noui |
-| 90_generate_screen | §9.2 M7 GENERATE SCREEN case TO out.prg (codegen from .SCR sibling), TYPE out.prg snapshot, MODIFY SCREEN recompiles .RSO (builder round-trip) | §9.2 M7 READ with pending GETs and no UI → error 601 (App. D) |
+| 90_generate_screen |
+| 91_report_form | §9.3 M8 REPORT FORM TO FILE (text emitter: title/page header/groups/vars), PLAIN+HEADING+FOR+RANGE, SUMMARY |
+| 92_label_form | §9.4 M8 LABEL FORM TO FILE (one label per page), FOR clause |
+| 93_create_modify | §9.3 M8 CREATE/MODIFY REPORT+LABEL in batch (empty form write + canonical re-save round-trip), TYPE snapshot | §9.2 M7 GENERATE SCREEN case TO out.prg (codegen from .SCR sibling), TYPE out.prg snapshot, MODIFY SCREEN recompiles .RSO (builder round-trip) | §9.2 M7 READ with pending GETs and no UI → error 601 (App. D) |

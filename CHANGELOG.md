@@ -314,3 +314,29 @@ Reynard is pre-1.0, versions are milestone tags M0..M10 then v1.0.0.
   builder round-trip gate: .SCR byte-identical re-save, .RSO compile/load,
   codegen snapshot). 90 conformance cases, 21 golden scenarios, 9 ctest
   targets \u2014 all green under -Werror and ASan/UBSan, plus Makefile.simple.
+
+### M8 \u2014 Reports and labels (\u00a79.3/9.4, \u00a77.7)
+- Formats (docs/formats.md \u00a77): canonical text .FRM (bands TITLE/
+  PAGEHEADER/GROUPHEADER/DETAIL/GROUPFOOTER/PAGEFOOTER/SUMMARY with TEXT/
+  FIELD/LINE/BOX objects, PAGE/MARGIN, VAR aggregates) and .RLB (STOCK/SIZE/
+  SPACING/MARGINS + detail band). Load/save round-trips byte-identically.
+- Engine (src/lang/rpt.c): page breaks, group breaks on group-expr change
+  (header/footer), report variables SUM/COUNT/AVG/MIN/MAX reset per
+  REPORT/PAGE/GROUP with INITIAL, date + "Page N" header line, PLAIN,
+  HEADING, SUMMARY, RANGE n1,n2, scope/FOR/WHILE via the shared iterator;
+  labels render one label per page. Deterministic in -t (frozen DATE()).
+- Emitters (src/lang/rpt_emit.c): text (rasterized pages, \f separators),
+  PostScript (Helvetica, text/lines/rects), PDF (built-in writer, base-14
+  Helvetica, no embeds, content-hash /ID \u2014 hash-stable), HTML (tables),
+  CSV (detail rows, rtrimmed, quoted). TO FILE picks emitter by extension;
+  TO PRINTER spools text to reynard.prn; TO PREVIEW opens the preview
+  window (src/ui/preview.c: pages PgUp/PgDn, mouse wheel/click, zoom
+  80/100/133/200% with +/-, Esc/Ctrl+W exit).
+- Commands: REPORT FORM / LABEL FORM [clauses] (7.7), CREATE/MODIFY
+  REPORT/LABEL (interactive designer src/ui/rptb.c; batch CREATE writes an
+  empty form, MODIFY re-saves canonically).
+- Gates: new `rptcheck` harness mode \u2014 text emitter golden-compared
+  byte-exact, ps/pdf/html/csv hash-stable (sha256 goldens) in CI; conformance
+  91\u201393 (REPORT FORM clauses, LABEL FORM, CREATE/MODIFY round-trip);
+  golden 22 (preview window). 93 conformance cases, 22 goldens, 10 ctest
+  targets \u2014 all green under -Werror and ASan/UBSan, plus Makefile.simple.

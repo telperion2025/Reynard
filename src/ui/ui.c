@@ -226,6 +226,10 @@ int rx_ui_run(rx_ctx *ctx, const term_backend *tb)
     ctx->read_ud = &ui;
     ctx->say_fn = ui_say; /* M7 §9.2: @ SAY paints on the desktop */
     ctx->screen_fn = ui_screen_designer; /* M7 9.2: CREATE/MODIFY SCREEN designer */
+    ctx->rptb_fn = ui_rptb_designer; /* M8 9.3/9.4: CREATE/MODIFY REPORT/LABEL */
+    ctx->rptb_ud = &ui;
+    ctx->preview_fn = ui_preview; /* M8 9.3: REPORT FORM ... TO PREVIEW */
+    ctx->preview_ud = &ui;
     ctx->say_ud = &ui;
     ctx->screen_ud = &ui;
 
@@ -314,6 +318,10 @@ done:
     ctx->say_ud = NULL;
     ctx->screen_fn = NULL;
     ctx->screen_ud = NULL;
+    ctx->rptb_fn = NULL;
+    ctx->rptb_ud = NULL;
+    ctx->preview_fn = NULL;
+    ctx->preview_ud = NULL;
     ui_says_free(&ui);
     while (ui.wins) {
         rx_win *w = ui.wins;

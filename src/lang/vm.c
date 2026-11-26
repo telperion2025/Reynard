@@ -2030,6 +2030,18 @@ static int exec_one(rx_ctx *ctx, rx_stmt *s)
     case ST_GENERATE_SCREEN:
         rc = rx_cmd_screen(ctx, s);
         break;
+    case ST_REPORT_FORM:
+        rc = rx_cmd_report(ctx, s, 0);
+        break;
+    case ST_LABEL_FORM:
+        rc = rx_cmd_report(ctx, s, 1);
+        break;
+    case ST_CREATE_REPORT:
+    case ST_MODIFY_REPORT:
+    case ST_CREATE_LABEL:
+    case ST_MODIFY_LABEL:
+        rc = rx_cmd_rptb(ctx, s);
+        break;
     case ST_COPY:
         rc = rx_cmd_copy(ctx, s);
         break;

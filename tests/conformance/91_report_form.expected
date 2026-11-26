@@ -1,0 +1,63 @@
+Report written to out.txt.
+    People Report
+  01/01/00                        Page 1
+    === page header ===
+    Married group:
+    Alice   30
+    group total:1
+    Married group:
+    Bob     25
+    group total:1
+    Married group:
+    Carol   41
+    group total:1
+    Married group:
+    Dave    35
+    group total:1
+    Married group:
+    Eve     28
+    group total:1
+    TOTAL records5
+    --- end page ---
+Report written to out2.txt.
+    People Report
+    Married group:
+    Alice   30
+    Carol   41
+    group total:2
+    Married group:
+    Dave    35
+    group total:1
+    TOTAL records3
+
+
+
+
+
+
+
+
+
+
+
+Report written to out3.txt.
+    People Report
+  01/01/00                        Page 1
+    === page header ===
+    Married group:
+    group total:1
+    Married group:
+    group total:1
+    Married group:
+    group total:1
+    Married group:
+    group total:1
+    Married group:
+    group total:1
+    TOTAL records5
+    --- end page ---
+
+
+
+
+

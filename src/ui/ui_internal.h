@@ -260,6 +260,9 @@ int ui_say(void *ud, int row, int col, const char *text);
 /* M7 9.2 screen builder designer (screenb.c); the .SCR/.RSO model and codegen
    live in util/scrfmt.h */
 int ui_screen_designer(void *ud, struct rx_stmt *s);
+/* M8 9.3/9.4: report/label designer + preview window */
+int ui_rptb_designer(void *ud, struct rx_stmt *s);
+int ui_preview(void *ud, const char *title, const char *text);
 void ui_says_render(rx_ui *ui);
 void ui_gets_render(rx_ui *ui);
 void ui_says_free(rx_ui *ui);

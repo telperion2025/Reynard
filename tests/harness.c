@@ -377,13 +377,15 @@ static int conformance(const char *dir, const char *bin, const char *fixtures, c
         char caseprg[1200];
         snprintf(caseprg, sizeof(caseprg), "%s/case.prg", wd);
         copy_file(prg, caseprg);
-        /* a per-case .scr sibling (e.g. for GENERATE SCREEN) ships as case.scr */
-        char casescr[1200];
-        snprintf(casescr, sizeof(casescr), "%s.scr", base);
-        if (access(casescr, F_OK) == 0) {
-            char dstscr[1200];
-            snprintf(dstscr, sizeof(dstscr), "%s/case.scr", wd);
-            copy_file(casescr, dstscr);
+        /* per-case form siblings ship as case.scr / case.frm / case.rlb */
+        static const char *exts3[3] = { "scr", "frm", "rlb" };
+        for (int ei = 0; ei < 3; ei++) {
+            char srcf[1200], dstf[1200];
+            snprintf(srcf, sizeof(srcf), "%s.%s", base, exts3[ei]);
+            if (access(srcf, F_OK) == 0) {
+                snprintf(dstf, sizeof(dstf), "%s/case.%s", wd, exts3[ei]);
+                copy_file(srcf, dstf);
+            }
         }
         int has_stdin = access(stdinf, F_OK) == 0;
         if (has_stdin) {
@@ -2152,6 +2154,159 @@ static int scrcheck(const char *dir, const char *workroot)
     return failures ? 1 : 0;
 }
 
+
+/* ---------------- rptcheck (M8 gate: emitter determinism) ---------------- */
+
+static int filter_frm(const struct dirent *d)
+{
+    size_t n = strlen(d->d_name);
+    return (n > 4 && strcmp(d->d_name + n - 4, ".frm") == 0) ||
+           (n > 4 && strcmp(d->d_name + n - 4, ".rlb") == 0);
+}
+
+static int rptcheck(const char *dir, const char *bin, const char *fixtures, const char *workroot)
+{
+    char absbin[1200], absroot[1000];
+    abs_path(bin, absbin, sizeof(absbin));
+    abs_path(workroot, absroot, sizeof(absroot));
+    mkdir(absroot, 0755);
+    struct dirent **names = NULL;
+    int n = scandir(dir, &names, filter_frm, NULL);
+    if (n < 0) {
+        perror("scandir");
+        return 1;
+    }
+    for (int i = 0; i < n; i++) {
+        for (int j = i + 1; j < n; j++) {
+            if (strcmp(names[i]->d_name, names[j]->d_name) > 0) {
+                struct dirent *t = names[i];
+                names[i] = names[j];
+                names[j] = t;
+            }
+        }
+    }
+    int ran = 0;
+    for (int i = 0; i < n; i++) {
+        char base[1100];
+        snprintf(base, sizeof(base), "%s/%s", dir, names[i]->d_name);
+        size_t bl = strlen(base);
+        int is_label = strcmp(base + bl - 4, ".rlb") == 0;
+        base[bl - 4] = '\0';
+        char wd[1100];
+        snprintf(wd, sizeof(wd), "%s/rpt-XXXXXX", absroot);
+        if (rx_mkdtemp(wd) != 0) {
+            perror("mkdtemp");
+            failures++;
+            continue;
+        }
+        ran++;
+        /* copy fixtures + the form as case.frm/case.rlb */
+        struct dirent **fx = NULL;
+        int nf = scandir(fixtures, &fx, NULL, alphasort);
+        if (nf > 0) {
+            for (int k = 0; k < nf; k++) {
+                char sp[1400], dp[1400];
+                snprintf(sp, sizeof(sp), "%s/%s", fixtures, fx[k]->d_name);
+                snprintf(dp, sizeof(dp), "%s/%s", wd, fx[k]->d_name);
+                struct stat st;
+                if (fx[k]->d_name[0] != '.' && stat(sp, &st) == 0 && S_ISREG(st.st_mode)) {
+                    copy_file(sp, dp);
+                }
+                free(fx[k]);
+            }
+            free(fx);
+        }
+        char formpath[1200], dstform[1200];
+        snprintf(formpath, sizeof(formpath), "%s.%s", base, is_label ? "rlb" : "frm");
+        snprintf(dstform, sizeof(dstform), "%s/case.%s", wd, is_label ? "rlb" : "frm");
+        copy_file(formpath, dstform);
+        /* driver program: run the form to every emitter */
+        char prg[1200];
+        snprintf(prg, sizeof(prg), "%s/case.prg", wd);
+        FILE *pf = fopen(prg, "w");
+        fprintf(pf, "USE people\n%s FORM case TO FILE out.txt\n", is_label ? "LABEL" : "REPORT");
+        fprintf(pf, "%s FORM case TO FILE out.ps\n", is_label ? "LABEL" : "REPORT");
+        fprintf(pf, "%s FORM case TO FILE out.pdf\n", is_label ? "LABEL" : "REPORT");
+        fprintf(pf, "%s FORM case TO FILE out.html\n", is_label ? "LABEL" : "REPORT");
+        fprintf(pf, "%s FORM case TO FILE out.csv\n", is_label ? "LABEL" : "REPORT");
+        fclose(pf);
+        char outp[1200], errp[1200];
+        snprintf(outp, sizeof(outp), "%s/out.txt.log", wd);
+        snprintf(errp, sizeof(errp), "%s/err.txt", wd);
+        pid_t pid = fork();
+        if (pid == 0) {
+            if (chdir(wd) != 0) {
+                _exit(99);
+            }
+            setenv("HOME", wd, 1);
+            FILE *fe = freopen(errp, "w", stderr);
+            (void)fe;
+            execl(absbin, "reynard", "-t", "-o", "stdout.txt", "case.prg", (char *)NULL);
+            _exit(127);
+        }
+        int status = 0;
+        waitpid(pid, &status, 0);
+        int bad = 0;
+        char diff[300] = "";
+        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+            size_t ne;
+            char *e = read_file(errp, &ne);
+            snprintf(diff, sizeof(diff), "run failed; stderr: %s", e ? e : "(none)");
+            free(e);
+            bad = 1;
+        }
+        /* compare: .txt.golden byte-exact; .ps/.pdf/.html/.csv.<sha256> hash-stable */
+        static const char *exts[5] = { "txt", "ps", "pdf", "html", "csv" };
+        for (int ei = 0; ei < 5 && !bad; ei++) {
+            char gp[1200], op[1200];
+            snprintf(gp, sizeof(gp), "%s.%s.golden", base, exts[ei]);
+            snprintf(op, sizeof(op), "%s/out.%s", wd, exts[ei]);
+            if (access(gp, F_OK) != 0) {
+                continue; /* no golden for this emitter */
+            }
+            if (ei == 0) {
+                if (cmp_files(op, gp, diff, sizeof(diff)) != 0) {
+                    bad = 1;
+                }
+            } else {
+                /* hash compare: golden holds the sha256 hex of the output */
+                size_t gn;
+                char *want = read_file(gp, &gn);
+                size_t on;
+                char *ob = read_file(op, &on);
+                uint8_t h[32];
+                char hex[65];
+                rx_sha256(ob ? ob : "", on, h);
+                for (int hi = 0; hi < 32; hi++) {
+                    snprintf(hex + hi * 2, 3, "%02x", h[hi]);
+                }
+                /* trim want */
+                size_t wl = gn;
+                while (wl && (want[wl - 1] == '\n' || want[wl - 1] == '\r' || want[wl - 1] == ' ')) {
+                    wl--;
+                }
+                if (!want || strncmp(want, hex, wl < 64 ? wl : 64) != 0 || wl != 64) {
+                    snprintf(diff, sizeof(diff), "%s hash mismatch (got %.16s...)", exts[ei], hex);
+                    bad = 1;
+                }
+                free(want);
+                free(ob);
+            }
+        }
+        if (bad) {
+            printf("FAIL %s: %s\n", names[i]->d_name, diff);
+            failures++;
+        } else {
+            printf("PASS %s\n", names[i]->d_name);
+        }
+        rm_rf(wd);
+        free(names[i]);
+    }
+    free(names);
+    printf("rptcheck: %d cases, %d failures\n", ran, failures);
+    return failures ? 1 : 0;
+}
+
 int main(int argc, char **argv)
 {
     rx_log_init();
@@ -2191,11 +2346,15 @@ int main(int argc, char **argv)
     if (argc >= 4 && strcmp(argv[1], "scrcheck") == 0) {
         return scrcheck(argv[2], argv[3]);
     }
+    if (argc >= 6 && strcmp(argv[1], "rptcheck") == 0) {
+        return rptcheck(argv[2], argv[3], argv[4], argv[5]);
+    }
     fprintf(stderr, "usage: %s selftest | conformance <dir> <reynard> <fixtures> <workroot>"
                     " | rxp <dir> <reynard> <fixtures> <workroot>"
                     " | roundtrip <fixtures> <workroot> | lockrace <workroot>"
                     " | golden <dir> <reynard> <fixtures> <workroot> [update]"
-                    " | browseperf <workroot> <reynard> | cdx <workroot> | scrcheck <dir> <workroot>\n",
+                    " | browseperf <workroot> <reynard> | cdx <workroot> | scrcheck <dir> <workroot>\n"
+                    " | rptcheck <dir> <reynard> <fixtures> <workroot>\n",
             argv[0]);
     return 2;
 }
