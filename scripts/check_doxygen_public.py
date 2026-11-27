@@ -11,7 +11,8 @@ import re
 import sys
 
 PROTO = re.compile(r"^[A-Za-z_].*\([^;]*\)\s*;\s*$")          # function prototype
-VAR = re.compile(r"^(?:const\s+|static\s+|extern\s+)*[A-Za-z_][\w\s\*]*\w+\s*;")  # variable
+VAR = re.compile(
+    r"^(?:const\s+|static\s+|extern\s+)*[A-Za-z_][\w\s\*]*\w+\s*;")  # variable
 MACRO = re.compile(r"^#define\s+RX_[A-Z0-9_]+")
 TYPEDEF = re.compile(r"^typedef\b")
 
@@ -37,7 +38,8 @@ def main():
                 j = i - 1
                 while j >= 0 and lines[j].strip() == "":
                     j -= 1
-                if j < 0 or not lines[j].strip().endswith("*/") or "/**" not in "\n".join(lines[max(0, j - 40):j + 1]):
+                block = "\n".join(lines[max(0, j - 40):j + 1])
+                if j < 0 or not lines[j].strip().endswith("*/") or "/**" not in block:
                     undoc.append(f"{path}:{i + 1}: {stripped[:70]}")
             # rough lexer for brace depth / comment state
             j = 0

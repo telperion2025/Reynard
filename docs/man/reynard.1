@@ -132,8 +132,15 @@ Read commands from standard input.
 Run a script with procedures, loops and arrays; a byte-reproducible
 compiled cache prog.rxp is written next to it and reused while the source
 is unchanged.
+.SH PACKAGING
+Release artifacts (spec \u00a713): CPack DEB/RPM/TGZ/ZIP from a CMake build
+dir, plus per-distribution recipes under \fIpackaging/\fR (Debian,
+RPM, BSD ports, Homebrew, Alpine/musl static, macOS universal2 zip).
+API documentation: \fImake docs\fR (Doxygen, build/docs/html), published
+to the \fIdocs\fR branch by CI. Release tags M0..M10 and v1.0.0.
 .SH SEE ALSO
 Full language reference: \fIdocs/language.md\fR; file formats:
-\fIdocs/formats.md\fR; deviations: \fIdocs/DEVIATIONS.md\fR.
+\fIdocs/formats.md\fR; deviations: \fIdocs/DEVIATIONS.md\fR;
+quality plan: \fIdocs/QUALITY.md\fR.
 .SH LICENSE
 2-clause BSD. See \fBLICENSE\fR or \fBreynard --dump-license\fR.

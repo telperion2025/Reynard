@@ -386,3 +386,46 @@ Reynard is pre-1.0, versions are milestone tags M0..M10 then v1.0.0.
   94-97 (menus batch, txn commit/rollback, BUILD PROJECT + SET PROCEDURE TO
   packed procs, ON KEY LABEL). 97 conformance cases, 24 goldens, 11 ctest
   targets - all green under -Werror and ASan/UBSan, plus Makefile.simple.
+### M10 — Release engineering (spec §11 quality, §12 CI/fuzz, §13 packaging, §14 gates)
+
+- Perf gates (spec §11.3) in the harness (`reynard-harness perf`, ctest
+  `perf_gates`): LIST 100k > 60 MB/s, CDX build 100k < 2 s, parse > 5 MB/s,
+  `--version` startup < 20 ms, batch RSS < 8 MB (watcher-process peak).
+  Measured: LIST 141.7 MB/s, CDX 0.66 s, parse 55 MB/s, startup 5.5 ms,
+  RSS 2.3 MB. Wall-clock gates skip under sanitizer builds (ASan startup
+  alone > 20 ms; see DEVIATIONS 61).
+- LIST/DISPLAY TO FILE (spec §7.1 gap closed): parser accepts
+  TO FILE/TO PRINTER/NOCONSOLE; 1 MB stdio buffer on the sink.
+- LIST hot path: cached field defs/offsets, one reused strbuf, batched
+  128 KiB writes, raw-record fast path via read-only `rx_dbf_cur_recbuf()`
+  (post-freeze header addition, DEVIATIONS 69), 256 KiB read-ahead cache in
+  `rx_dbf_load_rec` invalidated on every write path, exact `fast_num()` for
+  plain decimals (no strtod/snprintf) and digit-copy date formatting.
+  20.2 -> 141.7 MB/s.
+- Quality tooling (spec §11.1): REUSE.toml + LICENSES/ (`reuse lint`
+  clean, 414/414); `.clang-format` fixed so system headers sort first
+  (load-bearing R_OK rule) and the tree was machine-formatted (92 files);
+  `.editorconfig` enforced via `scripts/check_editorconfig.py`; pinned
+  clang-format 23.1.5 in the CI `format` job; Doxyfile + `make docs` /
+  cmake `docs` target; `scripts/check_doxygen_public.py` gates 100%
+  documented public API in include/reynard/*.h.
+- CI (spec §12): jobs `format`, `reuse`, `docs` (Doxygen + best-effort
+  publish to `docs` branch + HTML artifact), `fuzz` (libFuzzer `fuzz_dbf`
+  with ASan+UBSan over `testdata/gen/fuzz-seeds`, crash = failure),
+  `package` (CPack DEB/RPM/TGZ on ubuntu, universal2 zip + ZIP on macOS),
+  `static-analysis` (cppcheck + clang-tidy reports, advisory). Scheduled:
+  `soak.yml` daily (6 h-capped loop, DEVIATIONS 63), `valgrind.yml` weekly
+  memcheck, `msan.yml` monthly MemorySanitizer.
+- Packaging (spec §13): CPack DEB/RPM/TGZ/ZIP with full metadata
+  (verified locally: `reynard_1.0.0_amd64.deb` payload + Depends);
+  `packaging/` recipes for debian/, rpm spec, FreeBSD ports, Homebrew
+  formula, Alpine APKBUILD (musl static), macOS universal2 zip script;
+  `vendor/fetch-ncurses.sh` pins vendored ncurses 6.5 (sha256).
+- Version 1.0.0: single source `include/reynard/version.h` used by
+  `--version`, boot banner and About dialog; milestone tags M0..M10 +
+  annotated v1.0.0 (unsigned, DEVIATIONS 64).
+- Gates: ctest 12/12 on build and build-asan (ASan+UBSan+Lsan), 97
+  conformance cases, 24 goldens, 10 round-trip, 5 RXP, 27 CDX checks,
+  2 SCR, 2 RPT, lockrace, browse-perf and all 5 spec §11.3 perf gates;
+  Makefile.simple test all green; zero warnings under
+  -Wall -Wextra -Wpedantic -Werror in Debug and Release.

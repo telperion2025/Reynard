@@ -194,10 +194,11 @@ built-in functions. The complete command and function reference is
 ## Testing
 
 ```sh
-ctest --test-dir build --output-on-failure
+ctest --test-dir build --output-on-failure   # 12 tests incl. spec 11.3 perf gates
 # or directly:
 ./build/reynard-harness selftest                 # term/mouse backend self-test
 ./build/reynard-harness conformance tests/conformance ./build/reynard testdata/gen /tmp/work
+./build/reynard-harness perf /tmp/work ./build/reynard   # spec 11.3 perf gates
 ```
 
 - `tests/harness.c` — the purpose-built harness: sandboxed workdir per
@@ -215,7 +216,7 @@ ctest --test-dir build --output-on-failure
 ## Repository layout
 
 ```
-include/reynard/   installed public headers (dbf.h, status.h, rval.h)
+include/reynard/   installed public headers (dbf.h, status.h, rval.h, version.h)
 src/main.c         CLI, mode dispatch, config load
 src/term/          terminal backends (ncurses, script replay), mouse
 src/ui/            screen, windows, menubar, command window, dialogs (M3); browse (M4+)
@@ -223,11 +224,29 @@ src/lang/          lexer, parser, expression compiler, VM, functions
 src/data/          DBF/FPT/DBT/CDX engine, work areas, scopes, locking
 src/tools/         screen/report/label builders, project manager (M7+)
 src/util/          strbuf, UTF-8, code pages, numeric, config, logging
-tests/             harness, conformance, golden, unit, fuzz
+tests/             harness, conformance, golden, unit, fuzz (tests/fuzz)
+scripts/           CI gate scripts (editorconfig, doxygen public API)
+packaging/         debian/, rpm/, ports/, homebrew/, alpine/, macos/ recipes
+vendor/            fetch-ncurses.sh (pinned vendored ncurses 6.5, not committed)
+LICENSES/          license texts (REUSE)
 docs/              language.md, formats.md, QUALITY.md, DEVIATIONS.md, man/
 ```
 
 Dependency direction is strict: `util <- term <- ui <- lang <- data`.
+
+## Releases and packaging (v1.0.0, spec §13)
+
+- Release tags: annotated `M0`..`M10` milestone tags plus `v1.0.0`
+  (unsigned in CI; see docs/DEVIATIONS.md #64).
+- CI builds and uploads packages per push (`.github/workflows/ci.yml`,
+  job `package`): `cpack -G DEB -G RPM -G TGZ` on ubuntu,
+  universal2 zip + `cpack -G ZIP` on macOS.
+- Manual recipes live in [packaging/](packaging/README.md): Debian
+  (`dpkg-buildpackage`), RPM (`rpmbuild -ba packaging/rpm/reynard.spec`),
+  FreeBSD port, Homebrew formula, Alpine APKBUILD (musl, static), and
+  `packaging/macos/make-universal2-zip.sh` (x86_64+arm64 via lipo).
+- API docs: `make docs` (Doxygen -> build/docs/html); the CI `docs` job
+  publishes them to the `docs` branch.
 
 ## License
 
