@@ -19,3 +19,7 @@ Testing/
 # Editor/OS noise
 *.swp
 .DS_Store
+
+# Python tooling
+__pycache__/
+*.pyc
