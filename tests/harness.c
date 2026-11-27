@@ -2585,9 +2585,15 @@ static double run_timed(const char* bin, const char* wd, const char* home, char*
             waitpid(c, &st, 0);
             struct rusage ru;
             long rss = 0;
+#if defined(__linux__)
             if (getrusage(RUSAGE_CHILDREN, &ru) == 0) {
-                rss = ru.ru_maxrss;
+                rss = ru.ru_maxrss; /* KiB on Linux */
             }
+#else
+            /* ru_maxrss is hidden on macOS under _POSIX_C_SOURCE; the RSS
+               gate (< 8 MB) is enforced on Linux runners. */
+            (void)ru;
+#endif
             if (write(pipefd[1], &rss, sizeof(rss)) != (ssize_t)sizeof(rss)) {
                 /* ignore */
             }

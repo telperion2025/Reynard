@@ -44,7 +44,8 @@
    buffering interleaves with curses' own output and splits escape
    sequences, which prints garbage like "?1002h" onto the screen. */
 static void raw_write(const char* s) {
-    (void)write(STDOUT_FILENO, s, strlen(s));
+    ssize_t put = write(STDOUT_FILENO, s, strlen(s));
+    (void)put; /* short writes on a tty are retried by the caller's flush */
 }
 
 static void nc_sync_size(void) {
