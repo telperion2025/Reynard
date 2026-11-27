@@ -48,6 +48,10 @@ struct rx_dbf {
     int deleted;    /**< delete flag of current record */
     uint8_t *recbuf;
     int dirty;      /**< recbuf holds unflushed changes */
+    uint32_t loaded_rec; /**< recno currently held in recbuf (M10) */
+    uint8_t *rcache;    /**< read-ahead block cache over the record area (M10 11.3) */
+    int64_t rcache_off; /**< file offset of rcache[0] */
+    size_t rcache_len;  /**< valid bytes in rcache; 0 = invalid */
     int found;      /**< FOUND() flag (LOCATE/CONTINUE; SEEK at M6) */
     /* memo file (lazy) */
     int has_memo;
@@ -90,6 +94,8 @@ int rx_data_reprocess(void);
 int rx_dbf_write_header(rx_dbf *dbf);
 /** Load the current record into recbuf (internal). */
 int rx_dbf_load_rec(rx_dbf *dbf);
+/** Invalidate the read-ahead cache (internal; call on every file write). */
+void rx_dbf_cache_inv(rx_dbf *dbf);
 /** Write recbuf at the current record and clear dirty (internal). */
 int rx_dbf_write_rec(rx_dbf *dbf);
 /** Raw record access for the round-trip suite (internal). */

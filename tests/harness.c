@@ -25,6 +25,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/resource.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -1144,6 +1145,82 @@ static int golden(const char *dir, const char *bin, const char *fixtures, const 
    100k-record DBF. Generates large.dbf deterministically, replays a scripted
    BROWSE + 300 PgDn session through the script backend with RX_PERF timing,
    and asserts the average per-event handle+render time. */
+/* Write a valid 100k-record DBF (v0x03, no memo) with a few block writes;
+   shared by browseperf and the perf gate mode (spec 11.3). */
+static int write_large_dbf(const char *dbfpath)
+{
+    static const char *fnames[] = { "ID", "NAME", "SCORE", "BORN", "MARRIED" };
+    static const char ftypes[] = { 'N', 'C', 'N', 'D', 'L' };
+    static const uint8_t flens[] = { 8, 20, 8, 8, 1 };
+    const size_t nf = 5;
+    const uint16_t hdr_size = (uint16_t)(32 + 32 * nf + 1);
+    const uint16_t rec_size = (uint16_t)(1 + 8 + 20 + 8 + 8 + 1);
+    const uint32_t nrec = 100000;
+    uint8_t *buf = malloc((size_t)hdr_size + (size_t)nrec * rec_size + 1);
+    if (!buf) {
+        fprintf(stderr, "write_large_dbf: out of memory\n");
+        return 1;
+    }
+    memset(buf, 0, hdr_size);
+    buf[0] = 0x03;
+    buf[1] = 100;
+    buf[2] = 1;
+    buf[3] = 1;
+    buf[4] = (uint8_t)(nrec & 0xFF);
+    buf[5] = (uint8_t)((nrec >> 8) & 0xFF);
+    buf[6] = (uint8_t)((nrec >> 16) & 0xFF);
+    buf[7] = (uint8_t)((nrec >> 24) & 0xFF);
+    buf[8] = (uint8_t)(hdr_size & 0xFF);
+    buf[9] = (uint8_t)(hdr_size >> 8);
+    buf[10] = (uint8_t)(rec_size & 0xFF);
+    buf[11] = (uint8_t)(rec_size >> 8);
+    uint8_t *fd = buf + 32;
+    for (size_t i = 0; i < nf; i++) {
+        memset(fd, 0, 32);
+        memcpy(fd, fnames[i], strlen(fnames[i]));
+        fd[11] = (uint8_t)ftypes[i];
+        fd[16] = flens[i];
+        fd[17] = (uint8_t)(i == 2 ? 2 : 0);
+        fd += 32;
+    }
+    buf[32 + 32 * nf] = 0x0D;
+    uint8_t *rec = buf + hdr_size;
+    for (uint32_t i = 1; i <= nrec; i++) {
+        memset(rec, ' ', rec_size);
+        rec[0] = ' ';
+        char tmp[32];
+        snprintf(tmp, sizeof(tmp), "%8u", i);
+        memcpy(rec + 1, tmp, 8);
+        char nm[32];
+        snprintf(nm, sizeof(nm), "name-%u", i);
+        memcpy(rec + 9, nm, strlen(nm) < 20 ? strlen(nm) : 20);
+        snprintf(tmp, sizeof(tmp), "%8.2f", (double)(i % 1000) / 10.0);
+        memcpy(rec + 29, tmp, 8);
+        snprintf(tmp, sizeof(tmp), "%04d%02d%02d", 1990 + (int)(i % 30), 1 + (int)(i % 12),
+                 1 + (int)(i % 28));
+        memcpy(rec + 37, tmp, 8);
+        rec[45] = (i % 2) ? 'T' : 'F';
+        rec += rec_size;
+    }
+    *rec = 0x1A;
+    FILE *df = fopen(dbfpath, "wb");
+    if (!df) {
+        perror("fopen large.dbf");
+        free(buf);
+        return 1;
+    }
+    size_t total = (size_t)hdr_size + (size_t)nrec * rec_size + 1;
+    if (fwrite(buf, 1, total, df) != total) {
+        fprintf(stderr, "write_large_dbf: short write\n");
+        fclose(df);
+        free(buf);
+        return 1;
+    }
+    fclose(df);
+    free(buf);
+    return 0;
+}
+
 static int browseperf(const char *workroot, const char *bin)
 {
     char absbin[1200], absroot[1000];
@@ -1160,76 +1237,8 @@ static int browseperf(const char *workroot, const char *bin)
        block writes instead of 100k append+flush round-trips. */
     char dbfpath[1200];
     snprintf(dbfpath, sizeof(dbfpath), "%s/large.dbf", wd);
-    {
-        static const char *fnames[] = { "ID", "NAME", "SCORE", "BORN", "MARRIED" };
-        static const char ftypes[] = { 'N', 'C', 'N', 'D', 'L' };
-        static const uint8_t flens[] = { 8, 20, 8, 8, 1 };
-        const size_t nf = 5;
-        const uint16_t hdr_size = (uint16_t)(32 + 32 * nf + 1);
-        const uint16_t rec_size = (uint16_t)(1 + 8 + 20 + 8 + 8 + 1);
-        const uint32_t nrec = 100000;
-        uint8_t *buf = malloc((size_t)hdr_size + (size_t)nrec * rec_size + 1);
-        if (!buf) {
-            fprintf(stderr, "browseperf: out of memory\n");
-            return 1;
-        }
-        memset(buf, 0, hdr_size);
-        buf[0] = 0x03;
-        buf[1] = 100; /* 2000-01-01 like test mode */
-        buf[2] = 1;
-        buf[3] = 1;
-        buf[4] = (uint8_t)(nrec & 0xFF);
-        buf[5] = (uint8_t)((nrec >> 8) & 0xFF);
-        buf[6] = (uint8_t)((nrec >> 16) & 0xFF);
-        buf[7] = (uint8_t)((nrec >> 24) & 0xFF);
-        buf[8] = (uint8_t)(hdr_size & 0xFF);
-        buf[9] = (uint8_t)(hdr_size >> 8);
-        buf[10] = (uint8_t)(rec_size & 0xFF);
-        buf[11] = (uint8_t)(rec_size >> 8);
-        uint8_t *fd = buf + 32;
-        for (size_t i = 0; i < nf; i++) {
-            memset(fd, 0, 32);
-            memcpy(fd, fnames[i], strlen(fnames[i]));
-            fd[11] = (uint8_t)ftypes[i];
-            fd[16] = flens[i];
-            fd[17] = (uint8_t)(i == 2 ? 2 : 0); /* SCORE dec */
-            fd += 32;
-        }
-        buf[32 + 32 * nf] = 0x0D;
-        uint8_t *rec = buf + hdr_size;
-        for (uint32_t i = 1; i <= nrec; i++) {
-            memset(rec, ' ', rec_size);
-            rec[0] = ' ';
-            char tmp[32];
-            snprintf(tmp, sizeof(tmp), "%8u", i);
-            memcpy(rec + 1, tmp, 8);
-            char nm[32];
-            snprintf(nm, sizeof(nm), "name-%u", i);
-            memcpy(rec + 9, nm, strlen(nm) < 20 ? strlen(nm) : 20);
-            snprintf(tmp, sizeof(tmp), "%8.2f", (double)(i % 1000) / 10.0);
-            memcpy(rec + 29, tmp, 8);
-            snprintf(tmp, sizeof(tmp), "%04d%02d%02d", 1990 + (int)(i % 30), 1 + (int)(i % 12),
-                     1 + (int)(i % 28));
-            memcpy(rec + 37, tmp, 8);
-            rec[45] = (i % 2) ? 'T' : 'F';
-            rec += rec_size;
-        }
-        *rec = 0x1A;
-        FILE *df = fopen(dbfpath, "wb");
-        if (!df) {
-            perror("fopen large.dbf");
-            free(buf);
-            return 1;
-        }
-        size_t total = (size_t)hdr_size + (size_t)nrec * rec_size + 1;
-        if (fwrite(buf, 1, total, df) != total) {
-            fprintf(stderr, "browseperf: short write\n");
-            fclose(df);
-            free(buf);
-            return 1;
-        }
-        fclose(df);
-        free(buf);
+    if (write_large_dbf(dbfpath) != 0) {
+        return 1;
     }
 
     char evp[1200], dump[1200], perf[1200], home[1200], outp[1200], errp[1200];
@@ -2554,6 +2563,244 @@ static int projcheck(const char *dir, const char *bin, const char *fixtures, con
     return failures ? 1 : 0;
 }
 
+
+/* ---------------- perf gates (spec 11.3, M10) ---------------- */
+
+static double now_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
+}
+
+/* run the child binary in wd with the given argv; returns wall ms and exit code.
+   When maxrss_kb is requested, a dedicated watcher process measures the
+   child's peak RSS (RUSAGE_CHILDREN would otherwise aggregate every child
+   this process has waited for). */
+static double run_timed(const char *bin, const char *wd, const char *home, char *const argv[],
+                        int *exitcode, long *maxrss_kb)
+{
+    double t0 = now_ms();
+    int pipefd[2];
+    if (maxrss_kb && pipe(pipefd) != 0) {
+        maxrss_kb = NULL;
+    }
+    pid_t pid = fork();
+    if (pid == 0) {
+        if (maxrss_kb) {
+            /* watcher: fork the real child so its rusage is isolated */
+            close(pipefd[0]);
+            pid_t c = fork();
+            if (c == 0) {
+                if (chdir(wd) != 0) {
+                    _exit(99);
+                }
+                setenv("HOME", home, 1);
+                char xdg[1400];
+                snprintf(xdg, sizeof(xdg), "%s/.cache", home);
+                setenv("XDG_CACHE_HOME", xdg, 1);
+                FILE *fo = freopen("perf-child.out", "w", stdout);
+                (void)fo;
+                execv(bin, argv);
+                _exit(127);
+            }
+            int st = 0;
+            waitpid(c, &st, 0);
+            struct rusage ru;
+            long rss = 0;
+            if (getrusage(RUSAGE_CHILDREN, &ru) == 0) {
+                rss = ru.ru_maxrss;
+            }
+            if (write(pipefd[1], &rss, sizeof(rss)) != (ssize_t)sizeof(rss)) {
+                /* ignore */
+            }
+            int ec = WIFEXITED(st) ? WEXITSTATUS(st) : 128;
+            if (write(pipefd[1], &ec, sizeof(ec)) != (ssize_t)sizeof(ec)) {
+                /* ignore */
+            }
+            close(pipefd[1]);
+            _exit(0);
+        }
+        if (chdir(wd) != 0) {
+            _exit(99);
+        }
+        setenv("HOME", home, 1);
+        char xdg[1400];
+        snprintf(xdg, sizeof(xdg), "%s/.cache", home);
+        setenv("XDG_CACHE_HOME", xdg, 1);
+        FILE *fo = freopen("perf-child.out", "w", stdout);
+        (void)fo;
+        execv(bin, argv);
+        _exit(127);
+    }
+    int status = 0;
+    if (maxrss_kb) {
+        close(pipefd[1]);
+        long rss = 0;
+        int ec = 0;
+        if (read(pipefd[0], &rss, sizeof(rss)) == (ssize_t)sizeof(rss) &&
+            read(pipefd[0], &ec, sizeof(ec)) == (ssize_t)sizeof(ec)) {
+            *maxrss_kb = rss;
+            status = ec; /* pack exit code into status */
+            waitpid(pid, NULL, 0);
+            close(pipefd[0]);
+            double ms = now_ms() - t0;
+            if (exitcode) {
+                *exitcode = status;
+            }
+            return ms;
+        }
+        close(pipefd[0]);
+    }
+    waitpid(pid, &status, 0);
+    double ms = now_ms() - t0;
+    if (exitcode) {
+        *exitcode = WIFEXITED(status) ? WEXITSTATUS(status) : 128;
+    }
+    return ms;
+}
+
+static int perf_mode(const char *workroot, const char *bin)
+{
+    char absbin[1200], absroot[1000];
+    abs_path(bin, absbin, sizeof(absbin));
+    abs_path(workroot, absroot, sizeof(absroot));
+    mkdir(absroot, 0755);
+    char wd[1100];
+    snprintf(wd, sizeof(wd), "%s/perfgate-XXXXXX", absroot);
+    if (rx_mkdtemp(wd) != 0) {
+        perror("mkdtemp");
+        return 1;
+    }
+    char home[1200];
+    snprintf(home, sizeof(home), "%s/home", wd);
+    mkdir(home, 0755);
+    /* Sanitizer builds are exempt from the wall-clock gates (spec 11.3 gates
+       target the release build; the ASan runtime alone costs >20 ms of
+       startup). They still run through the same code for memory checking. */
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_UNDEFINED__) || \
+    (defined(__has_feature) && (__has_feature(address_sanitizer) || __has_feature(undefined_behavior_sanitizer)))
+    printf("perf gates: SKIP (sanitizer build; spec 11.3 wall-clock gates run on the release build)\n");
+    rm_rf(wd);
+    return 0;
+#else
+    char dbfpath[1200];
+    snprintf(dbfpath, sizeof(dbfpath), "%s/large.dbf", wd);
+    if (write_large_dbf(dbfpath) != 0) {
+        return 1;
+    }
+    int bad = 0;
+
+    /* 1. LIST of 100k records to file: > 60 MB/s (spec 11.3) */
+    {
+        char prg[1200];
+        snprintf(prg, sizeof(prg), "%s/list.prg", wd);
+        FILE *f = fopen(prg, "w");
+        fprintf(f, "USE large\nLIST TO FILE list.txt\n");
+        fclose(f);
+        char *av[] = { (char *)"reynard", (char *)"-t", (char *)"list.prg", NULL };
+        int ec;
+        double ms = run_timed(absbin, wd, home, av, &ec, NULL);
+        char lp[1200];
+        snprintf(lp, sizeof(lp), "%s/list.txt", wd);
+        struct stat st;
+        double mb = (stat(lp, &st) == 0 ? (double)st.st_size : 0) / (1024.0 * 1024.0);
+        double mbs = ms > 0 ? mb / (ms / 1000.0) : 0;
+        int ok = ec == 0 && mbs > 60.0;
+        printf("perf LIST 100k: %s (%.1f MB in %.1f ms = %.1f MB/s, gate >60)\n", ok ? "PASS" : "FAIL",
+               mb, ms, mbs);
+        if (!ok) {
+            bad = 1;
+        }
+    }
+
+    /* 2. CDX build of 100k keys: < 2 s (spec 11.3) */
+    {
+        char prg[1200];
+        snprintf(prg, sizeof(prg), "%s/idx.prg", wd);
+        FILE *f = fopen(prg, "w");
+        fprintf(f, "USE large\nSET TALK OFF\nINDEX ON id TAG id\n");
+        fclose(f);
+        char *av[] = { (char *)"reynard", (char *)"-t", (char *)"idx.prg", NULL };
+        int ec;
+        double ms = run_timed(absbin, wd, home, av, &ec, NULL);
+        int ok = ec == 0 && ms < 2000.0;
+        printf("perf CDX build 100k: %s (%.1f ms, gate <2000 ms)\n", ok ? "PASS" : "FAIL", ms);
+        if (!ok) {
+            bad = 1;
+        }
+    }
+
+    /* 3. Program parse: > 5 MB/s (spec 11.3). A ~6 MB comment-heavy .prg is
+       lexed+parsed; execution is trivial, so wall time ~= parse time. */
+    {
+        char prg[1200];
+        snprintf(prg, sizeof(prg), "%s/big.prg", wd);
+        FILE *f = fopen(prg, "w");
+        size_t written = 0;
+        while (written < 6u * 1024 * 1024) {
+            written += fprintf(f, "* %s\n", "lorem ipsum dolor sit amet consectetur adipiscing elit sed do");
+        }
+        fprintf(f, "? \"parsed\"\n");
+        fclose(f);
+        struct stat st;
+        stat(prg, &st);
+        char *av[] = { (char *)"reynard", (char *)"-t", (char *)"big.prg", NULL };
+        int ec;
+        double ms = run_timed(absbin, wd, home, av, &ec, NULL);
+        double mbs = ms > 0 ? (double)st.st_size / (1024.0 * 1024.0) / (ms / 1000.0) : 0;
+        int ok = ec == 0 && mbs > 5.0;
+        printf("perf parse: %s (%.1f MB in %.1f ms = %.1f MB/s, gate >5)\n", ok ? "PASS" : "FAIL",
+               (double)st.st_size / (1024.0 * 1024.0), ms, mbs);
+        if (!ok) {
+            bad = 1;
+        }
+    }
+
+    /* 4. Startup --version: < 20 ms (spec 11.3), best of 5 */
+    {
+        double best = 1e9;
+        for (int i = 0; i < 5; i++) {
+            char *av[] = { (char *)"reynard", (char *)"--version", NULL };
+            int ec;
+            double ms = run_timed(absbin, wd, home, av, &ec, NULL);
+            if (ms < best) {
+                best = ms;
+            }
+        }
+        int ok = best < 20.0;
+        printf("perf startup --version: %s (%.2f ms best of 5, gate <20 ms)\n", ok ? "PASS" : "FAIL",
+               best);
+        if (!ok) {
+            bad = 1;
+        }
+    }
+
+    /* 5. RSS batch: < 8 MB (spec 11.3). Sanitizer builds are exempt (ASan
+       runtime alone exceeds the budget). */
+#if defined(__SANITIZE_ADDRESS__) || (defined(__has_feature) && __has_feature(address_sanitizer))
+    printf("perf RSS batch: SKIP (sanitizer build)\n");
+#else
+    {
+        char *av[] = { (char *)"reynard", (char *)"-t", (char *)"-c", (char *)"? 1+1", NULL };
+        int ec;
+        long rss = 0;
+        run_timed(absbin, wd, home, av, &ec, &rss);
+        double mb = rss / 1024.0;
+        int ok = ec == 0 && mb < 8.0;
+        printf("perf RSS batch: %s (%.1f MB, gate <8 MB)\n", ok ? "PASS" : "FAIL", mb);
+        if (!ok) {
+            bad = 1;
+        }
+    }
+#endif
+
+    printf("perf gates: %s\n", bad ? "FAIL" : "PASS");
+    rm_rf(wd);
+    return bad ? 1 : 0;
+#endif
+}
+
 int main(int argc, char **argv)
 {
     rx_log_init();
@@ -2587,6 +2834,9 @@ int main(int argc, char **argv)
     if (argc >= 4 && strcmp(argv[1], "browseperf") == 0) {
         return browseperf(argv[2], argv[3]);
     }
+    if (argc >= 4 && strcmp(argv[1], "perf") == 0) {
+        return perf_mode(argv[2], argv[3]);
+    }
     if (argc >= 3 && strcmp(argv[1], "cdx") == 0) {
         return cdx_mode(argv[2]);
     }
@@ -2603,7 +2853,7 @@ int main(int argc, char **argv)
                     " | rxp <dir> <reynard> <fixtures> <workroot>"
                     " | roundtrip <fixtures> <workroot> | lockrace <workroot>"
                     " | golden <dir> <reynard> <fixtures> <workroot> [update]"
-                    " | browseperf <workroot> <reynard> | cdx <workroot> | scrcheck <dir> <workroot>\n"
+                    " | browseperf <workroot> <reynard> | perf <workroot> <reynard> | cdx <workroot> | scrcheck <dir> <workroot>\n"
                     " | rptcheck <dir> <reynard> <fixtures> <workroot>"
                     " | projcheck <dir> <reynard> <fixtures> <workroot>\n",
             argv[0]);

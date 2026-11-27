@@ -691,111 +691,371 @@ static int iterate(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, int default_kind, rx_re
     return rc;
 }
 
-static void print_record_line(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, const size_t *flds,
-                              size_t nf, const size_t *widths, int recw, int off, int deleted)
-{
-    strbuf sb;
-    sb_init(&sb);
-    char tmp[32];
-    if (!off) {
-        if (deleted) {
-            sb_putc(&sb, '*');
-            snprintf(tmp, sizeof(tmp), "%*u", recw - 1, recno);
-        } else {
-            snprintf(tmp, sizeof(tmp), "%*u", recw, recno);
-        }
-        sb_puts(&sb, tmp);
-    }
-    for (size_t k = 0; k < nf; k++) {
-        size_t f = flds[k];
-        sb_putc(&sb, ' ');
-        rval v;
-        rx_rval_undef(&v);
-        if (rx_dbf_get(dbf, f, &v) != R_OK) {
-            sb_putc(&sb, '?');
-            continue;
-        }
-        rx_fielddef fd;
-        rx_dbf_field_def(dbf, f, &fd);
-        size_t w = widths[k];
-        if (fd.type == RFT_C) {
-            const char *str = v.t == RX_T_C ? (v.u.c.utf8 ? v.u.c.utf8 : "") : "";
-            size_t n = v.t == RX_T_C ? v.u.c.n : 0;
-            sb_put(&sb, str, n);
-            for (size_t i = n; i < w; i++) {
-                sb_putc(&sb, ' ');
-            }
-        } else if (fd.type == RFT_M) {
-            sb_puts(&sb, "Memo");
-            for (size_t i = 4; i < w; i++) {
-                sb_putc(&sb, ' ');
-            }
-        } else if (fd.type == RFT_N || fd.type == RFT_F) {
-            char num[64];
-            rx_format_num(num, sizeof(num), v.u.n.d, fd.dec, 1);
-            size_t nl = strlen(num);
-            for (size_t i = nl; i < w; i++) {
-                sb_putc(&sb, ' ');
-            }
-            sb_puts(&sb, num);
-        } else if (fd.type == RFT_D) {
-            char d[48];
-            if (v.u.d.y == 0) {
-                snprintf(d, sizeof(d), "%s", ctx->set.century ? "  /  /    " : "  /  /  ");
-            } else if (ctx->set.century) {
-                snprintf(d, sizeof(d), "%02d/%02d/%04d", v.u.d.m, v.u.d.d, v.u.d.y);
-            } else {
-                snprintf(d, sizeof(d), "%02d/%02d/%02d", v.u.d.m, v.u.d.d, v.u.d.y % 100);
-            }
-            sb_puts(&sb, d);
-        } else if (fd.type == RFT_L) {
-            sb_putc(&sb, v.u.l == L_T ? 'T' : v.u.l == L_F ? 'F' : '?');
-            for (size_t i = 1; i < w; i++) {
-                sb_putc(&sb, ' ');
-            }
-        } else if (fd.type == RFT_I) {
-            char num[64];
-            snprintf(num, sizeof(num), "%d", v.u.i);
-            size_t nl = strlen(num);
-            for (size_t i = nl; i < w; i++) {
-                sb_putc(&sb, ' ');
-            }
-            sb_puts(&sb, num);
-        } else {
-            strbuf tmp2;
-            sb_init(&tmp2);
-            rx_vm_display(ctx, &v, &tmp2);
-            size_t n = tmp2.len;
-            for (size_t i = n; i < w; i++) {
-                sb_putc(&sb, ' ');
-            }
-            sb_put(&sb, tmp2.buf ? tmp2.buf : "", n);
-            sb_free(&tmp2);
-        }
-        rx_rval_free(&v);
-    }
-    sb_putc(&sb, '\n');
-    if (sb.buf) {
-        rx_out(ctx, sb.buf, sb.len);
-    }
-    sb_free(&sb);
-}
-
 typedef struct {
     rx_ctx *ctx;
-    const size_t *flds;
-    size_t nf;
-    const size_t *widths;
+    const size_t *flds;  /**< selected field indices */
+    size_t nf;           /**< number of selected fields */
+    rx_fielddef *fds;    /**< cached def of each selected field (M10) */
+    size_t *foffs;       /**< byte offset of every field in a record (M10) */
+    size_t *widths;
     int recw;
     int off;
+    FILE *sink;          /**< LIST/DISPLAY TO FILE: write the listing here (M10) */
+    strbuf sb;           /**< reused across records (M10 perf gate) */
 } list_ud;
+
+/* Format a DBF numeric field exactly like rx_parse_num()+rx_format_num(d,dec,1)
+   ("%.*f") when no rounding is involved (plain decimal, <= 15 significant
+   digits, fractional digits <= dec); returns 0 when the exact strtod/snprintf
+   path must be used instead. Hot on the LIST 100k gate (spec 11.3, M10). */
+static int fast_num(const uint8_t *raw, size_t len, int dec, char *out, size_t outsz)
+{
+    size_t i = 0;
+    while (i < len && (raw[i] == ' ' || raw[i] == '\t')) {
+        i++;
+    }
+    int neg = 0;
+    if (i < len && (raw[i] == '-' || raw[i] == '+')) {
+        neg = raw[i] == '-';
+        i++;
+    }
+    size_t int_start = i;
+    while (i < len && raw[i] >= '0' && raw[i] <= '9') {
+        i++;
+    }
+    size_t int_n = i - int_start;
+    size_t frac_start = 0, frac_n = 0;
+    if (i < len && raw[i] == '.') {
+        i++;
+        frac_start = i;
+        while (i < len && raw[i] >= '0' && raw[i] <= '9') {
+            i++;
+            frac_n++;
+        }
+    }
+    while (i < len && (raw[i] == ' ' || raw[i] == '\t')) {
+        i++;
+    }
+    if (i != len) {
+        return 0; /* not a plain decimal (e.g. overflow ******): exact path */
+    }
+    if (int_n + frac_n > 15) {
+        return 0; /* too many significant digits to round-trip through double */
+    }
+    if (dec > 15) {
+        dec = 15; /* same clamp as rx_format_num */
+    }
+    if (frac_n > (size_t)dec) {
+        return 0; /* rounding needed: exact path */
+    }
+    size_t o = 0;
+    if (neg && int_n + frac_n > 0) {
+        if (o + 1 >= outsz) {
+            return 0;
+        }
+        out[o++] = '-';
+    }
+    if (int_n == 0) {
+        if (o + 1 >= outsz) {
+            return 0;
+        }
+        out[o++] = '0'; /* blank field -> 0, like rx_parse_num */
+    } else {
+        if (o + int_n >= outsz) {
+            return 0;
+        }
+        memcpy(out + o, raw + int_start, int_n);
+        o += int_n;
+    }
+    if (dec > 0) {
+        if (o + 1 + (size_t)dec >= outsz) {
+            return 0;
+        }
+        out[o++] = '.';
+        if (frac_n) {
+            memcpy(out + o, raw + frac_start, frac_n);
+            o += frac_n;
+        }
+        for (size_t k = frac_n; k < (size_t)dec; k++) {
+            out[o++] = '0';
+        }
+    }
+    out[o] = '\0';
+    return 1;
+}
+
+/* append n spaces in bulk (padding is hot on the LIST perf path, M10) */
+static void sb_spaces(strbuf *sb, size_t n)
+{
+    static const char sp[64] =
+        "                                                                ";
+    while (n > 0) {
+        size_t c = n > sizeof(sp) ? sizeof(sp) : n;
+        sb_put(sb, sp, c);
+        n -= c;
+    }
+}
+
+/* Emit one field of one record into sb, padded to width w. raw points at the
+   field bytes inside the current record buffer when available (M10 fast
+   path, no per-field pread/strdup); NULL forces the generic rval path. */
+static void list_emit_field(rx_ctx *ctx, rx_dbf *dbf, size_t f, const rx_fielddef *fd, size_t w,
+                            const uint8_t *raw, strbuf *sb)
+{
+    switch (fd->type) {
+    case RFT_C:
+        if (raw) { /* caller guarantees codepage <= 0 when raw is set */
+            sb_put(sb, (const char *)raw, fd->len);
+            if ((size_t)fd->len < w) {
+                sb_spaces(sb, w - fd->len);
+            }
+            return;
+        }
+        break;
+    case RFT_N:
+    case RFT_F:
+        if (raw) {
+            char num[64];
+            if (!fast_num(raw, fd->len, fd->dec, num, sizeof(num))) {
+                int blank;
+                double d = rx_parse_num((const char *)raw, fd->len, &blank);
+                rx_format_num(num, sizeof(num), d, fd->dec, 1);
+            }
+            size_t nl = strlen(num);
+            if (nl < w) {
+                sb_spaces(sb, w - nl);
+            }
+            sb_puts(sb, num);
+            return;
+        }
+        break;
+    case RFT_D:
+        if (raw) {
+            char d[48];
+            int blank = 1;
+            for (int i = 0; i < 8; i++) {
+                if (raw[i] != ' ' && raw[i] != '0') {
+                    blank = 0;
+                    break;
+                }
+            }
+            if (blank) {
+                sb_puts(sb, ctx->set.century ? "  /  /    " : "  /  /  ");
+                return;
+            }
+            int y = (raw[0] - '0') * 1000 + (raw[1] - '0') * 100 + (raw[2] - '0') * 10 + (raw[3] - '0');
+            int m = (raw[4] - '0') * 10 + (raw[5] - '0');
+            int dd = (raw[6] - '0') * 10 + (raw[7] - '0');
+            if (y < 1 || m < 1 || m > 12 || dd < 1 || dd > 31) {
+                sb_putc(sb, '?'); /* decode error: same as rx_dbf_get failure */
+                return;
+            }
+            int alldig = 1;
+            for (int q = 0; q < 8; q++) {
+                if (raw[q] < '0' || raw[q] > '9') {
+                    alldig = 0;
+                    break;
+                }
+            }
+            if (alldig) {
+                /* MM/DD/YY(YY) is a pure digit copy of YYYYMMDD (M10 fast path) */
+                char *p = d;
+                *p++ = (char)raw[4];
+                *p++ = (char)raw[5];
+                *p++ = '/';
+                *p++ = (char)raw[6];
+                *p++ = (char)raw[7];
+                *p++ = '/';
+                if (ctx->set.century) {
+                    memcpy(p, raw, 4);
+                    p += 4;
+                } else {
+                    *p++ = (char)raw[2];
+                    *p++ = (char)raw[3];
+                }
+                *p = '\0';
+            } else if (ctx->set.century) {
+                snprintf(d, sizeof(d), "%02d/%02d/%04d", m, dd, y);
+            } else {
+                snprintf(d, sizeof(d), "%02d/%02d/%02d", m, dd, y % 100);
+            }
+            sb_puts(sb, d);
+            return;
+        }
+        break;
+    case RFT_L:
+        if (raw) {
+            char c = (char)raw[0];
+            char o = (c == 'Y' || c == 'y' || c == 'T' || c == 't')     ? 'T'
+                     : (c == 'N' || c == 'n' || c == 'F' || c == 'f')   ? 'F'
+                                                                       : '?';
+            sb_putc(sb, o);
+            if (w > 1) {
+                sb_spaces(sb, w - 1);
+            }
+            return;
+        }
+        break;
+    case RFT_I:
+        if (raw && fd->len >= 4) {
+            char num[64];
+            int32_t v;
+            memcpy(&v, raw, 4);
+            snprintf(num, sizeof(num), "%d", v);
+            size_t nl = strlen(num);
+            if (nl < w) {
+                sb_spaces(sb, w - nl);
+            }
+            sb_puts(sb, num);
+            return;
+        }
+        break;
+    default:
+        break;
+    }
+    /* generic path: decode through the rval API (memo/codepage/exotic types) */
+    rval v;
+    rx_rval_undef(&v);
+    if (rx_dbf_get(dbf, f, &v) != R_OK) {
+        sb_putc(sb, '?');
+        return;
+    }
+    if (fd->type == RFT_C) {
+        const char *str = v.t == RX_T_C ? (v.u.c.utf8 ? v.u.c.utf8 : "") : "";
+        size_t n = v.t == RX_T_C ? v.u.c.n : 0;
+        sb_put(sb, str, n);
+        if (n < w) {
+            sb_spaces(sb, w - n);
+        }
+    } else if (fd->type == RFT_M) {
+        sb_puts(sb, "Memo");
+        if (w > 4) {
+            sb_spaces(sb, w - 4);
+        }
+    } else if (fd->type == RFT_N || fd->type == RFT_F) {
+        char num[64];
+        rx_format_num(num, sizeof(num), v.u.n.d, fd->dec, 1);
+        size_t nl = strlen(num);
+        if (nl < w) {
+            sb_spaces(sb, w - nl);
+        }
+        sb_puts(sb, num);
+    } else if (fd->type == RFT_D) {
+        char d[48];
+        if (v.u.d.y == 0) {
+            sb_puts(sb, ctx->set.century ? "  /  /    " : "  /  /  ");
+        } else if (ctx->set.century) {
+            snprintf(d, sizeof(d), "%02d/%02d/%04d", v.u.d.m, v.u.d.d, v.u.d.y);
+            sb_puts(sb, d);
+        } else {
+            snprintf(d, sizeof(d), "%02d/%02d/%02d", v.u.d.m, v.u.d.d, v.u.d.y % 100);
+            sb_puts(sb, d);
+        }
+    } else if (fd->type == RFT_L) {
+        sb_putc(sb, v.u.l == L_T ? 'T' : v.u.l == L_F ? 'F' : '?');
+        if (w > 1) {
+            sb_spaces(sb, w - 1);
+        }
+    } else if (fd->type == RFT_I) {
+        char num[64];
+        snprintf(num, sizeof(num), "%d", v.u.i);
+        size_t nl = strlen(num);
+        if (nl < w) {
+            sb_spaces(sb, w - nl);
+        }
+        sb_puts(sb, num);
+    } else {
+        strbuf tmp2;
+        sb_init(&tmp2);
+        rx_vm_display(ctx, &v, &tmp2);
+        size_t n = tmp2.len;
+        if (n < w) {
+            sb_spaces(sb, w - n);
+        }
+        sb_put(sb, tmp2.buf ? tmp2.buf : "", n);
+        sb_free(&tmp2);
+    }
+    rx_rval_free(&v);
+}
+
+/* flush the accumulated listing buffer (M10: batched writes, not per-record) */
+static void flush_list(list_ud *u)
+{
+    strbuf *sb = &u->sb;
+    if (sb->buf && sb->len) {
+        if (u->sink) {
+            fwrite(sb->buf, 1, sb->len, u->sink);
+        } else {
+            rx_out(u->ctx, sb->buf, sb->len);
+        }
+    }
+    sb->len = 0;
+}
+
+/* right-aligned decimal into out; returns length (no snprintf on hot path) */
+static size_t fmt_u32(char *out, uint32_t v)
+{
+    char t[10];
+    size_t n = 0;
+    do {
+        t[n++] = (char)('0' + v % 10);
+        v /= 10;
+    } while (v);
+    for (size_t i = 0; i < n; i++) {
+        out[i] = t[n - 1 - i];
+    }
+    return n;
+}
+
+static void print_record_line(list_ud *u, rx_dbf *dbf, uint32_t recno, int deleted)
+{
+    rx_ctx *ctx = u->ctx;
+    strbuf *sb = &u->sb;
+    char tmp[16];
+    if (!u->off) {
+        int rw = u->recw;
+        if (deleted) {
+            sb_putc(sb, '*');
+            rw--;
+        }
+        size_t n = fmt_u32(tmp, recno);
+        if (n < (size_t)rw) {
+            sb_spaces(sb, (size_t)rw - n);
+        }
+        sb_put(sb, tmp, n);
+    }
+    size_t reclen = 0;
+    const uint8_t *rb = rx_dbf_cur_recbuf(dbf, &reclen);
+    int cp = 0;
+    rx_dbf_codepage(dbf, &cp);
+    if (cp > 0) {
+        rb = NULL; /* char fields need code-page conversion: generic path */
+    }
+    for (size_t k = 0; k < u->nf; k++) {
+        size_t f = u->flds[k];
+        const uint8_t *raw = NULL;
+        if (rb) {
+            size_t off = u->foffs[f];
+            if (off + u->fds[k].len <= reclen) {
+                raw = rb + off;
+            }
+        }
+        sb_putc(sb, ' ');
+        list_emit_field(ctx, dbf, f, &u->fds[k], u->widths[k], raw, sb);
+    }
+    sb_putc(sb, '\n');
+    if (sb->len >= (128u << 10)) {
+        flush_list(u);
+    }
+}
 
 static int cb_list(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud)
 {
     list_ud *u = ud;
     int del;
     rx_dbf_deleted(dbf, &del);
-    print_record_line(ctx, dbf, recno, u->flds, u->nf, u->widths, u->recw, u->off, del);
+    (void)ctx;
+    print_record_line(u, dbf, recno, del);
     return R_OK;
 }
 
@@ -857,15 +1117,48 @@ int rx_cmd_list(rx_ctx *ctx, rx_stmt *s, int display)
             off = 1;
         }
     }
+    /* M10 7.1: LIST/DISPLAY ... TO FILE f redirect the listing to f */
+    FILE *sink = NULL;
+    for (size_t i = 0; i < s->nclause; i++) {
+        if (strcmp(s->clauses[i].key, "TOFILE") == 0 && s->clauses[i].word[0]) {
+            sink = fopen(s->clauses[i].word, "w");
+            if (!sink) {
+                free(flds);
+                return rx_raise(ctx, R_ERR_IO_OPEN, s->line, s->col, "Cannot open %s",
+                                s->clauses[i].word);
+            }
+            setvbuf(sink, NULL, _IOFBF, 1 << 20); /* big buffer: 100k-record gate (M10) */
+        }
+    }
 
+    /* M10 perf: cache field defs/widths and per-field record offsets once, so
+       the per-record loop never calls rx_dbf_field_def or re-walks the defs */
     size_t *widths = calloc(nsel, sizeof(size_t));
-    if (!widths) {
+    rx_fielddef *selfds = malloc((nsel ? nsel : 1) * sizeof(rx_fielddef));
+    size_t *foffs = malloc((nf ? nf : 1) * sizeof(size_t));
+    if (!widths || !selfds || !foffs) {
+        free(widths);
+        free(selfds);
+        free(foffs);
         free(flds);
+        if (sink) {
+            fclose(sink);
+        }
         RX_FATAL("out of memory");
+    }
+    {
+        size_t o = 1; /* byte 0 is the delete flag */
+        for (size_t i = 0; i < nf; i++) {
+            rx_fielddef fd;
+            rx_dbf_field_def(dbf, i, &fd);
+            foffs[i] = o;
+            o += fd.len;
+        }
     }
     for (size_t k = 0; k < nsel; k++) {
         rx_fielddef fd;
         rx_dbf_field_def(dbf, flds[k], &fd);
+        selfds[k] = fd;
         size_t w = strlen(fd.name);
         size_t tw = fd.len;
         if (fd.type == RFT_D) {
@@ -902,11 +1195,9 @@ int rx_cmd_list(rx_ctx *ctx, rx_stmt *s, int display)
             sb_puts(&sb, tmp);
         }
         for (size_t k = 0; k < nsel; k++) {
-            rx_fielddef fd;
-            rx_dbf_field_def(dbf, flds[k], &fd);
             sb_putc(&sb, ' ');
-            sb_puts(&sb, fd.name);
-            for (size_t i = strlen(fd.name); i < widths[k]; i++) {
+            sb_puts(&sb, selfds[k].name);
+            for (size_t i = strlen(selfds[k].name); i < widths[k]; i++) {
                 sb_putc(&sb, ' ');
             }
         }
@@ -924,14 +1215,35 @@ int rx_cmd_list(rx_ctx *ctx, rx_stmt *s, int display)
         }
         sb_putc(&sb, '\n');
         if (sb.buf) {
-            rx_out(ctx, sb.buf, sb.len);
+            if (sink) {
+                fwrite(sb.buf, 1, sb.len, sink);
+            } else {
+                rx_out(ctx, sb.buf, sb.len);
+            }
         }
         sb_free(&sb);
     }
 
-    list_ud ud = { ctx, flds, nsel, widths, recw, off };
+    list_ud ud;
+    ud.ctx = ctx;
+    ud.flds = flds;
+    ud.nf = nsel;
+    ud.fds = selfds;
+    ud.foffs = foffs;
+    ud.widths = widths;
+    ud.recw = recw;
+    ud.off = off;
+    ud.sink = sink;
+    sb_init(&ud.sb);
     rc = iterate(ctx, s, dbf, display ? 3 : 1, cb_list, &ud, NULL, 0);
+    flush_list(&ud); /* M10: drain the batched listing buffer */
+    sb_free(&ud.sb);
+    if (sink) {
+        fclose(sink);
+    }
     free(widths);
+    free(selfds);
+    free(foffs);
     free(flds);
     return rc;
 }

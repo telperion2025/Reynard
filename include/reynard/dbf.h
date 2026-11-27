@@ -122,6 +122,10 @@ int rx_dbf_zap(rx_dbf *dbf);
 /** Current record buffer/size accessors for import/export serializers. */
 const uint8_t *rx_dbf_recbuf(const rx_dbf *dbf);
 int rx_dbf_recsize(const rx_dbf *dbf, uint16_t *out);
+/** Like rx_dbf_recbuf, but NULL unless the buffer provably holds the current
+    record (no disk I/O on the hot LIST path, M10 spec 11.3; added after the
+    M6 API freeze as a pure read-only addition). */
+const uint8_t *rx_dbf_cur_recbuf(const rx_dbf *dbf, size_t *reclen);
 /** Full-control create with explicit version/mark/date (COPY fidelity). */
 int rx_dbf_create_full(const char *path, const rx_fielddef *fields, size_t n,
                        uint8_t version, uint8_t cp_mark, int yy, int mm, int dd,

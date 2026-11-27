@@ -1930,6 +1930,24 @@ static int parse_stmt(parser *p)
                     if (pk_word_is(p, "OFF")) {
                         st_add_str(&s, "OFF");
                         pk_adv(p);
+                    } else if (pk_word_is(p, "TO")) {
+                        /* LIST/DISPLAY ... TO FILE f (M10 7.1) */
+                        pk_adv(p);
+                        if (pk_word_is(p, "FILE")) {
+                            pk_adv(p);
+                            char *fp = parse_path_until(p, NULL);
+                            st_add_clause(&s, "TOFILE", fp, NULL);
+                            free(fp);
+                        } else if (pk_word_is(p, "PRINTER")) {
+                            st_add_clause(&s, "TOPRINTER", "", NULL);
+                            pk_adv(p);
+                        } else {
+                            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                           "Expected FILE or PRINTER after TO");
+                        }
+                    } else if (pk_word_is(p, "NOCONSOLE")) {
+                        st_add_clause(&s, "NOCONSOLE", "1", NULL);
+                        pk_adv(p);
                     } else if (parse_fields(p, &s)) {
                         /* FIELDS clause consumed */
                     } else {

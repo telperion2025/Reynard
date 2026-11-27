@@ -236,6 +236,10 @@ add_test(NAME browse_perf
     COMMAND reynard-harness browseperf
         ${CMAKE_CURRENT_BINARY_DIR}/test-work-perf
         $<TARGET_FILE:reynard>)
+add_test(NAME perf_gates
+    COMMAND reynard-harness perf
+        ${CMAKE_CURRENT_BINARY_DIR}/test-work-perf
+        $<TARGET_FILE:reynard>)
 
 add_test(NAME rpt_emitters
     COMMAND reynard-harness rptcheck

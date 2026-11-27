@@ -156,6 +156,7 @@ static void touch_date(rx_dbf *dbf)
 
 int rx_dbf_write_header(rx_dbf *dbf)
 {
+    rx_dbf_cache_inv(dbf);
     uint8_t hdr[32];
     memset(hdr, 0, sizeof(hdr));
     hdr[0] = dbf->version;
@@ -415,6 +416,7 @@ int rx_dbf_close(rx_dbf *dbf)
     }
     free(dbf->fields);
     free(dbf->foff);
+    free(dbf->rcache);
     free(dbf->recbuf);
     free(dbf->locks);
     free(dbf->jrecs); /* M9 8.6: transaction before-image index */
@@ -425,6 +427,7 @@ int rx_dbf_close(rx_dbf *dbf)
 
 int rx_dbf_reopen(rx_dbf *dbf, int newmode)
 {
+    rx_dbf_cache_inv(dbf);
     if (!dbf) {
         return R_ERR_RANGE;
     }
@@ -462,25 +465,74 @@ int rx_dbf_reopen(rx_dbf *dbf, int newmode)
     return R_OK;
 }
 
+#define RX_DBCACHE (256u * 1024u) /**< read-ahead block, spec 11.3 LIST gate (M10) */
+
+void rx_dbf_cache_inv(rx_dbf *dbf)
+{
+    if (dbf) {
+        dbf->rcache_len = 0;
+    }
+}
+
 int rx_dbf_load_rec(rx_dbf *dbf)
 {
     if (dbf->eof || dbf->recno < 1 || dbf->recno > dbf->nrec) {
         return R_ERR_DBF_RECNO;
     }
     off_t off = (off_t)dbf->header_size + (off_t)(dbf->recno - 1) * dbf->rec_size;
-    ssize_t got = pread(dbf->fd, dbf->recbuf, dbf->rec_size, off);
-    if (got < 0) {
-        return R_ERR_IO_READ;
+    /* M10 11.3: sequential record walks (LIST/SCAN/BROWSE over 100k+ rows) go
+       through a 256 KiB read-ahead block instead of one pread per record.
+       The cache is invalidated by every write path (rx_dbf_cache_inv), so it
+       can never serve bytes the file no longer has. */
+    if (!dbf->rcache) {
+        dbf->rcache = malloc(RX_DBCACHE);
+        if (!dbf->rcache) {
+            RX_FATAL("out of memory");
+        }
+        dbf->rcache_len = 0;
     }
-    if ((size_t)got != dbf->rec_size) {
-        return R_ERR_DBF_TRUNCATED;
+    if (!(off >= dbf->rcache_off &&
+          off + (off_t)dbf->rec_size <= dbf->rcache_off + (off_t)dbf->rcache_len)) {
+        ssize_t got = pread(dbf->fd, dbf->rcache, RX_DBCACHE, off);
+        if (got < 0) {
+            return R_ERR_IO_READ;
+        }
+        if ((size_t)got < dbf->rec_size) {
+            return R_ERR_DBF_TRUNCATED;
+        }
+        dbf->rcache_off = off;
+        dbf->rcache_len = (size_t)got;
     }
+    memcpy(dbf->recbuf, dbf->rcache + (off - dbf->rcache_off), dbf->rec_size);
     dbf->deleted = dbf->recbuf[0] == 0x2A;
+    dbf->loaded_rec = dbf->recno;
     return R_OK;
+}
+
+/* M10 (spec 11.3 perf): recbuf accessor that is only valid while it holds the
+   current record; returns NULL otherwise so callers can fall back to
+   rx_dbf_get (which re-reads from disk). recbuf always holds record
+   loaded_rec, so a direct recno change without a load is detected. */
+const uint8_t *rx_dbf_cur_recbuf(const rx_dbf *dbf, size_t *reclen)
+{
+    if (!dbf || !dbf->recbuf) {
+        return NULL;
+    }
+    if (dbf->eof || dbf->recno < 1 || dbf->recno > dbf->nrec) {
+        return NULL;
+    }
+    if (dbf->loaded_rec != dbf->recno) {
+        return NULL;
+    }
+    if (reclen) {
+        *reclen = dbf->rec_size;
+    }
+    return dbf->recbuf;
 }
 
 int rx_dbf_write_rec(rx_dbf *dbf)
 {
+    rx_dbf_cache_inv(dbf);
     if (dbf->recno < 1 || dbf->recno > dbf->nrec) {
         return R_ERR_DBF_RECNO;
     }
@@ -818,6 +870,7 @@ int rx_flush(rx_dbf *dbf)
 
 int rx_dbf_append(rx_dbf *dbf, uint32_t *recno)
 {
+    rx_dbf_cache_inv(dbf);
     if (!dbf) {
         return R_ERR_RANGE;
     }
@@ -889,6 +942,7 @@ int rx_dbf_append(rx_dbf *dbf, uint32_t *recno)
 
 int rx_dbf_put_raw(rx_dbf *dbf, const uint8_t *raw)
 {
+    rx_dbf_cache_inv(dbf);
     if (!dbf || !raw) {
         return R_ERR_RANGE;
     }
@@ -906,6 +960,7 @@ int rx_dbf_put_raw(rx_dbf *dbf, const uint8_t *raw)
 
 int rx_dbf_set_deleted(rx_dbf *dbf, int del)
 {
+    rx_dbf_cache_inv(dbf);
     if (!dbf) {
         return R_ERR_RANGE;
     }
@@ -939,6 +994,7 @@ int rx_dbf_set_deleted(rx_dbf *dbf, int del)
 
 int rx_dbf_pack(rx_dbf *dbf)
 {
+    rx_dbf_cache_inv(dbf);
     if (!dbf) {
         return R_ERR_RANGE;
     }
@@ -1158,6 +1214,7 @@ int rx_dbf_pack(rx_dbf *dbf)
 
 int rx_dbf_zap(rx_dbf *dbf)
 {
+    rx_dbf_cache_inv(dbf);
     if (!dbf) {
         return R_ERR_RANGE;
     }

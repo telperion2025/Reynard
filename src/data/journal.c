@@ -182,6 +182,7 @@ int rx_begin(rx_dbf *dbf)
 /* replay the sidecar in reverse, restoring before-images */
 static int rollback_apply(rx_dbf *dbf)
 {
+    rx_dbf_cache_inv(dbf); /* replay rewrites the file: drop read-ahead (M10) */
     struct stat st;
     if (fstat(dbf->rjn_fd, &st) != 0 || st.st_size < 4) {
         return R_ERR_IO_READ;
