@@ -930,7 +930,7 @@ static int filter_events(const struct dirent* d) {
 }
 
 static int cmp_lines(const char* a, const char* b, char* diffbuf, size_t diffsz) {
-    size_t na, nb;
+    size_t na = 0, nb = 0;
     char* ca = read_file(a, &na);
     char* cb = read_file(b, &nb);
     if (!ca || !cb) {
@@ -981,7 +981,18 @@ static void abs_path(const char* p, char* out, size_t outsz) {
         snprintf(out, outsz, "%s", p);
         return;
     }
-    snprintf(out, outsz, "%s/%s", cwd, p);
+    {
+        size_t cl = strlen(cwd), pl = strlen(p);
+        if (cl + 1 + pl < outsz) {
+            memcpy(out, cwd, cl);
+            out[cl] = '/';
+            memcpy(out + cl + 1, p, pl + 1);
+        } else {
+            size_t n = pl < outsz - 1 ? pl : outsz - 1;
+            memcpy(out, p, n);
+            out[n] = '\0';
+        }
+    }
 }
 
 static int golden(const char* dir, const char* bin, const char* fixtures, const char* workroot,
@@ -2251,9 +2262,9 @@ static int rptcheck(const char* dir, const char* bin, const char* fixtures, cons
                 }
             } else {
                 /* hash compare: golden holds the sha256 hex of the output */
-                size_t gn;
+                size_t gn = 0;
                 char* want = read_file(gp, &gn);
-                size_t on;
+                size_t on = 0;
                 char* ob = read_file(op, &on);
                 uint8_t h[32];
                 char hex[65];

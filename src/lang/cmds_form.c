@@ -136,7 +136,7 @@ int rx_cmd_sayget(rx_ctx* ctx, rx_stmt* s) {
     if (rc != R_OK) {
         return rc;
     }
-    double rd, cd;
+    double rd = 0, cd = 0;
     int ok1 = rv_to_num(&rv, &rd);
     int ok2 = rv_to_num(&cv, &cd);
     rx_rval_free(&rv);

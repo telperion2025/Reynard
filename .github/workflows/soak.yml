@@ -1,0 +1,39 @@
+name: Soak
+
+# Spec 12: daily soak. GitHub caps a single job at 6 h, so the "24 h soak"
+# runs as a daily 5.5 h loop window (see docs/DEVIATIONS.md); the loop runs
+# the full deterministic suite repeatedly until the time budget is spent.
+on:
+  schedule:
+    - cron: "0 3 * * *" # daily 03:00 UTC
+  workflow_dispatch:
+
+jobs:
+  soak:
+    name: 24h-capped soak loop (spec 12)
+    runs-on: ubuntu-latest
+    timeout-minutes: 360 # Actions hard cap is 6 h per job
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (ASan+UBSan)
+        run: |
+          cmake -B build-san -DRX_WERROR=on \
+            -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -g" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+          cmake --build build-san -j 2
+      - name: Soak loop (~5.5 h of repeated full-suite runs)
+        run: |
+          export ASAN_OPTIONS=detect_leaks=1
+          END=$((SECONDS + 5 * 3600 + 1800))
+          i=0
+          while [ $SECONDS -lt $END ]; do
+            i=$((i + 1))
+            echo "=== soak iteration $i ($(date -u +%H:%M:%S)) ==="
+            ctest --test-dir build-san --output-on-failure || exit 1
+          done
+          echo "soak completed $i iterations"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: soak-log
+          path: build-san/Testing/Temporary/LastTest.log

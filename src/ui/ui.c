@@ -8,6 +8,7 @@
  *        message-line hooks so interpreter output and errors land in the
  *        Command window and on the message line (§6.4, §6.6).
  */
+#include "reynard/version.h"
 #include "ui/ui_internal.h"
 
 #include <ctype.h>
@@ -265,8 +266,12 @@ int rx_ui_run(rx_ctx* ctx, const term_backend* tb) {
     ctx->say_ud = &ui;
     ctx->screen_ud = &ui;
 
-    cmdwin_out(ui.cmd, "Reynard 0.1.0 — the clever fox of terminals\n",
-               strlen("Reynard 0.1.0 — the clever fox of terminals\n"));
+    {
+        char banner[64];
+        snprintf(banner, sizeof(banner), "Reynard %s — the clever fox "
+                 "of terminals\n", RX_VERSION);
+        cmdwin_out(ui.cmd, banner, strlen(banner));
+    }
     cmdwin_out(ui.cmd, "F10 or Alt opens the menubar. Type a command below.\n",
                strlen("F10 or Alt opens the menubar. Type a command below.\n"));
     ui_set_msg(&ui, "Welcome to Reynard");

@@ -6,6 +6,7 @@
  *        Filer, Calculator, Calendar/Diary, ASCII Chart. Every control is a
  *        hitbox; Esc closes; border drag moves the dialog.
  */
+#include "reynard/version.h"
 #include "ui/ui_internal.h"
 
 #include <ctype.h>
@@ -273,8 +274,9 @@ static rx_dlg* dlg_lines(struct rx_ui* ui, const char* title, int ww, int hh,
 }
 
 void dlg_about(struct rx_ui* ui) {
+    static char first[64];
+    snprintf(first, sizeof(first), "Reynard %s — the clever fox of terminals", RX_VERSION);
     static const char* const lines[] = {
-        "Reynard 0.1.0 — the clever fox of terminals",
         "A FoxPro 2.6a reimplementation for Unix terminals.",
         "",
         "Copyright (c) 2025 The Reynard contributors.",
@@ -282,7 +284,15 @@ void dlg_about(struct rx_ui* ui) {
         "",
         "Press Esc to close.",
     };
-    dlg_lines(ui, "About Reynard", 52, 9, lines, sizeof(lines) / sizeof(lines[0]));
+    {
+        const size_t nl = sizeof(lines) / sizeof(lines[0]);
+        const char* all[8];
+        all[0] = first;
+        for (size_t i = 0; i < nl && i + 1 < sizeof(all) / sizeof(all[0]); i++) {
+            all[i + 1] = lines[i];
+        }
+        dlg_lines(ui, "About Reynard", 52, 9, all, nl + 1);
+    }
 }
 
 void dlg_macros(struct rx_ui* ui) {

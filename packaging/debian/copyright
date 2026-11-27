@@ -1,0 +1,11 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: reynard
+Source: https://github.com/telperion2025/Reynard
+
+Files: *
+Copyright: 2025 The Reynard contributors
+License: BSD-2-Clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the conditions of the
+ BSD-2-Clause license (see /usr/share/doc/reynard/licenses/BSD-2-Clause.txt)
+ are met.

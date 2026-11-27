@@ -21,7 +21,7 @@
 
 extern const char rx_license_text[];
 
-#define RX_VERSION "0.1.0"
+#include "reynard/version.h"
 
 static void usage(FILE* f) {
     fprintf(f, "Usage: reynard [options] [script.prg]\n"

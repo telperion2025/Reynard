@@ -1,0 +1,28 @@
+name: MSan (monthly)
+
+# Spec 12: MemorySanitizer monthly. MSan needs an instrumented libc++, so the
+# harness runs with -fsanitize=memory and all dependencies instrumented via
+# MSAN_INSTRUMENTED... in practice: build with clang -fsanitize=memory and
+# run the ctest suite; uninitialized reads fail the job.
+on:
+  schedule:
+    - cron: "0 5 1 * *" # 1st of the month 05:00 UTC
+  workflow_dispatch:
+
+jobs:
+  msan:
+    name: MSan monthly (spec 12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+      - name: Build with MemorySanitizer
+        run: |
+          CC=clang cmake -B build-msan -DRX_WERROR=on \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_FLAGS="-fsanitize=memory -fsanitize-memory-track-origins=2 -fno-omit-frame-pointer -g" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=memory"
+          cmake --build build-msan -j 2
+      - name: Run suite under MSan
+        run: ctest --test-dir build-msan --output-on-failure

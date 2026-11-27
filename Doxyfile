@@ -1,0 +1,26 @@
+# Doxyfile for Reynard (spec 11.1, M10). Run from the repo root:  doxygen Doxyfile
+# or via the build:  cmake --build build --target docs   (== `make docs`)
+# Output: build/docs/html  (published to the `docs` branch by the CI docs job)
+DOXYFILE_ENCODING      = UTF-8
+PROJECT_NAME           = "Reynard"
+PROJECT_NUMBER         = 1.0.0
+PROJECT_BRIEF          = "Cross-platform terminal reimplementation of FoxPro 2.x/xBase (C17)"
+OUTPUT_DIRECTORY       = build/docs
+INPUT                  = include src
+INPUT_ENCODING         = UTF-8
+FILE_PATTERNS          = *.h *.c
+RECURSIVE              = YES
+EXCLUDE_PATTERNS       = */build*/* */vendor/*
+# Public API gate (M6+): every public symbol must be documented; warnings are
+# printed for undocumented members and missing parameters.
+EXTRACT_ALL            = NO
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = NO
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_NO_PARAMDOC       = YES
+WARN_AS_ERROR          = NO
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+GENERATE_LATEX         = NO
+QUIET                  = YES

@@ -1,0 +1,5 @@
+bin/reynard
+%%PORTDOCS%%%%DOCSDIR%%/README.md
+%%PORTDOCS%%%%DOCSDIR%%/CHANGELOG.md
+%%PORTDOCS%%%%DOCSDIR%%/LICENSE
+share/man/man1/reynard.1

@@ -1,0 +1,4 @@
+# Fill in with `make makesum` in the ports tree.
+TIMESTAMP = 1790000000
+SHA256 (reynard-1.0.0.tar.gz) = REPLACE_WITH_MAKESUM
+SIZE (reynard-1.0.0.tar.gz) = 0

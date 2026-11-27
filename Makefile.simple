@@ -103,8 +103,20 @@ install: reynard
 	install -m 755 reynard $(DESTDIR)/usr/local/bin/reynard
 	install -m 644 docs/man/reynard.1 $(DESTDIR)/usr/local/share/man/man1/reynard.1
 
+# M10 (spec 11.1): API docs via Doxygen; the CI docs job publishes
+# build/docs/html to the `docs` branch. Falls back to the cmake target.
+docs:
+	@if command -v doxygen >/dev/null 2>&1; then \
+		doxygen Doxyfile && echo "docs in build/docs/html"; \
+	elif [ -d build ]; then \
+		cmake --build build --target docs; \
+	else \
+		echo "install doxygen (or configure cmake in build/) for 'make docs'"; \
+		exit 1; \
+	fi
+
 clean:
 	rm -f reynard reynard-harness license_text.c
-	rm -rf .test-work
+	rm -rf .test-work build/docs
 
-.PHONY: all test install clean
+.PHONY: all test install clean docs

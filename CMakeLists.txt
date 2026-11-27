@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(reynard VERSION 0.1.0 LANGUAGES C)
+project(reynard VERSION 1.0.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -263,4 +263,47 @@ add_test(NAME proj_engine
 
 if(ENABLE_FUZZ)
     add_subdirectory(tests/fuzz)
+endif()
+
+# ---- M10 release packaging (spec 13) -------------------------------------
+install(TARGETS reynard RUNTIME DESTINATION bin)
+install(FILES docs/man/reynard.1 DESTINATION share/man/man1)
+install(FILES README.md CHANGELOG.md LICENSE
+        DESTINATION share/doc/reynard)
+install(FILES LICENSES/BSD-2-Clause.txt
+        DESTINATION share/doc/reynard/licenses)
+
+set(CPACK_PACKAGE_NAME "reynard")
+set(CPACK_PACKAGE_VENDOR "The Reynard contributors")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
+    "Cross-platform terminal reimplementation of FoxPro 2.x/xBase (C17)")
+set(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/telperion2025/Reynard")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "The Reynard contributors")
+set(CPACK_DEBIAN_PACKAGE_SECTION "devel")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6, libncursesw6 | libncurses6")
+set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")
+set(CPACK_RPM_PACKAGE_LICENSE "BSD-2-Clause")
+set(CPACK_RPM_PACKAGE_GROUP "Development/Tools")
+set(CPACK_RPM_PACKAGE_REQUIRES "ncurses")
+if(APPLE)
+    set(CPACK_GENERATOR "TGZ;ZIP")
+else()
+    set(CPACK_GENERATOR "DEB;RPM;TGZ")
+endif()
+include(CPack)
+
+# ---- M10 docs (spec 11.1): 'make docs' / cmake --build --target docs -----
+find_package(Doxygen QUIET)
+if(DOXYGEN_FOUND)
+    add_custom_target(docs
+        COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Generating Doxygen API docs into build/docs/html")
+else()
+    add_custom_target(docs
+        COMMAND ${CMAKE_COMMAND} -E echo
+            "doxygen not found: install doxygen to build API docs (make docs)")
 endif()
