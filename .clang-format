@@ -11,8 +11,11 @@ PointerAlignment: Left
 AllowShortFunctionsOnASingleLine: None
 AllowShortIfStatementsOnASingleLine: false
 SortIncludes: CaseSensitive
+# System/POSIX headers (<...>) sort BEFORE project headers ("..."): glibc
+# <unistd.h> redefines R_OK, and reynard/status.h must own R_OK (=0), so the
+# include order is load-bearing (see docs/DEVIATIONS.md).
 IncludeCategories:
-  - Regex: '^"'
-    Priority: 1
   - Regex: '^<'
+    Priority: 1
+  - Regex: '^"'
     Priority: 2

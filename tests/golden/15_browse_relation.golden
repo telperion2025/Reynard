@@ -1,0 +1,24 @@
+ System  File  Edit  Database  Record  Program  Window  Help
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ┌─ Command ───────────────────────────────────────────────────────────────×┐
+  │SET RELATION TO RECNO() INTO PEOPLE                                       │
+  │BROWSE                                                                    │
+  │SELECT PEOPLE                                                             │
+  │? RECNO(), NAME                                                           │
+  │3 Carol                                                                   │
+  │                                                                          │
+  └──────────────────────────────────────────────────────────────────────────┘
+Welcome to Reynard                                             NUM 1 PEOPLE 3/5

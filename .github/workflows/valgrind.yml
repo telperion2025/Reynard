@@ -1,0 +1,34 @@
+name: Valgrind (weekly)
+
+# Spec 12: valgrind weekly. Runs the deterministic harness modes under
+# valgrind memcheck; any error (leak or invalid access) fails the job.
+on:
+  schedule:
+    - cron: "0 4 * * 0" # Sundays 04:00 UTC
+  workflow_dispatch:
+
+jobs:
+  valgrind:
+    name: valgrind memcheck (spec 12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install valgrind
+        run: sudo apt-get update && sudo apt-get install -y valgrind
+      - name: Build (plain, -O1 -g for readable stacks)
+        run: |
+          cmake -B build-vg -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_FLAGS="-O1 -g -fno-omit-frame-pointer"
+          cmake --build build-vg -j 2
+      - name: valgrind selftest + conformance + roundtrip + cdx + golden
+        run: |
+          VG="valgrind --error-exitcode=99 --leak-check=full --show-leak-kinds=all --errors-for-leak-kinds=all -q"
+          mkdir -p .vg-work
+          $VG ./build-vg/reynard-harness selftest
+          $VG ./build-vg/reynard-harness conformance tests/conformance \
+              ./build-vg/reynard testdata/gen .vg-work
+          $VG ./build-vg/reynard-harness roundtrip testdata/gen .vg-work
+          $VG ./build-vg/reynard-harness cdx .vg-work
+          $VG ./build-vg/reynard-harness golden tests/golden \
+              ./build-vg/reynard testdata/gen .vg-work
+          $VG ./build-vg/reynard -t -c "? 1+1"

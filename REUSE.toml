@@ -1,19 +1,11 @@
 version = 1
 
+# Everything in this repository is BSD-2-Clause. The explicit dotfile/.github
+# entries are needed because glob `**` does not descend into hidden paths.
+# Note: when ncurses is vendored (macOS builds, -DUSE_SYSTEM_NCURSES=off) the
+# vendored sources are fetched at build time and are NOT committed; they are
+# distributed under the ncurses MIT-style license (see vendor/ when fetched).
 [[annotations]]
-path = ["LICENSE"]
+path = ["**", ".github/**", ".clang-format", ".editorconfig", ".gitignore", "LICENSE"]
 SPDX-License-Identifier = "BSD-2-Clause"
 SPDX-FileCopyrightText = "2025 The Reynard contributors"
-
-[[annotations]]
-path = ["**/*.{c,h,py,md,1,toml,yml,cfg,txt,cmake}", "Makefile.simple", "CMakeLists.txt", ".editorconfig", ".clang-format", ".gitignore"]
-SPDX-License-Identifier = "BSD-2-Clause"
-SPDX-FileCopyrightText = "2025 The Reynard contributors"
-
-# Vendored ncurses (built only on macOS or with -DUSE_SYSTEM_NCURSES=off)
-# is distributed under the ncurses MIT-style license; see the upstream
-# package when vendored. It is not part of this repository's default tree.
-[[annotations]]
-path = ["vendor/ncurses/**"]
-SPDX-License-Identifier = "MIT"
-SPDX-FileCopyrightText = "2016-2021,2024 Free Software Foundation, Inc."

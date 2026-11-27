@@ -1,0 +1,6 @@
+USE blank
+APPEND FROM people
+? RECCOUNT()
+ZAP
+? RECCOUNT(), BOF(), EOF()
+LIST

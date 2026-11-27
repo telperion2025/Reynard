@@ -14,13 +14,12 @@
 static int log_level = 0; /* 0 = off */
 static int log_inited = 0;
 
-void rx_log_init(void)
-{
+void rx_log_init(void) {
     if (log_inited) {
         return;
     }
     log_inited = 1;
-    const char *v = getenv("RX_LOG");
+    const char* v = getenv("RX_LOG");
     if (!v) {
         return;
     }
@@ -35,9 +34,8 @@ void rx_log_init(void)
     }
 }
 
-void rx_fatal(const char *what, const char *file, int line)
-{
-    FILE *f = fopen("reynard-crash.log", "w");
+void rx_fatal(const char* what, const char* file, int line) {
+    FILE* f = fopen("reynard-crash.log", "w");
     if (f) {
         fprintf(f, "reynard fatal: %s at %s:%d\n", what, file, line);
         fclose(f);
@@ -46,15 +44,14 @@ void rx_fatal(const char *what, const char *file, int line)
     abort();
 }
 
-void rx_log(int level, const char *fmt, ...)
-{
+void rx_log(int level, const char* fmt, ...) {
     if (!log_inited) {
         rx_log_init();
     }
     if (log_level == 0 || level > log_level) {
         return;
     }
-    static const char *names[] = { "", "ERROR", "WARN", "INFO", "DEBUG" };
+    static const char* names[] = {"", "ERROR", "WARN", "INFO", "DEBUG"};
     fprintf(stderr, "[reynard %s] ", names[level & 7]);
     va_list ap;
     va_start(ap, fmt);

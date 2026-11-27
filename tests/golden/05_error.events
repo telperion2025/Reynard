@@ -1,0 +1,5 @@
+# §6.6: an interpreter error in interactive mode lands on the message line
+# (status bar left), not on stderr, and the session continues.
+text ? 1/0
+key enter
+eof

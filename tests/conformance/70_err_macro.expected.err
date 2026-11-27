@@ -1,0 +1,3 @@
+Error in line 2 col 1 of case.prg: Variable not found: undef
+? &undef
+^

@@ -1,0 +1,6 @@
+# §6.4 Command window: type a command, Enter executes it into the window's
+# scrollback, Up recalls it from the history ring.
+text ? 1+1, "hi"
+key enter
+key up
+eof

@@ -1,0 +1,16 @@
+Source: reynard
+Section: devel
+Priority: optional
+Maintainer: The Reynard contributors
+Build-Depends: debhelper-compat (= 13), cmake, libncurses-dev
+Standards-Version: 4.6.2
+Homepage: https://github.com/telperion2025/Reynard
+
+Package: reynard
+Architecture: any
+Depends: libc6, libncursesw6 | libncurses6, ${shlibs:Depends}, ${misc:Depends}
+Description: Cross-platform terminal reimplementation of FoxPro 2.x/xBase
+ Reynard is a C17 reimplementation of the FoxPro 2.x/xBase developer
+ environment for modern POSIX terminals: DBF tables with CDX/IDX indexes,
+ the xBase language, BROWSE, @ SAY/GET forms, screen builder, reports,
+ menus, projects and a help browser, with deterministic -t test mode.

@@ -2,7 +2,7 @@
 
 This document is the authoritative language reference (spec §7). It covers
 the full v1.0 target; the **Status** column shows what is implemented at
-the current milestone (M1). Every implemented bullet has at least one
+the current milestone (M3). Every implemented bullet has at least one
 `tests/conformance/` case (spec §14.6; index in
 [tests/conformance/INDEX.md](../tests/conformance/INDEX.md)).
 
@@ -52,28 +52,32 @@ spaces of the left operand) — `* / %` — `** ^` (right associative) — unary
 
 ## 4. Commands
 
-Status legend: ✅ implemented at M1, 🚧 partial, ⏳ planned (milestone).
+Status legend: ✅ implemented (milestone noted), 🚧 partial, ⏳ planned (milestone).
 
 ### Data browsing / positioning
 
 | Command | Status |
 | --- | --- |
-| `USE [table] [IN n\|alias] [ALIAS a] [AGAIN] [EXCLUSIVE\|SHARED] [NOUPDATE] [INDEX ...] [ORDER ...]` | ✅ (INDEX/ORDER accepted, applied at M6) |
+| `USE [table] [IN n\|alias] [ALIAS a] [AGAIN] [EXCLUSIVE\|SHARED] [NOUPDATE] [INDEX f1[,f2...]] [ORDER n\|TAG t [OF cdx]]` | ✅ M6 (INDEX/ORDER attach + controlling order) |
 | `CLOSE [ALL\|DATABASES]` | ✅ |
 | `SELECT n\|alias` | ✅ |
 | `GO\|GOTO TOP\|BOTTOM\|RECORD n\|expr` | ✅ |
 | `SKIP [n]` | ✅ (FoxPro BOF/EOF rules, §7.6) |
-| `LIST [scope] [OFF]` / `DISPLAY [scope]` | ✅ scopes ALL/REST/NEXT n/RECORD n; SET HEADINGS/DELETED honored |
-| `BROWSE` | ⏳ M4 (raises R_ERR_NOUI 601 in batch) |
-| `LOCATE/CONTINUE/SEEK/SET ORDER/SET INDEX` | ⏳ M2/M6 |
-| `APPEND/APPEND BLANK/APPEND FROM/REPLACE/DELETE/RECALL/PACK/ZAP/REINDEX/INDEX ON/COPY TO/SORT TO/TOTAL TO/COUNT/SUM/AVERAGE/CALCULATE/SCATTER/GATHER/FLUSH` | ⏳ M2+ |
+| `LIST [scope] [FOR/WHILE] [FIELDS ...] [OFF]` / `DISPLAY [scope] ...` | ✅ M2: scopes, FOR/WHILE, FIELDS, OFF, SET FILTER/HEADINGS/DELETED, deleted `*` marker |
+| `BROWSE [FIELDS f[:H="t"][:W=n][:P="p"][:V=e[:E="m"]][:F][:R], ...] [PARTITION n] [LEDIT|REDIT] [FREEZE f] [LOCK n] [WIDTH n] [NOAPPEND] [NODELETE] [NOEDIT|NOMODIFY] [NOWAIT] [TITLE "t"] [FOR e] [WHEN e] [VALID[:F] e[:E="m"]]` / `CHANGE` | ✅ M4 interactive grid (§9.1: nav/edit/:V/FREEZE/PARTITION/LEDIT/REDIT/mouse; raises R_ERR_NOUI 601 in batch); header popover sort/filter ⏳ M6; memo-cell editing ⏳ M7 |
+| `LOCATE [scope] FOR e [WHILE e]` / `CONTINUE` | ✅ M2 (FOUND(), `Record = n`); scans in tag order when an index order is active |
+| `SEEK e` | ✅ M6 (controlling order; SET EXACT ON = exact match, OFF = first key >= e; miss → EOF, FOUND()=.F.; SET DELETED ON skips deleted entries) |
+| `INDEX ON e TO file \| TAG t [OF cdx] [FOR e] [UNIQUE] [DESCENDING] [ADDITIVE]` / `REINDEX` | ✅ M6 (structural CDX tag or standalone .idx; new tag becomes controlling; REINDEX rebuilds all tags) |
+| `SET INDEX TO [f1[,f2...]] [ADDITIVE]` / `SET ORDER TO [n \| [TAG] t [OF cdx] \| e]` / `SET UNIQUE ON\|OFF` | ✅ M6 (SET INDEX TO bare closes non-structural files; ORDER 0 = natural order) |
+| `APPEND BLANK` / `APPEND FROM f [TYPE] SDF\|DELIMITED [WITH c\|BLANK\|TAB]` (bare APPEND ✅ M4: append-mode BROWSE grid interactively, R_ERR_NOUI 601 in batch) / `REPLACE [scope] [FOR/WHILE] f WITH e, ...` / `DELETE` / `RECALL` / `PACK` / `ZAP` / `COPY TO f [FIELDS..] [scope] [TYPE SDF\|DELIMITED [WITH..]]` / `COPY STRUCTURE TO f [FIELDS..] [EXTENDED]` / `CREATE f FROM struct` / `FLUSH` / `UNLOCK [ALL]` | ✅ M2; SORT TO/TOTAL TO/COUNT/SUM/AVERAGE/CALCULATE/SCATTER/GATHER ⏳ M7+ |
 | alias prefixes `alias->field`, `m.var` | ✅ |
 
 ### Environment
 
 | Command | Status |
 | --- | --- |
-| `SET <option> ON\|OFF\|TO v` | 🚧 implemented: TALK, HEADINGS, EXACT, FIXED, CENTURY, DELETED, ESCAPE, CONSOLE, SAFETY, CLOCK, MOUSE, DECIMALS, DEFAULT, PATH, DATE; all other Appendix B options parse and are accepted (semantics at their milestone) |
+| `SET <option> ON\|OFF\|TO v` | 🚧 implemented: TALK, HEADINGS, EXACT, FIXED, CENTURY, DELETED, ESCAPE, CONSOLE, SAFETY, CLOCK, MOUSE, DECIMALS, DEFAULT, PATH, DATE, EXCLUSIVE, MULTILOCKS, REPROCESS, FILTER; all other Appendix B options parse and are accepted (semantics at their milestone) |
+| `SET RELATION TO [e INTO alias [, ...]] [ADDITIVE]` / `SET RELATION OFF INTO alias` / `SET SKIP TO [alias [, ...]]` | ✅ M4 (§8.1: driver work area repositions INTO targets on GO/SKIP/LOCATE; without an index the key is numeric = record number; SET SKIP TO holds targets on SKIP; M6 adds index-keyed seeks) |
 | `? / ??` | ✅ |
 | `var = expr`, `STORE expr TO v1, v2` | ✅ |
 | `QUIT` | ✅ |
@@ -81,13 +85,41 @@ Status legend: ✅ implemented at M1, 🚧 partial, ⏳ planned (milestone).
 
 ### Program flow, I/O, macros (M5)
 
-⏳ IF/ELSE/ENDIF, DO WHILE, FOR/ENDFOR, DO CASE, SCAN/ENDSCAN, LOOP,
-EXIT, RETURN, RETRY, CANCEL, SUSPEND, RESUME, PARAMETERS/LPARAMETERS,
-DO [WITH], PROCEDURE/FUNCTION, DEFINE WINDOW/MENU/POPUP/BAR,
-ACTIVATE/DEACTIVATE/SHOW/HIDE, ON KEY LABEL, ON ERROR, ON ESCAPE,
-PUSH/POP, READ EVENTS, CLEAR EVENTS, @ SAY/GET, READ, TEXT...ENDTEXT,
-INPUT, ACCEPT, WAIT, TYPE, REPORT FORM, LABEL FORM, SET PRINTER,
-SET ALTERNATE, & macro, EVALUATE(), GETEXPR.
+✅ M5 implemented: IF/ELSEIF/ELSE/ENDIF, DO WHILE/ENDDO, FOR [STEP]/NEXT/
+ENDFOR, DO CASE/OTHERWISE/ENDCASE, SCAN [scope] [FOR/WHILE]/ENDSCAN, LOOP,
+EXIT (leave the innermost loop), RETURN [expr], RETRY (inside ON ERROR),
+CANCEL, DO name [WITH args], PROCEDURE/FUNCTION ... ENDPROC/ENDFUNC
+(order-independent, recursive UDFs), PARAMETERS/LPARAMETERS (by value),
+PUBLIC/PRIVATE [ALL LIKE/EXCEPT], RELEASE [ALL [LIKE/EXCEPT]|MEMVAR],
+DIMENSION/DECLARE arrays a[i,j] + AELEMENT/ASUBSCRIPT/ACOPY/ADEL/AINS/
+ASCAN/ASORT/AFIELDS/ADIR/ALEN, & macro (execution-time expansion, depth 16),
+ON ERROR DO + ERROR()/MESSAGE(), TEXT...ENDTEXT, INPUT, ACCEPT, WAIT
+(non-blocking in -t), .RXP compiled cache (byte-reproducible, sha256-keyed).
+
+\u2705 M7 forms (spec {U}9.2): `@ r,c [SAY e [PICTURE p] [FUNCTION f]] [GET var
+[SIZE h,w] [PICTURE p] [FUNCTION f] [WHEN e] [VALID e[:E="m"]] [RANGE a[,b]]
+[DEFAULT e] [COLOR SCHEME n]]`, `READ [CYCLE]`, `CLEAR GETS`, `CLEAR READ`,
+`@ r,c CLEAR`, `@ r,c BOX [TO r2,c2]`, `TRANSFORM(e, pic[, func])`,
+`CREATE|MODIFY|GENERATE SCREEN name [TO f.prg]` (designer + .SCR/.RSO +
+.PRG codegen, docs/formats.md {U}6), `DO file.prg` file fallback.
+
+\u2705 M9 menu generator + transactions + packaging (spec {U}8.6/9.5/9.6):
+`DEFINE MENU/PAD/POPUP/BAR ... [PROMPT p] [KEY k]`, `ON PAD p OF m <cmd>`,
+`ON SELECTION PAD p | BAR n OF pop <cmd>`, `ACTIVATE MENU m [PAD p]`,
+`SHOW|DEACTIVATE|RELEASE MENU [m]`, `BEGIN|END TRANSACTION`, `ROLLBACK`,
+`BUILD PROJECT name FROM file.rpj`, `SET PROCEDURE TO file.prg|app.rpp`,
+`ON KEY LABEL key <cmd>|DO proc`, `SET HELP TO file.dbf`; `reynard --run
+app.rpp` (see docs/formats.md {U}8).
+
+\u23f3 remaining (later milestones): DEFINE WINDOW, ACTIVATE/DEACTIVATE/SHOW/HIDE
+WINDOW, ON ESCAPE, PUSH/POP, READ EVENTS, CLEAR EVENTS, SET PRINTER,
+SET ALTERNATE, EVALUATE(), GETEXPR, SUSPEND/RESUME interactive (batch: note only).
+
+\u2705 M8 reports/labels (spec {U}9.3/9.4/7.7): `REPORT FORM x [ENVIRONMENT]
+[scope] [FOR/WHILE] [PLAIN|HEADING c] [NOEJECT] [TO PRINTER|FILE f|PREVIEW]
+[SUMMARY] [RANGE n1[,n2]] [NOCONSOLE] [PDSETUP]`, `LABEL FORM x [...] [SAMPLE]`,
+`CREATE|MODIFY REPORT|LABEL x` (designer + canonical .FRM/.RLB, docs/formats.md
+{U}7), five emitters (text/PS/PDF/HTML/CSV) with the CI determinism gate.
 
 ## 5. Built-in functions (Appendix A)
 
@@ -105,14 +137,17 @@ SET ALTERNATE, & macro, EVALUATE(), GETEXPR.
   TIME()="00:00:00", SECONDS()=0), YEAR, MONTH, DAY, DOW, CDOW, CMONTH,
   DTOS, DTOC, CTOD, GOMONTH, MDY, DMY, QUARTER, WEEK, HOUR, MINUTE, SEC.
 - **Database**: RECNO, RECCOUNT, BOF, EOF, DELETED, ALIAS, SELECT, USED,
-  FCOUNT, FIELD, FSIZE, HEADER, RECSIZE, FOUND, LUPDATE, FILTER, ORDER, TAG.
+  FCOUNT, FIELD, FSIZE, HEADER, RECSIZE, FOUND (M2), LUPDATE (M2),
+  FLOCK, RLOCK/LOCK (M2), FILTER (M6). **M6**: ORDER, TAG, TAGCOUNT,
+  CDX, MDX, NDX, KEY, KEYCOUNT, TARGET, RELATION.
 - **System**: OS, VERSION, GETENV, MEMORY, DISKSPACE, SYS, CAPSLOCK,
   NUMLOCK, INSMODE, INKEY, LASTKEY, READKEY, SET, SCOLS, SROWS, CURDIR,
-  FILE.
+  FILE; **M5**: ERROR, MESSAGE.
+- **Arrays (M5)**: AELEMENT, ASUBSCRIPT, ACOPY, ADEL, AINS, ASCAN, ASORT,
+  AFIELDS, ADIR, ALEN.
 
-⏳ remaining Appendix A entries (arrays ACOPY..., menu/window WLAST...,
-low-level FOPEN... file I/O, OEMTOANSI/ANSITOOEM) land with their
-milestones (M2/M5).
+⏳ remaining Appendix A entries (menu/window WLAST..., low-level FOPEN...
+file I/O, OEMTOANSI/ANSITOOEM) land with their milestones (M6+).
 
 ## 6. Errors
 

@@ -1,0 +1,11 @@
+Screen case generated to out.prg.
+* Reynard generated screen DEMO (from DEMO.scr)
+* Regenerate with GENERATE SCREEN; edit the .SCR, not this file.
+@ 2,2 SAY "Name:"
+@ 2,8 SAY "Name:" GET NAME SIZE 1,16 PICTURE "@K XXXXXXXXXXXXXXXX" VALID name <> ""
+@ 3,2 SAY "Age:"
+@ 3,8 GET AGE SIZE 1,3 PICTURE "999" RANGE 0,120 DEFAULT 0
+@ 1,1 BOX TO 5,30
+* CONTROL BUTTON 7,2 "OK" VAR BTN
+READ CYCLE
+Screen case compiled to case.rso.

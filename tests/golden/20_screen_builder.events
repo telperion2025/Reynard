@@ -1,0 +1,26 @@
+# M7 9.2: CREATE SCREEN designer: place a SAY, a GET, a box; Ctrl+W saves
+# .SCR+.RSO; then GENERATE SCREEN emits the .PRG and TYPE shows the round-trip
+text CREATE SCREEN demo
+key enter
+text s
+text Name:
+key enter
+key down
+text g
+text age
+key enter
+text b
+key down
+key down
+key right
+key right
+key right
+key right
+key right
+key b
+key ctrl-w
+text GENERATE SCREEN demo
+key enter
+text TYPE demo.scr
+key enter
+eof

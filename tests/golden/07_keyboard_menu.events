@@ -1,0 +1,8 @@
+# Appendix C keyboard path: F10 opens the menubar, Down moves to Macros,
+# Enter runs it, Esc closes the dialog, Alt+H opens the Help pulldown.
+key f10
+key down
+key enter
+key esc
+key alt-h
+eof

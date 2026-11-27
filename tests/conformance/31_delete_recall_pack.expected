@@ -1,0 +1,17 @@
+1 record deleted.
+5
+Record# NAME                
+------- --------------------
+      1 Alice               
+      3 Carol               
+      5 Eve                 
+1 record recalled.
+1 record deleted.
+T
+4
+Record# NAME                 AGE BORN     MARRIED SCORE 
+------- -------------------- --- -------- ------- ------
+      1 Alice                 30 03/12/95 T        87.50
+      2 Bob                   25 02/29/00 F        92.00
+      3 Carol                 41 07/04/83 T        78.25
+      4 Eve                   28 01/01/97 T        99.99

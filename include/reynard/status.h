@@ -83,18 +83,18 @@ extern "C" {
 
 /** Structured error record carried through the interpreter (spec §7.4). */
 typedef struct r_err {
-    int code;            /**< Appendix D code */
-    int line;            /**< 1-based source line, 0 if not applicable */
-    int col;             /**< 1-based source column, 0 if not applicable */
-    char src_file[260];  /**< source file name, empty for ad-hoc input */
-    char msg[512];       /**< human-readable message (English catalog, v1.0) */
+    int code;           /**< Appendix D code */
+    int line;           /**< 1-based source line, 0 if not applicable */
+    int col;            /**< 1-based source column, 0 if not applicable */
+    char src_file[260]; /**< source file name, empty for ad-hoc input */
+    char msg[512];      /**< human-readable message (English catalog, v1.0) */
 } r_err;
 
 /** Return the short catalog string for an Appendix D code. */
-const char *rx_status_str(int code);
+const char* rx_status_str(int code);
 
 /** Fill @p msg with the catalog string for @p code (never NULL). */
-void rx_status_message(int code, char *msg, size_t msgsz);
+void rx_status_message(int code, char* msg, size_t msgsz);
 
 #ifdef __cplusplus
 }

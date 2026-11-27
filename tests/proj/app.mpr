@@ -1,0 +1,5 @@
+DEFINE MENU app
+DEFINE PAD file OF app PROMPT "\<File"
+DEFINE PAD rpt OF app PROMPT "\<Report"
+ON PAD file OF app ? "pad:file"
+ON PAD rpt OF app ? "pad:report"

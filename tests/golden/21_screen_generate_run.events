@@ -1,0 +1,43 @@
+# M7 9.2 gate: .SCR built in the designer, GENERATE SCREEN emits demo.prg,
+# DO demo.prg executes it through the same READ runtime; typed values land
+text USE people
+key enter
+text CREATE SCREEN demo
+key enter
+text s
+text Name:
+key enter
+key right
+key right
+key right
+key right
+key right
+key right
+key g
+text name
+key enter
+key down
+text s
+text Age:
+key enter
+key right
+key right
+key right
+key right
+key right
+key g
+text age
+key enter
+key ctrl-w
+text GENERATE SCREEN demo
+key enter
+text DO demo.prg
+key enter
+text Zed
+key tab
+text 42
+key tab
+key ctrl-w
+text ? name, age
+key enter
+eof

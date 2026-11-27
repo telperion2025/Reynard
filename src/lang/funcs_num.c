@@ -13,9 +13,8 @@
 
 #include "util/util.h"
 
-static int unary_num(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err,
-                     double (*fn)(double), const char *nm)
-{
+static int unary_num(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err,
+                     double (*fn)(double), const char* nm) {
     if (f_argc(err, argc, 1, nm) != 0) {
         return err->code;
     }
@@ -29,48 +28,39 @@ static int unary_num(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
     return R_OK;
 }
 
-static int f_abs(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_abs(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return unary_num(c, a, v, o, e, fabs, "ABS");
 }
 
-static int f_intfn(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_intfn(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return unary_num(c, a, v, o, e, floor, "INT");
 }
 
-static int f_ceiling(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_ceiling(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return unary_num(c, a, v, o, e, ceil, "CEILING");
 }
 
-static int f_floor(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_floor(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return unary_num(c, a, v, o, e, floor, "FLOOR");
 }
 
-static int f_exp(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_exp(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return unary_num(c, a, v, o, e, exp, "EXP");
 }
 
-static int f_log(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_log(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return unary_num(c, a, v, o, e, log, "LOG");
 }
 
-static int f_log10(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_log10(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return unary_num(c, a, v, o, e, log10, "LOG10");
 }
 
-static int f_sqrt(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_sqrt(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return unary_num(c, a, v, o, e, sqrt, "SQRT");
 }
 
-static int f_sign(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_sign(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (f_argc(err, argc, 1, "SIGN") != 0) {
         return err->code;
     }
@@ -84,8 +74,7 @@ static int f_sign(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
     return R_OK;
 }
 
-static int f_round(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_round(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc < 1 || argc > 2) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "ROUND() expects 1 or 2 arguments");
@@ -111,8 +100,7 @@ static int f_round(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
     return R_OK;
 }
 
-static int f_mod(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_mod(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (f_argc(err, argc, 2, "MOD") != 0) {
         return err->code;
     }
@@ -131,8 +119,7 @@ static int f_mod(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err
     return R_OK;
 }
 
-static int f_rand(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_rand(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 1) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "RAND() expects 0 or 1 arguments");
@@ -151,9 +138,8 @@ static int f_rand(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
     return R_OK;
 }
 
-static int f_minmax(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err, int ismax)
-{
-    const char *nm = ismax ? "MAX" : "MIN";
+static int f_minmax(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err, int ismax) {
+    const char* nm = ismax ? "MAX" : "MIN";
     if (argc < 1) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "%s() needs arguments", nm);
@@ -184,10 +170,10 @@ static int f_minmax(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *
     if (numeric) {
         f_num(c, out, bd);
     } else {
-        const char *s = "";
+        const char* s = "";
         size_t n = 0;
         rv_to_str(&best, &s, &n);
-        char *copy = malloc(n + 1);
+        char* copy = malloc(n + 1);
         if (!copy) {
             RX_FATAL("out of memory");
         }
@@ -198,18 +184,15 @@ static int f_minmax(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *
     return R_OK;
 }
 
-static int f_max(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_max(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return f_minmax(c, a, v, o, e, 1);
 }
 
-static int f_min(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_min(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return f_minmax(c, a, v, o, e, 0);
 }
 
-static int f_between(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_between(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     (void)c;
     if (f_argc(err, argc, 3, "BETWEEN") != 0) {
         return err->code;
@@ -231,8 +214,7 @@ static int f_between(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
     return err->code;
 }
 
-static int f_iif(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_iif(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     (void)c;
     if (f_argc(err, argc, 3, "IIF") != 0) {
         return err->code;
@@ -243,11 +225,11 @@ static int f_iif(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err
         snprintf(err->msg, sizeof(err->msg), "IIF() condition must be logical");
         return err->code;
     }
-    const rval *pick = (l == L_T) ? &argv[1] : &argv[2];
+    const rval* pick = (l == L_T) ? &argv[1] : &argv[2];
     rx_rval_free(out);
     *out = *pick; /* shallow: function results are consumed immediately */
     if (pick->t == RX_T_C) {
-        char *copy = malloc(pick->u.c.n + 1);
+        char* copy = malloc(pick->u.c.n + 1);
         if (!copy) {
             RX_FATAL("out of memory");
         }
@@ -257,8 +239,7 @@ static int f_iif(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err
     return R_OK;
 }
 
-static int f_fv(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_fv(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (f_argc(err, argc, 3, "FV") != 0) {
         return err->code;
     }
@@ -274,8 +255,7 @@ static int f_fv(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
     return R_OK;
 }
 
-static int f_pv(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_pv(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (f_argc(err, argc, 3, "PV") != 0) {
         return err->code;
     }
@@ -291,8 +271,7 @@ static int f_pv(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
     return R_OK;
 }
 
-static int f_payment(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_payment(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (f_argc(err, argc, 3, "PAYMENT") != 0) {
         return err->code;
     }
@@ -308,8 +287,7 @@ static int f_payment(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
     return R_OK;
 }
 
-static int f_pi(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_pi(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc != 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "PI() expects no arguments");
@@ -321,11 +299,11 @@ static int f_pi(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
 }
 
 const rx_funcdef rx_funcs_num[] = {
-    { "ABS", f_abs },     { "CEILING", f_ceiling }, { "FLOOR", f_floor }, { "EXP", f_exp },
-    { "INT", f_intfn },     { "LOG", f_log },         { "LOG10", f_log10 }, { "SQRT", f_sqrt },
-    { "SIGN", f_sign },   { "ROUND", f_round },     { "MOD", f_mod },     { "RAND", f_rand },
-    { "MAX", f_max },     { "MIN", f_min },         { "BETWEEN", f_between }, { "IIF", f_iif },
-    { "FV", f_fv },       { "PV", f_pv },           { "PAYMENT", f_payment }, { "PI", f_pi },
+    {"ABS", f_abs},   {"CEILING", f_ceiling}, {"FLOOR", f_floor},     {"EXP", f_exp},
+    {"INT", f_intfn}, {"LOG", f_log},         {"LOG10", f_log10},     {"SQRT", f_sqrt},
+    {"SIGN", f_sign}, {"ROUND", f_round},     {"MOD", f_mod},         {"RAND", f_rand},
+    {"MAX", f_max},   {"MIN", f_min},         {"BETWEEN", f_between}, {"IIF", f_iif},
+    {"FV", f_fv},     {"PV", f_pv},           {"PAYMENT", f_payment}, {"PI", f_pi},
 };
 
 const size_t rx_funcs_num_n = sizeof(rx_funcs_num) / sizeof(rx_funcs_num[0]);

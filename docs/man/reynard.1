@@ -15,6 +15,13 @@ it runs the same interpreter in batch mode; with
 .B \-t
 the batch is deterministic (DATE(), TIME(), RAND() frozen to a session
 seed) for use in test harnesses.
+Commands worth knowing beyond the language docs (docs/language.md):
+BUILD PROJECT name FROM file.rpj builds a .RPP package + launcher;
+SET PROCEDURE TO file.prg|app.rpp loads procedure sources; ON KEY LABEL key
+cmd binds a key (F1 opens the help DBF browser otherwise); SET HELP TO
+file.dbf selects the help table; BEGIN/END TRANSACTION and ROLLBACK provide
+journaling (see docs/DEVIATIONS.md).
+
 .SH OPTIONS
 .TP
 .BR \-c " \fIcmd; cmd\fR"
@@ -29,7 +36,9 @@ Redirect batch stdout to
 .IR file .
 .TP
 .BI --run " app.rpp"
-Run a packaged application (milestone M9).
+Run a packaged application built by BUILD PROJECT (spec 9.6): executes the
+packed main program from its compiled blob, with packed sources available to
+DO and packed res/ and data/ extracted onto SET PATH. See docs/formats.md 8.
 .TP
 .BI --cfg " file"
 Use an alternate config file.
@@ -51,6 +60,21 @@ Print usage and exit.
 .TP
 .B \-\-dump\-license
 Print the 2-clause BSD license and exit.
+.SH INTERACTIVE KEYS
+F10 or Alt activates the menubar; arrows navigate, Enter selects, Esc
+backs out; mouse click opens a menu title and drag sweeps across titles.
+In the Command window: Enter runs the line into the window's scrollback,
+Ctrl+Up/Down walk the persisted history, Tab completes command names,
+Ctrl+Y kills to end of line, Ctrl+S pauses, Esc aborts (SET ESCAPE).
+Ctrl+F2 raises the Command window. Every window has a × close button on
+its title bar (closing the Command window hides it; Ctrl+F2 brings it
+back). Drag a window border to move it, the corner to resize it.
+In a Browse window (M4): arrows/Tab move the cell cursor, Enter commits
+and moves down, typing edits the cell, Esc cancels the edit or closes the
+window, Ctrl+T toggles the delete mark, Ctrl+N appends a record; mouse
+click positions, wheel scrolls, header drag reorders columns, border drag
+resizes, double-click on a border sizes to widest.
+QUIT or File > Quit exits with status 0.
 .SH FILES
 .TP
 .I $XDG_CONFIG_HOME/reynard/reynard.cfg
@@ -103,8 +127,20 @@ Run a script deterministically, capturing output.
 .TP
 .B reynard -
 Read commands from standard input.
+.TP
+.B reynard -t prog.prg
+Run a script with procedures, loops and arrays; a byte-reproducible
+compiled cache prog.rxp is written next to it and reused while the source
+is unchanged.
+.SH PACKAGING
+Release artifacts (spec \u00a713): CPack DEB/RPM/TGZ/ZIP from a CMake build
+dir, plus per-distribution recipes under \fIpackaging/\fR (Debian,
+RPM, BSD ports, Homebrew, Alpine/musl static, macOS universal2 zip).
+API documentation: \fImake docs\fR (Doxygen, build/docs/html), published
+to the \fIdocs\fR branch by CI. Release tags M0..M10 and v1.0.0.
 .SH SEE ALSO
 Full language reference: \fIdocs/language.md\fR; file formats:
-\fIdocs/formats.md\fR; deviations: \fIdocs/DEVIATIONS.md\fR.
+\fIdocs/formats.md\fR; deviations: \fIdocs/DEVIATIONS.md\fR;
+quality plan: \fIdocs/QUALITY.md\fR.
 .SH LICENSE
 2-clause BSD. See \fBLICENSE\fR or \fBreynard --dump-license\fR.

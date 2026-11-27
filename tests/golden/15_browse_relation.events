@@ -1,0 +1,22 @@
+# M4 SET RELATION: moving in the browse's work area (2) repositions the
+# parent (PEOPLE); after Esc the Command window shows the parent record.
+text SELECT 1
+key enter
+text USE people
+key enter
+text SELECT 2
+key enter
+text USE people30
+key enter
+text SET RELATION TO RECNO() INTO PEOPLE
+key enter
+text BROWSE
+key enter
+key down
+key down
+key esc
+text SELECT PEOPLE
+key enter
+text ? RECNO(), NAME
+key enter
+eof

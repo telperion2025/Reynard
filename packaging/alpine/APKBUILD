@@ -1,0 +1,29 @@
+# Alpine APKBUILD for Reynard (spec 13): musl, static binary.
+# Build in an alpine container:
+#   abuild -r   (with this file as /home/builder/reynard/APKBUILD)
+pkgname=reynard
+pkgver=1.0.0
+pkgrel=0
+pkgdesc="Cross-platform terminal reimplementation of FoxPro 2.x/xBase"
+url="https://github.com/telperion2025/Reynard"
+arch="all"
+license="BSD-2-Clause"
+makedepends="cmake ncurses-dev musl-dev"
+source="$pkgname-$pkgver.tar.gz::https://github.com/telperion2025/Reynard/archive/refs/tags/v$pkgver.tar.gz"
+builddir="$srcdir/Reynard-$pkgver"
+
+build() {
+    cmake -B build -DCMAKE_BUILD_TYPE=Release -DRX_WERROR=on \
+        -DCMAKE_EXE_LINKER_FLAGS="-static" .
+    cmake --build build --parallel
+}
+
+check() {
+    ctest --test-dir build --output-on-failure
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install build
+}
+
+sha512sums="REPLACE_WITH_ABUILD_CHECKSUMS  reynard-1.0.0.tar.gz"

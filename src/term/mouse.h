@@ -19,7 +19,7 @@ extern "C" {
  * Decode one mouse event from a byte stream.
  * @return 1 event decoded, 0 need more bytes, -1 malformed.
  */
-int mouse_decode(const uint8_t *buf, size_t n, rmouse *out, size_t *used);
+int mouse_decode(const uint8_t* buf, size_t n, rmouse* out, size_t* used);
 
 #ifdef __cplusplus
 }

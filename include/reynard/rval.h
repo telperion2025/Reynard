@@ -38,7 +38,7 @@ typedef enum {
 /** UTF-8 string. n is the byte length excluding the terminating NUL. */
 typedef struct r_str {
     size_t n;   /**< byte length */
-    char *utf8; /**< NUL-terminated UTF-8, owned when inside an RVAL */
+    char* utf8; /**< NUL-terminated UTF-8, owned when inside an RVAL */
 } r_str;
 
 /** Numeric with display precision (SET DECIMALS). */
@@ -65,38 +65,39 @@ typedef enum { L_UNDEF = 0, L_T = 1, L_F = 2 } rx_logic;
 typedef struct rval {
     rx_type t;
     union {
-        r_str c;                /**< RX_T_C */
-        r_num n;                /**< RX_T_N */
-        int32_t i;              /**< RX_T_I */
-        int64_t y;              /**< RX_T_Y, scaled by 10000 */
-        double b;               /**< RX_T_B */
-        r_date d;               /**< RX_T_D */
-        r_dt tm;                /**< RX_T_T */
-        rx_logic l;             /**< RX_T_L */
+        r_str c;    /**< RX_T_C */
+        r_num n;    /**< RX_T_N */
+        int32_t i;  /**< RX_T_I */
+        int64_t y;  /**< RX_T_Y, scaled by 10000 */
+        double b;   /**< RX_T_B */
+        r_date d;   /**< RX_T_D */
+        r_dt tm;    /**< RX_T_T */
+        rx_logic l; /**< RX_T_L */
         struct {
-            uint32_t blk;       /**< FPT/DBT block number from the DBF */
-            r_str *loaded;      /**< lazily loaded memo text, owned ref */
-        } memo;                 /**< RX_T_M */
+            uint32_t blk;  /**< FPT/DBT block number from the DBF */
+            r_str* loaded; /**< lazily loaded memo text, owned ref */
+        } memo;            /**< RX_T_M */
         struct {
             size_t n;
-            uint8_t *bytes;     /**< owned */
-        } g;                    /**< RX_T_G */
+            uint8_t* bytes; /**< owned */
+        } g;                /**< RX_T_G */
     } u;
 } rval;
 
 /** Set @p v to the undefined value. */
-static inline void rx_rval_undef(rval *v)
-{
+static inline void rx_rval_undef(rval* v) {
     memset(v, 0, sizeof(*v));
     v->t = RX_T_U;
 }
 
 /** Free owned members of @p v and reset it to undefined. */
-static inline void rx_rval_free(rval *v)
-{
-    if (v->t == RX_T_C || v->t == RX_T_M) {
+static inline void rx_rval_free(rval* v) {
+    if (v->t == RX_T_C) {
         free(v->u.c.utf8);
-        if (v->t == RX_T_M) {
+    } else if (v->t == RX_T_M) {
+        /* u.memo.loaded overlaps u.c.utf8 in the union: free via memo only */
+        if (v->u.memo.loaded) {
+            free(v->u.memo.loaded->utf8);
             free(v->u.memo.loaded);
         }
     } else if (v->t == RX_T_G) {
@@ -106,8 +107,7 @@ static inline void rx_rval_free(rval *v)
 }
 
 /** Shallow-copy @p src into @p dst without transferring ownership. */
-static inline void rx_rval_set_shallow(rval *dst, const rval *src)
-{
+static inline void rx_rval_set_shallow(rval* dst, const rval* src) {
     *dst = *src;
 }
 

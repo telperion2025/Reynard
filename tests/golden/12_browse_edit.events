@@ -1,0 +1,14 @@
+# §9.1: in-cell editing (typing replaces the cell, Enter commits and moves
+# down), Ctrl+T delete-marks the current record, Ctrl+N appends a new record
+# in edit mode.
+text USE people
+key enter
+text BROWSE
+key enter
+text Zed
+key enter
+key ctrl-t
+key ctrl-n
+text NewGuy
+key enter
+eof

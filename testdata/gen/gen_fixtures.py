@@ -76,6 +76,67 @@ PEOPLE = [
 ]
 
 
+MEMO_FIELDS = [("ID", "N", 4, 0), ("NOTES", "M", 10, 0)]
+
+MEMO_TEXTS = [
+    b"short note",
+    b"a much longer memo that spans several 64-byte FPT blocks to exercise "
+    b"multi-block allocation and in-place vs extend behavior on rewrite",
+    b"",
+]
+
+
+def fpt_bytes(texts, bs=64):
+    """Build an FPT file: 512-byte header (BE32 next-free, BE16 block size),
+    then 8-byte block headers (BE32 type=0 text, BE32 length) + payload."""
+    hdr = bytearray(512)
+    blocks = []
+    next_blk = (512 + bs - 1) // bs
+    body = bytearray()
+    for t in texts:
+        off = next_blk * bs
+        need = (8 + len(t) + bs - 1) // bs * bs
+        blk = bytearray(need)
+        blk[0:4] = len(t).to_bytes(4, "big")
+        blk[4:8] = (0).to_bytes(4, "big") if False else b"\x00\x00\x00\x00"
+        # FPT block header: type BE32 then length BE32
+        blk[0:4] = (0).to_bytes(4, "big")
+        blk[4:8] = len(t).to_bytes(4, "big")
+        blk[8:8 + len(t)] = t
+        blocks.append((next_blk, bytes(blk)))
+        next_blk += need // bs
+    struct.pack_into(">I", hdr, 0, next_blk)
+    struct.pack_into(">H", hdr, 6, bs)
+    out = bytearray(hdr)
+    maxend = 512
+    for blkno, blk in blocks:
+        end = blkno * bs + len(blk)
+        if end > maxend:
+            maxend = end
+    out += b"\x00" * (maxend - 512)
+    for blkno, blk in blocks:
+        out[blkno * bs:blkno * bs + len(blk)] = blk
+    return bytes(out), [b[0] for b in blocks]
+
+
+def dbt_bytes(texts, blk=512):
+    """Build a dBase DBT: 512-byte header (LE32 next block at 0), then each
+    memo as data + 0x1A padded to a 512 boundary (append-per-write)."""
+    hdr = bytearray(blk)
+    out = bytearray(hdr)
+    blocks = []
+    for t in texts:
+        while len(out) % blk != 0:
+            out += b"\x00"
+        b = len(out) // blk
+        blocks.append(b)
+        out += t + b"\x1a"
+        while len(out) % blk != 0:
+            out += b"\x00"
+    struct.pack_into("<I", out, 0, len(out) // blk)
+    return bytes(out), blocks
+
+
 def main():
     out = HERE
     with open(os.path.join(out, "people.dbf"), "wb") as f:
@@ -100,6 +161,28 @@ def main():
         f.write(dbf_bytes([], []))
     with open(os.path.join(seeds, "empty.dbf"), "wb") as f:
         f.write(b"")
+    # empty table with the people layout (write tests APPEND into it)
+    with open(os.path.join(out, "blank.dbf"), "wb") as f:
+        f.write(dbf_bytes(PEOPLE_FIELDS, [], version=0x03, cp_mark=0x01))
+    # FoxPro memo fixture: version 0xF5 + FPT sidecar (block size 64)
+    memo_blocks = [b"%10d" % b for b in [0, 0, 0]]
+    fpt, blks = fpt_bytes(MEMO_TEXTS)
+    recs = []
+    for i, t in enumerate(MEMO_TEXTS):
+        blkno = blks[i] if t else 0
+        recs.append((i == 2, [n(i + 1, 4, 0), b"%10d" % blkno]))
+    with open(os.path.join(out, "memo.dbf"), "wb") as f:
+        f.write(dbf_bytes(MEMO_FIELDS, recs, version=0xF5, cp_mark=0x01))
+    with open(os.path.join(out, "memo.fpt"), "wb") as f:
+        f.write(fpt)
+    # dBase III memo fixture: version 0x83 + DBT sidecar
+    dbt, dblks = dbt_bytes([b"dbt one", b"dbt two, a bit longer"])
+    drecs = [(False, [n(1, 4, 0), b"%10d" % dblks[0]]),
+             (False, [n(2, 4, 0), b"%10d" % dblks[1]])]
+    with open(os.path.join(out, "dbtmemo.dbf"), "wb") as f:
+        f.write(dbf_bytes(MEMO_FIELDS, drecs, version=0x83, cp_mark=0x01))
+    with open(os.path.join(out, "dbtmemo.dbt"), "wb") as f:
+        f.write(dbt)
     print("fixtures written to", out)
 
 

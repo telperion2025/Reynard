@@ -1,0 +1,9 @@
+Alice 30
+Carol 41
+Dave 35
+eof T
+s 1 Alice
+s 3 Carol
+after
+w Alice
+w Bob

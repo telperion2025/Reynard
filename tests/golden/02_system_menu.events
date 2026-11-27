@@ -1,0 +1,41 @@
+# M3 gate: the mouse reaches every System menu action (§6.3).
+# Pulldown geometry at 80x24: x=1 y=1 w=20 h=12; item rows: About=2, sep=3,
+# Macros=4, Filer=5, Calculator=6, Calendar/Diary=7, sep=8, ASCII=9, sep=10,
+# Help=11. Each action opens its dialog (Esc closes) and traces a line into
+# the Command window scrollback.
+mouse press 2 0 1
+mouse release 2 0 1
+mouse press 3 2 1
+mouse release 3 2 1
+key esc
+mouse press 2 0 1
+mouse release 2 0 1
+mouse press 3 4 1
+mouse release 3 4 1
+key esc
+mouse press 2 0 1
+mouse release 2 0 1
+mouse press 3 5 1
+mouse release 3 5 1
+key esc
+mouse press 2 0 1
+mouse release 2 0 1
+mouse press 3 6 1
+mouse release 3 6 1
+key esc
+mouse press 2 0 1
+mouse release 2 0 1
+mouse press 3 7 1
+mouse release 3 7 1
+key esc
+mouse press 2 0 1
+mouse release 2 0 1
+mouse press 3 9 1
+mouse release 3 9 1
+key esc
+mouse press 2 0 1
+mouse release 2 0 1
+mouse press 3 11 1
+mouse release 3 11 1
+key esc
+eof

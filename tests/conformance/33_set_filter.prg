@@ -1,0 +1,7 @@
+USE people
+SET FILTER TO age >= 30
+LIST FIELDS name, age
+? RECCOUNT()
+SET FILTER TO
+GO TOP
+LIST NEXT 2 FIELDS name, age

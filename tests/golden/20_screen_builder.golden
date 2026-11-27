@@ -1,0 +1,24 @@
+ System  File  Edit  Database  Record  Program  Window  Help
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ┌─ Command ───────────────────────────────────────────────────────────────×┐
+  │SIZE 24,80                                                                │
+  │ITEM SAY 2,2 SCHEME 1 "Name:"                                             │
+  │ITEM GET 3,2 VAR AGE SIZE 1,10 SCHEME 1                                   │
+  │ITEM BOX 3,2 TO 5,7 SCHEME 1                                              │
+  │END                                                                       │
+  │                                                                          │
+  └──────────────────────────────────────────────────────────────────────────┘
+Screen demo saved (demo.scr, demo.rso)                                    NUM 1

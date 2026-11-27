@@ -12,21 +12,18 @@
 
 #include "util/utf8.h"
 
-void sb_init(strbuf *sb)
-{
+void sb_init(strbuf* sb) {
     sb->buf = NULL;
     sb->len = 0;
     sb->cap = 0;
 }
 
-void sb_free(strbuf *sb)
-{
+void sb_free(strbuf* sb) {
     free(sb->buf);
     sb_init(sb);
 }
 
-static int sb_reserve(strbuf *sb, size_t extra)
-{
+static int sb_reserve(strbuf* sb, size_t extra) {
     if (sb->len + extra + 1 <= sb->cap) {
         return R_OK;
     }
@@ -34,7 +31,7 @@ static int sb_reserve(strbuf *sb, size_t extra)
     while (ncap < sb->len + extra + 1) {
         ncap *= 2;
     }
-    char *nbuf = realloc(sb->buf, ncap);
+    char* nbuf = realloc(sb->buf, ncap);
     if (!nbuf) {
         RX_FATAL("out of memory");
     }
@@ -43,16 +40,14 @@ static int sb_reserve(strbuf *sb, size_t extra)
     return R_OK;
 }
 
-int sb_putc(strbuf *sb, char c)
-{
+int sb_putc(strbuf* sb, char c) {
     sb_reserve(sb, 1);
     sb->buf[sb->len++] = c;
     sb->buf[sb->len] = '\0';
     return R_OK;
 }
 
-int sb_put(strbuf *sb, const char *s, size_t n)
-{
+int sb_put(strbuf* sb, const char* s, size_t n) {
     sb_reserve(sb, n);
     memcpy(sb->buf + sb->len, s, n);
     sb->len += n;
@@ -60,13 +55,11 @@ int sb_put(strbuf *sb, const char *s, size_t n)
     return R_OK;
 }
 
-int sb_puts(strbuf *sb, const char *s)
-{
+int sb_puts(strbuf* sb, const char* s) {
     return sb_put(sb, s, strlen(s));
 }
 
-int sb_printf(strbuf *sb, const char *fmt, ...)
-{
+int sb_printf(strbuf* sb, const char* fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     char tmp[1024];
@@ -86,8 +79,7 @@ int sb_printf(strbuf *sb, const char *fmt, ...)
     return R_OK;
 }
 
-int sb_putcp(strbuf *sb, uint32_t cp)
-{
+int sb_putcp(strbuf* sb, uint32_t cp) {
     char tmp[4];
     size_t n = utf8_encode(cp, tmp);
     return sb_put(sb, tmp, n);

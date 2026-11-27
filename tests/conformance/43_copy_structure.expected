@@ -1,0 +1,10 @@
+4 FIELD_NAME FIELD_DEC
+Record# FIELD_NAME FIELD_TYPE FIELD_LEN FIELD_DEC
+------- ---------- ---------- --------- ---------
+      1 NAME       C                 20         0
+      2 AGE        N                  3         0
+      3 BORN       D                  8         0
+      4 MARRIED    L                  1         0
+      5 SCORE      N                  6         2
+5 SCORE NEWT
+2 NAME AGE 3

@@ -1,0 +1,13 @@
+USE people
+INDEX ON age TO ages
+? ORDER(), NDX(1), TAGCOUNT()
+SEEK 30
+? FOUND(), RECNO(), TRIM(name)
+CLOSE
+USE people INDEX ages
+? TAGCOUNT(), ORDER(), NDX(1)
+SEEK 41
+? FOUND(), RECNO(), TRIM(name)
+SET INDEX TO
+? TAGCOUNT(), ORDER()
+CLOSE ALL

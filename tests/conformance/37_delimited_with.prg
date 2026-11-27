@@ -1,0 +1,7 @@
+USE people
+COPY TO c3 DELIMITED WITH "|"
+TYPE c3.txt
+USE blank
+APPEND FROM c3 DELIMITED WITH "|"
+? RECCOUNT()
+LIST FIELDS name, score

@@ -48,25 +48,84 @@ Character data converts at the DBF boundary; UTF-8 internally.
 
 ## 2. FPT memo (§8.3)
 
-512-byte header block: bytes 0-3 next-free block number (BE), bytes 4-5
-block size (BE, power of two 32-65536, default 64), rest reserved.
+512-byte header block: bytes 0-3 next-free block number (BE), bytes 6-7
+block size (BE, power of two 32-65536, default 64), rest reserved. Block
+number n occupies bytes [n*bs, (n+1)*bs); the header occupies blocks
+0..ceil(512/bs)-1, so the first memo block is ceil(512/bs).
 Each block: 4-byte BE type signature (0 text, 1 picture, 2 object),
-4-byte BE payload length, payload. Writes update in place when the new
-memo fits the old block, else extend from the free list.
+4-byte BE payload length, payload, zero padding to the block boundary.
+Writes update in place when the new memo fits the old allocation, else
+extend from the free list (next-free bumped in the header). PACK rewrites
+the sidecar from scratch with only live memos. Memo text is stored in the
+DBF code page and converted to UTF-8 on read (lazy, on first access).
 
 ## 3. DBT memo (§8.3)
 
-512-byte blocks; writer is append-per-write for compatibility; reader
-infers the format.
+512-byte blocks; block 0 is the header with a 4-byte LE next-free block
+at offset 0. Reader: payload runs from blk*512 to the first 0x1A
+terminator (trailing NUL/0x1A padding stripped when absent). Writer:
+append-per-write for compatibility — data + 0x1A, zero-padded to the
+512-byte boundary, next-free updated. PACK rewrites the sidecar.
 
-## 4. CDX compound index (§8.4)
+## 3a. RJN transaction journal (§8.6)
 
-500-byte B+tree nodes (FoxPro page size). Structural CDX opens
-automatically with the DBF (same stem); tag headers chain in the root
-page storing key expression, FOR filter, flags (descending/unique), page
-counts. Character keys have trailing spaces stripped. Reynard-written
-CDX must open in FoxPro 2.6a and VFP 9 (CI-verified against reference
-fixtures at M6). IDX read/write; NTX/NDX read-only.
+`<dbfstem>.RJN`, created by BEGIN TRANSACTION: magic `RJN1`, then entries
+of 1 tag byte + payload: `R` u32le recno + rec_size raw bytes (record
+before-image), `H` 32 raw header bytes, `A` u32le recno (appended record),
+`M` u32le blk + u32le has_payload + u32le oldn + oldn bytes + i64le old
+memo file size, `C` commit marker. DBF header byte 30 is the
+incomplete-transaction stamp: set at BEGIN, cleared at COMMIT; on open,
+a set stamp with an existing sidecar triggers automatic rollback
+(complete-or-rollback, §8.6). PACK/ZAP are refused inside a transaction.
+
+## 5a. SDF / DELIMITED text export (§8.8)
+
+SDF: fixed-width fields concatenated in field order, CRLF record
+terminator; memo/G/B/P fields skipped. DELIMITED: separator `,` (default),
+custom char with `WITH c`, space with `WITH BLANK` (unquoted, trailing
+blanks trimmed), tab with `WITH TAB`; character fields are double-quoted
+with embedded quotes doubled (except WITH BLANK); numeric fields export
+trimmed; dates as `YYYYMMDD`; logicals as `T`/`F`; memo fields skipped.
+Files are written in the DBF code page. Default extension: `.txt`.
+APPEND FROM parses the same layouts back; default extension lookup tries
+the name as given, then `.txt` (text) / `.dbf` (tables).
+
+## 4. CDX compound index (§8.4, implemented M6)
+
+500-byte little-endian blocks; block 0..n-1 are the tag directory, then one
+B+tree per tag. See src/data/cdx_internal.h for the authoritative layout.
+
+- Directory block: `u32` sig `RCDX` @0, `u16` version (1) @4, `u16` entry
+  count @6, `u32` next dir block @8 (0 = last), `u32` first free page @12.
+  Tag headers are 236 bytes from offset 24: name[11] @0, key expression[128]
+  @12, FOR expression[64] @140, flags `u16` @204 (bit0 descending, bit1
+  unique), root page `u32` @206, page count `u32` @210, key count `u64` @222.
+- Node block: `u16` type @0 (1 root / 2 internal / 3 leaf), `u16` key count
+  @2, `u32` left sibling @4, `u32` right sibling @8, `u32` leftmost child @12
+  (internal nodes), entries from offset 16. Leaf entry: `u16` klen, key
+  bytes, `u32` recno. Internal entry: `u16` klen, separator key (first key of
+  the child), `u32` 0, `u32` child page. A single-leaf tree keeps LEAF type
+  at the root page.
+- Keys are the canonical sortable encoding (rx_key_encode): type byte then
+  payload; character keys are uppercased with trailing spaces stripped
+  (MACHINE collation); numerics are sign-flipped IEEE doubles; dates are
+  `YYYYMMDD` digits (empty = spaces, sorts first); logicals T/F. Equal keys
+  batch by ascending recno; UNIQUE tags drop exact duplicate keys.
+- Structural CDX (same stem as the DBF, `.cdx`) opens automatically with USE
+  and its first tag is the controlling order; structural writes happen only
+  under exclusive open (FoxPro rule). Non-structural CDX and IDX open via
+  USE ... INDEX / SET INDEX TO.
+- IDX standalone: block 0 is a "RIDX" header (sig @0, version @4, key
+  expression[128] @8, FOR[64] @136, flags @200, root page @204, key count
+  `u64` @208, page count @216); tree blocks from page 1, same node format.
+- NTX/NDX: read-only import of uncompressed dBase III indexes (1024-byte
+  pages); compressed variants produce the R_ERR_CDX_VARIANT (303)
+  diagnostic; users convert with INDEX ON ... TO new.
+- Reynard-written CDX/IDX must open in FoxPro 2.6a and VFP 9; byte-compat
+  against reference fixtures is a CI gate at M6+ (no reference fixtures are
+  checked into this tree yet — see DEVIATIONS #37). Our own files are
+  verified byte-reproducible and by an independent validator (harness `cdx`
+  mode: ctest cdx_engine).
 
 ## 5. Other formats
 
@@ -77,3 +136,117 @@ fixtures at M6). IDX read/write; NTX/NDX read-only.
   formats specified here at their milestones (M7-M9).
 - Import/export: SDF, DELIMITED [WITH del|BLANK|TAB], XLS (BIFF5) —
   spec §8.8.
+
+
+## 6. Screen files: .SCR text and .RSO compiled form (spec \u00a79.2, M7)
+
+Not FoxPro .SCX (binary table) \u2014 Reynard uses its own formats.
+
+**.SCR (text, canonical, one directive per line):**
+
+```
+REYNARD SCREEN 1
+NAME <NAME>
+SIZE <h>,<w>
+ITEM SAY <r>,<c> SCHEME <n> "<text>"
+ITEM GET <r>,<c> VAR <var> [SAY "<label>"] SIZE <h>,<w> [PICTURE "<p>"] [FUNCTION "<f>"] [WHEN <e>] [VALID <e>] [RANGE <a>[,<b>]] [DEFAULT <e>] SCHEME <n>
+ITEM BOX <r1>,<c1> TO <r2>,<c2> SCHEME <n>
+ITEM LINE <r1>,<c1> TO <r2>,<c2> SCHEME <n>
+ITEM BUTTON|RADIO|CHECK|POPUP <r>,<c> PROMPT "<p>" VAR <var> SCHEME <n>
+ITEM SPIN <r>,<c> VAR <var> SCHEME <n>
+ITEM INVB <r>,<c> SIZE <h>,<w> VAR <var> SCHEME <n>
+END
+```
+
+The writer emits exactly this field order, so load\u2192save is
+byte-identical (gate: harness `scrcheck`). Strings are double-quoted with
+`\\` and `\"` escapes. WHEN/VALID/RANGE/DEFAULT are raw expression text
+running to the next clause keyword (canonical order WHEN, VALID, RANGE,
+DEFAULT, SCHEME).
+
+**.RSO (binary, byte-reproducible):** header 120 bytes \u2014 u32 LE magic
+`RRSO` (0x4F535252), u32 LE version=1, name[64] NUL-padded, u32 h, u32 w,
+u32 nitems, u32 item record size (896), sha256[32] of the canonical .SCR
+bytes; then nitems fixed 896-byte records, all integers LE: u16 type
+(SAY=1 GET=2 BOX=3 LINE=4 BUTTON=5 RADIO=6 CHECK=7 POPUP=8 SPIN=9 INVB=10),
+u16 row, u16 col, u16 row2, u16 col2, u16 h, u16 w, u16 scheme, then NUL-padded
+strings at fixed offsets: text[256] @16, var[64] @272, pic[64] @336,
+func[16] @400, when[128] @416, valid[128] @544, rang[96] @672, deflt[96]
+@768.
+
+**GENERATE SCREEN** emits .PRG: `@ r,c SAY "t"`, `@ r,c [SAY "l"] GET var
+SIZE h,w [PICTURE..] [WHEN..] [VALID..] [RANGE..] [DEFAULT..]`,
+`@ r1,c1 BOX TO r2,c2`, controls as comments (DEVIATIONS #46), and a final
+`READ CYCLE`.
+
+
+## 7. Report (.FRM) and label (.RLB) text forms (spec \u00a79.3/9.4, M8)
+
+Canonical line-based text (writer emits exactly what the parser accepts;
+load\u2192save round-trips byte-identically):
+
+```
+REYNARD REPORT 1
+NAME <NAME>
+PAGE <w>,<h>            # default 80,66
+MARGIN <l>,<r>,<t>,<b>
+BAND TITLE <height>
+BAND PAGEHEADER <height>
+BAND GROUPHEADER <height> "<group expr>"
+BAND DETAIL <height>
+BAND GROUPFOOTER <height> "<group expr>"
+BAND PAGEFOOTER <height>
+BAND SUMMARY <height>
+OBJ TEXT <row>,<col> "<literal>"
+OBJ FIELD <row>,<col> <expr>          # raw expression text
+OBJ LINE <r>,<c> TO <r2>,<c2>
+OBJ BOX <r1>,<c1> TO <r2>,<c2>
+VAR <name> SUM|COUNT|AVG|MIN|MAX|NONE <expr> RESET REPORT|PAGE|GROUP [INITIAL <e>]
+END
+```
+
+Labels (.RLB): `REYNARD LABEL 1`, NAME, `STOCK <name>`,
+`SIZE <h>,<w> SPACING <r>,<c> MARGINS <l>,<t>`, then one `BAND DETAIL <h>`
+with OBJ lines, `END`. One label per page at runtime (DEVIATIONS #51).
+
+Emitters: TO FILE extension picks text (.txt) / PostScript (.ps) / PDF (.pdf,
+minimal writer, base-14 Helvetica, content-hash /ID) / HTML (.html, tables) /
+CSV (.csv, detail-band field rows). TO PRINTER spools text to reynard.prn.
+
+## 8. Project files: .RPJ text and .RPP package (spec 9.6, M9)
+
+.RPJ is a line-based text file (keywords case-insensitive, `#` or `*` start a
+comment line, values may be "quoted"):
+
+    REYNARD PROJECT 1
+    NAME demo
+    MAIN main.prg
+    PRG main.prg
+    MENU app.mpr          # menu-generator source (.mpr = program source)
+    SCREEN cust.scr
+    REPORT rep.frm
+    LABEL tags.rlb
+    DBF people.dbf
+    END
+
+Paths resolve against the .RPJ's directory. BUILD PROJECT name FROM f.rpj
+checks every listed file exists (all missing ones are reported in one
+diagnostic), then writes <name>.rpp plus a <name>-app.sh launcher.
+
+.RPP is a ZIP archive with STORED (uncompressed) entries only, written
+byte-deterministically: fixed DOS date 1980-01-01, no extra fields, entries
+in project order, CRC32 per entry (src/util/rpp.c). Layout:
+
+    manifest.json          {"format":"RPP1","name":...,"main":...,
+                           "files":[{"path","kind","sha256","size"},...]}
+    src/<rel>              raw program/menu source (.prg/.mpr)
+    bin/<stem>.rxp         RXP1 compiled blob (sha256 of its source as hash)
+    res/<rel>              raw .scr/.frm/.rlb
+    data/<rel>             raw .dbf
+    data/dictionary.json   {"databases":[{"file","sha256","fields":[...]}]}
+
+`reynard --run app.rpp` runs bin/<main-stem>.rxp (source fallback), registers
+all src/ entries as packed sources (DO finds them), and extracts res/ and data/
+into $XDG_CACHE_HOME/reynard/rpp/<sha256-of-rpp>/ which is prepended to
+SET PATH. Rebuilds skip when every source sha256 in manifest.json matches
+(content-based recompile; keeps builds byte-reproducible).

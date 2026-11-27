@@ -1,0 +1,15 @@
+# M8 9.3: REPORT FORM ... TO PREVIEW opens the preview window; PgDn moves
+# pages, arrows scroll, +/- zoom, Esc exits back to the Command window
+text USE people
+key enter
+text REPORT FORM people TO PREVIEW
+key enter
+key pgdn
+key down
+key down
+key +
+key pgup
+key esc
+text ? RECNO()
+key enter
+eof

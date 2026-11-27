@@ -12,35 +12,37 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include "util/util.h"
 
 typedef struct lexer {
-    const char *src;
+    const char* src;
     size_t pos, len;
+    size_t tok_start; /**< offset where the current token began */
     int line, col;
-    const char *fname;
-    rx_tok *toks;
+    const char* fname;
+    rx_tok* toks;
     size_t n, cap;
-    r_err *err;
+    r_err* err;
     int failed;
 } lexer;
 
-static int lx_emit(lexer *lx, tk_kind kind, const char *text, size_t tn, int ival, double num)
-{
+static int lx_emit(lexer* lx, tk_kind kind, const char* text, size_t tn, int ival, double num) {
     if (lx->n == lx->cap) {
         size_t nc = lx->cap ? lx->cap * 2 : 64;
-        rx_tok *nt = realloc(lx->toks, nc * sizeof(rx_tok));
+        rx_tok* nt = realloc(lx->toks, nc * sizeof(rx_tok));
         if (!nt) {
             RX_FATAL("out of memory");
         }
         lx->toks = nt;
         lx->cap = nc;
     }
-    rx_tok *t = &lx->toks[lx->n++];
+    rx_tok* t = &lx->toks[lx->n++];
     t->kind = kind;
     t->line = lx->line;
     t->col = lx->col;
+    t->off = lx->tok_start;
     t->ival = ival;
     t->num = num;
     t->text = malloc(tn + 1);
@@ -52,8 +54,7 @@ static int lx_emit(lexer *lx, tk_kind kind, const char *text, size_t tn, int iva
     return R_OK;
 }
 
-static int lx_fail(lexer *lx, const char *msg)
-{
+static int lx_fail(lexer* lx, const char* msg) {
     if (!lx->failed) {
         lx->failed = 1;
         lx->err->code = R_ERR_SYNTAX;
@@ -65,18 +66,15 @@ static int lx_fail(lexer *lx, const char *msg)
     return R_ERR_SYNTAX;
 }
 
-static char lx_peek(lexer *lx)
-{
+static char lx_peek(lexer* lx) {
     return lx->pos < lx->len ? lx->src[lx->pos] : '\0';
 }
 
-static char lx_peek2(lexer *lx)
-{
+static char lx_peek2(lexer* lx) {
     return lx->pos + 1 < lx->len ? lx->src[lx->pos + 1] : '\0';
 }
 
-static char lx_get(lexer *lx)
-{
+static char lx_get(lexer* lx) {
     char c = lx_peek(lx);
     if (lx->pos < lx->len) {
         lx->pos++;
@@ -90,8 +88,7 @@ static char lx_get(lexer *lx)
     return c;
 }
 
-static void lx_skip_inline_comment(lexer *lx)
-{
+static void lx_skip_inline_comment(lexer* lx) {
     /* && comment to end of line */
     while (lx->pos < lx->len && lx->src[lx->pos] != '\n') {
         lx->pos++;
@@ -99,8 +96,45 @@ static void lx_skip_inline_comment(lexer *lx)
     }
 }
 
-int rx_lex(const char *src, const char *fname, rx_tok **out, size_t *nout, r_err *err)
-{
+/* after a line-initial TEXT word: consume the raw block up to the ENDTEXT
+   line, emitting a synthetic ENDTEXT word token so the parser can find the
+   block end (parse_text captures the verbatim span from token offsets) */
+static void lx_skip_text_block(lexer* lx) {
+    while (lx->pos < lx->len && lx->src[lx->pos] != '\n') {
+        lx_get(lx);
+    }
+    for (;;) {
+        while (lx->pos < lx->len &&
+               (lx->src[lx->pos] == ' ' || lx->src[lx->pos] == '\t' || lx->src[lx->pos] == '\r')) {
+            lx_get(lx);
+        }
+        if (lx->pos >= lx->len) {
+            return;
+        }
+        if (lx->pos + 7 <= lx->len && strncasecmp(lx->src + lx->pos, "ENDTEXT", 7) == 0 &&
+            (lx->pos + 7 >= lx->len ||
+             !(isalnum((unsigned char)lx->src[lx->pos + 7]) || lx->src[lx->pos + 7] == '_'))) {
+            size_t off = lx->pos;
+            int line = lx->line, col = lx->col;
+            for (int i = 0; i < 7; i++) {
+                lx_get(lx);
+            }
+            lx_emit(lx, TK_WORD, "ENDTEXT", 7, 0, 0);
+            lx->toks[lx->n - 1].off = off;
+            lx->toks[lx->n - 1].line = line;
+            lx->toks[lx->n - 1].col = col;
+            return;
+        }
+        while (lx->pos < lx->len && lx->src[lx->pos] != '\n') {
+            lx_get(lx);
+        }
+        if (lx->pos < lx->len) {
+            lx_get(lx);
+        }
+    }
+}
+
+int rx_lex(const char* src, const char* fname, rx_tok** out, size_t* nout, r_err* err) {
     lexer lx;
     memset(&lx, 0, sizeof(lx));
     lx.src = src;
@@ -111,6 +145,7 @@ int rx_lex(const char *src, const char *fname, rx_tok **out, size_t *nout, r_err
     lx.err = err;
 
     while (lx.pos < lx.len && !lx.failed) {
+        lx.tok_start = lx.pos;
         char c = lx_peek(&lx);
         if (c == ' ' || c == '\t' || c == '\r') {
             lx_get(&lx);
@@ -198,12 +233,12 @@ int rx_lex(const char *src, const char *fname, rx_tok **out, size_t *nout, r_err
         }
         if (isdigit((unsigned char)c) || (c == '.' && isdigit((unsigned char)lx_peek2(&lx)))) {
             size_t start = lx.pos;
-            while (lx.pos < lx.len && (isdigit((unsigned char)lx.src[lx.pos]) ||
-                                       lx.src[lx.pos] == '.')) {
+            while (lx.pos < lx.len &&
+                   (isdigit((unsigned char)lx.src[lx.pos]) || lx.src[lx.pos] == '.')) {
                 lx_get(&lx);
             }
             size_t tn = lx.pos - start;
-            char *tmp = malloc(tn + 1);
+            char* tmp = malloc(tn + 1);
             if (!tmp) {
                 RX_FATAL("out of memory");
             }
@@ -218,15 +253,18 @@ int rx_lex(const char *src, const char *fname, rx_tok **out, size_t *nout, r_err
         }
         if (isalpha((unsigned char)c) || c == '_') {
             size_t start = lx.pos;
-            while (lx.pos < lx.len &&
-                   (isalnum((unsigned char)lx.src[lx.pos]) || lx.src[lx.pos] == '_' ||
-                    lx.src[lx.pos] == '$')) {
+            while (lx.pos < lx.len && (isalnum((unsigned char)lx.src[lx.pos]) ||
+                                       lx.src[lx.pos] == '_' || lx.src[lx.pos] == '$')) {
                 lx_get(&lx);
             }
             size_t tn = lx.pos - start;
+            int line_start = lx.n == 0 || lx.toks[lx.n - 1].kind == TK_NEWLINE;
             lx_emit(&lx, TK_WORD, lx.src + start, tn, 0, 0);
             lx.toks[lx.n - 1].line = line;
             lx.toks[lx.n - 1].col = col;
+            if (line_start && tn == 4 && strncasecmp(lx.src + start, "TEXT", 4) == 0) {
+                lx_skip_text_block(&lx);
+            }
             continue;
         }
         /* two-char operators first */
@@ -256,26 +294,69 @@ int rx_lex(const char *src, const char *fname, rx_tok **out, size_t *nout, r_err
             lx_get(&lx);
             int op = OP_NONE;
             switch (c) {
-            case '+': op = OP_PLUS; break;
-            case '-': op = OP_MINUS; break;
-            case '*': op = OP_MUL; break;
-            case '/': op = OP_DIV; break;
-            case '%': op = OP_MOD; break;
-            case '^': op = OP_POW; break;
-            case '=': op = OP_EQ; break;
-            case '<': op = OP_LT; break;
-            case '>': op = OP_GT; break;
-            case '$': op = OP_IN; break;
-            case '(': op = OP_LP; break;
-            case ')': op = OP_RP; break;
-            case ',': op = OP_COMMA; break;
-            case '.': op = OP_DOT; break;
-            case '&': op = OP_AMP; break;
-            case '[': op = OP_LB; break;
-            case ']': op = OP_RB; break;
-            case ':': op = OP_COLON; break;
-            case ';': op = OP_SEMI; break;
-            case '?': op = OP_Q; break;
+            case '+':
+                op = OP_PLUS;
+                break;
+            case '-':
+                op = OP_MINUS;
+                break;
+            case '*':
+                op = OP_MUL;
+                break;
+            case '/':
+                op = OP_DIV;
+                break;
+            case '%':
+                op = OP_MOD;
+                break;
+            case '^':
+                op = OP_POW;
+                break;
+            case '=':
+                op = OP_EQ;
+                break;
+            case '<':
+                op = OP_LT;
+                break;
+            case '>':
+                op = OP_GT;
+                break;
+            case '$':
+                op = OP_IN;
+                break;
+            case '(':
+                op = OP_LP;
+                break;
+            case ')':
+                op = OP_RP;
+                break;
+            case ',':
+                op = OP_COMMA;
+                break;
+            case '.':
+                op = OP_DOT;
+                break;
+            case '&':
+                op = OP_AMP;
+                break;
+            case '[':
+                op = OP_LB;
+                break;
+            case ']':
+                op = OP_RB;
+                break;
+            case ':':
+                op = OP_COLON;
+                break;
+            case ';':
+                op = OP_SEMI;
+                break;
+            case '?':
+                op = OP_Q;
+                break;
+            case '@':
+                op = OP_AT;
+                break;
             default:
                 return lx_fail(&lx, "Unexpected character");
             }
@@ -290,8 +371,7 @@ int rx_lex(const char *src, const char *fname, rx_tok **out, size_t *nout, r_err
     return lx.failed ? R_ERR_SYNTAX : R_OK;
 }
 
-void rx_lex_free(rx_tok *toks, size_t n)
-{
+void rx_lex_free(rx_tok* toks, size_t n) {
     if (!toks) {
         return;
     }

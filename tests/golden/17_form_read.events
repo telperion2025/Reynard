@@ -1,0 +1,17 @@
+# M7 §9.2: drive a two-field form (GET on table fields) through READ;
+# the dump after EOF shows the SAY labels, entered GET values, and the ? echo.
+text USE people
+key enter
+text @ 2,2 SAY "Name:" GET name SIZE 1,16
+key enter
+text @ 3,2 SAY "Age:" GET age PICTURE "999" SIZE 1,3
+key enter
+text READ
+key enter
+text Zed
+key tab
+text 42
+key enter
+text ? name, age
+key enter
+eof
