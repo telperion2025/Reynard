@@ -388,7 +388,7 @@ int rptf_load_text(const char *text, rpt_file *rf)
         if (strncmp(line, "VAR ", 4) == 0) {
             rtok tk[8];
             size_t n = rtok_split(line + 4, tk, 8);
-            if (n < 5 || !strcmp(tk[3].tok, "RESET") == 0) {
+            if (n < 5 || strcmp(tk[3].tok, "RESET") != 0) {
                 free(copy);
                 return R_ERR_SYNTAX;
             }
