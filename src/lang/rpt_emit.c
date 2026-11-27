@@ -344,13 +344,15 @@ static void emit_pdf(const rpt_doc *doc, const rpt_file *rf, strbuf *out)
     /* deterministic /ID from content hash */
     uint8_t h[32];
     rx_sha256(out->buf, out->len, h);
-    sb_printf(out, "trailer\n<< /Size %zu /Root 1 0 R /ID [<%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x> <%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x>] >>\nstartxref\n%zu\n%%%%EOF\n",
-              total_objs + 1,
-              h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7], h[8], h[9], h[10], h[11], h[12], h[13], h[14], h[15],
-              h[16], h[17], h[18], h[19], h[20], h[21], h[22], h[23], h[24], h[25], h[26], h[27], h[28], h[29], h[30], h[31],
-              h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7], h[8], h[9], h[10], h[11], h[12], h[13], h[14], h[15],
-              h[16], h[17], h[18], h[19], h[20], h[21], h[22], h[23], h[24], h[25], h[26], h[27], h[28], h[29], h[30], h[31],
-              xref_pos);
+    sb_printf(out, "trailer\n<< /Size %zu /Root 1 0 R /ID [<", total_objs + 1);
+    for (int hi = 0; hi < 32; hi++) {
+        sb_printf(out, "%02x", h[hi]);
+    }
+    sb_puts(out, "> <");
+    for (int hi = 0; hi < 32; hi++) {
+        sb_printf(out, "%02x", h[hi]);
+    }
+    sb_printf(out, ">] >>\nstartxref\n%zu\n%%%%EOF\n", xref_pos);
     free(offs);
     (void)rf;
 }
