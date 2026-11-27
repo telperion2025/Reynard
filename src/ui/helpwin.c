@@ -19,7 +19,7 @@
 #include "ui/ui_internal.h"
 #include "util/util.h"
 
-static const char *const fallback[] = {
+static const char* const fallback[] = {
     "Reynard Help - Contents (built-in; no help.dbf found)",
     "",
     "  System    About, Macros, Filer, Calculator, Calendar, ASCII, Help",
@@ -36,15 +36,15 @@ static const char *const fallback[] = {
     "  Batch mode: reynard script.prg | reynard -c \"? 1+1\" | reynard -",
 };
 
-static int ci_contains(const char *hay, const char *needle)
-{
+static int ci_contains(const char* hay, const char* needle) {
     size_t nl = strlen(needle);
     if (!nl) {
         return 1;
     }
-    for (const char *h = hay; *h; h++) {
+    for (const char* h = hay; *h; h++) {
         size_t i = 0;
-        while (i < nl && h[i] && tolower((unsigned char)h[i]) == tolower((unsigned char)needle[i])) {
+        while (i < nl && h[i] &&
+               tolower((unsigned char)h[i]) == tolower((unsigned char)needle[i])) {
             i++;
         }
         if (i == nl) {
@@ -56,20 +56,19 @@ static int ci_contains(const char *hay, const char *needle)
 
 /* one filtered topic row */
 typedef struct {
-    size_t idx;   /* record index in the help DBF */
+    size_t idx; /* record index in the help DBF */
     char topic[64];
 } hrow;
 
 typedef struct {
-    hrow *rows;
+    hrow* rows;
     size_t nrows, cap;
     char filter[64];
     size_t sel;
     int scroll;
 } hmodel;
 
-static void hm_rebuild(rx_ctx *ctx, hmodel *m)
-{
+static void hm_rebuild(rx_ctx* ctx, hmodel* m) {
     m->nrows = 0;
     size_t n = rx_help_count(ctx);
     for (size_t i = 0; i < n; i++) {
@@ -90,7 +89,7 @@ static void hm_rebuild(rx_ctx *ctx, hmodel *m)
         }
         if (m->nrows == m->cap) {
             size_t nc = m->cap ? m->cap * 2 : 16;
-            hrow *nr = realloc(m->rows, nc * sizeof(hrow));
+            hrow* nr = realloc(m->rows, nc * sizeof(hrow));
             if (!nr) {
                 RX_FATAL("out of memory");
             }
@@ -107,14 +106,12 @@ static void hm_rebuild(rx_ctx *ctx, hmodel *m)
 }
 
 /* render one line of text into the screen buffer */
-static void hline(rx_ui *ui, int x, int y, int w, const char *s, uint16_t attr, int bold_sel)
-{
+static void hline(rx_ui* ui, int x, int y, int w, const char* s, uint16_t attr, int bold_sel) {
     (void)bold_sel;
     scr_textn_clip(&ui->scr, x, y, s, strlen(s), attr, w);
 }
 
-static void help_render(rx_ui *ui, hmodel *m, int show_body, size_t body_idx)
-{
+static void help_render(rx_ui* ui, hmodel* m, int show_body, size_t body_idx) {
     int wx = 2, wy = 2;
     int ww = ui->scr.w - 4, wh = ui->scr.h - 5;
     if (ww < 20) {
@@ -124,7 +121,7 @@ static void help_render(rx_ui *ui, hmodel *m, int show_body, size_t body_idx)
         wh = 6;
     }
     scr_fill(&ui->scr, wx, wy, ww, wh, ' ', RXA_DLG);
-    win_box(ui, &(rx_win){ .x = wx, .y = wy, .w = ww, .h = wh }, RXA_DLG_BORDER, RXA_DLG_TITLE);
+    win_box(ui, &(rx_win){.x = wx, .y = wy, .w = ww, .h = wh}, RXA_DLG_BORDER, RXA_DLG_TITLE);
     /* title */
     char ttl[128];
     snprintf(ttl, sizeof(ttl), " Reynard Help %s", show_body ? "- Topic" : "- Contents");
@@ -162,9 +159,9 @@ static void help_render(rx_ui *ui, hmodel *m, int show_body, size_t body_idx)
         char hdr[96];
         snprintf(hdr, sizeof(hdr), " %s", topic);
         scr_textn_clip(&ui->scr, wx + 1, y++, hdr, strlen(hdr), RXA_DLG_TITLE, ww - 2);
-        const char *p = body.buf ? body.buf : "";
+        const char* p = body.buf ? body.buf : "";
         while (*p && y < wy + wh - 2) {
-            const char *nl = strchr(p, '\n');
+            const char* nl = strchr(p, '\n');
             size_t ln = nl ? (size_t)(nl - p) : strlen(p);
             scr_textn_clip(&ui->scr, wx + 1, y, p, ln, RXA_DLG, ww - 2);
             y++;
@@ -181,9 +178,8 @@ static void help_render(rx_ui *ui, hmodel *m, int show_body, size_t body_idx)
     scr_blit(&ui->scr, ui->tb);
 }
 
-void dlg_help(struct rx_ui *ui)
-{
-    rx_ctx *ctx = ui->ctx;
+void dlg_help(struct rx_ui* ui) {
+    rx_ctx* ctx = ui->ctx;
     /* resolve the help DBF: SET HELP TO file, else help.dbf on cwd/PATH */
     char path[700];
     if (ctx->set.helpfile[0]) {
@@ -214,7 +210,7 @@ void dlg_help(struct rx_ui *ui)
                 wh = ui->scr.h - 4;
             }
             scr_fill(&ui->scr, wx, wy, ww, wh, ' ', RXA_DLG);
-            win_box(ui, &(rx_win){ .x = wx, .y = wy, .w = ww, .h = wh }, RXA_DLG_BORDER,
+            win_box(ui, &(rx_win){.x = wx, .y = wy, .w = ww, .h = wh}, RXA_DLG_BORDER,
                     RXA_DLG_TITLE);
             scr_textn_clip(&ui->scr, wx, wy, " Reynard Help", 13, RXA_DLG_TITLE, ww);
             for (int r = 0; r < wh - 2 && r < (int)(sizeof(fallback) / sizeof(fallback[0])); r++) {
@@ -243,7 +239,7 @@ void dlg_help(struct rx_ui *ui)
         if (ev.kind != EV_KEY) {
             continue;
         }
-        const rkey *k = &ev.u.k;
+        const rkey* k = &ev.u.k;
         if (k->sym == RXK_ESC) {
             if (show_body) {
                 show_body = 0;

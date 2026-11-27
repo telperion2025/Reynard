@@ -14,11 +14,10 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "util/util.h" 
+#include "util/util.h"
 
-int rstr_dup(r_str *dst, const char *utf8, size_t n)
-{
-    char *copy = malloc(n + 1);
+int rstr_dup(r_str* dst, const char* utf8, size_t n) {
+    char* copy = malloc(n + 1);
     if (!copy) {
         RX_FATAL("out of memory");
     }
@@ -31,8 +30,7 @@ int rstr_dup(r_str *dst, const char *utf8, size_t n)
     return R_OK;
 }
 
-int rstr_cmp(const r_str *a, const r_str *b)
-{
+int rstr_cmp(const r_str* a, const r_str* b) {
     size_t n = a->n < b->n ? a->n : b->n;
     int c = memcmp(a->utf8, b->utf8, n);
     if (c != 0) {
@@ -47,16 +45,14 @@ int rstr_cmp(const r_str *a, const r_str *b)
     return 0;
 }
 
-void rval_set_str(rval *v, char *utf8, size_t n)
-{
+void rval_set_str(rval* v, char* utf8, size_t n) {
     rx_rval_free(v);
     v->t = RX_T_C;
     v->u.c.utf8 = utf8;
     v->u.c.n = n;
 }
 
-int rx_strcasecmp(const char *a, const char *b)
-{
+int rx_strcasecmp(const char* a, const char* b) {
     while (*a && *b) {
         int ca = tolower((unsigned char)*a);
         int cb = tolower((unsigned char)*b);
@@ -69,20 +65,18 @@ int rx_strcasecmp(const char *a, const char *b)
     return tolower((unsigned char)*a) - tolower((unsigned char)*b);
 }
 
-void rx_strtoupper(char *s)
-{
+void rx_strtoupper(char* s) {
     for (; *s; s++) {
         *s = (char)toupper((unsigned char)*s);
     }
 }
 
-char *rx_strdup(const char *s)
-{
+char* rx_strdup(const char* s) {
     if (!s) {
         return NULL;
     }
     size_t n = strlen(s);
-    char *copy = malloc(n + 1);
+    char* copy = malloc(n + 1);
     if (!copy) {
         RX_FATAL("out of memory");
     }
@@ -90,8 +84,7 @@ char *rx_strdup(const char *s)
     return copy;
 }
 
-int rx_mkdtemp(char *tmpl)
-{
+int rx_mkdtemp(char* tmpl) {
     size_t n = strlen(tmpl);
     if (n < 6 || strcmp(tmpl + n - 6, "XXXXXX") != 0) {
         return -1;
@@ -107,8 +100,7 @@ int rx_mkdtemp(char *tmpl)
     return -1;
 }
 
-int rx_mkstemp(char *tmpl)
-{
+int rx_mkstemp(char* tmpl) {
     size_t n = strlen(tmpl);
     if (n < 6 || strcmp(tmpl + n - 6, "XXXXXX") != 0) {
         return -1;
@@ -125,19 +117,16 @@ int rx_mkstemp(char *tmpl)
     return -1;
 }
 
-int rx_ftruncate(int fd, long len)
-{
+int rx_ftruncate(int fd, long len) {
     return ftruncate(fd, (off_t)len);
 }
 
-int rx_unlink(const char *path)
-{
+int rx_unlink(const char* path) {
     return unlink(path);
 }
 
 /* FoxPro-style wildcard match for LIKE/EXCEPT patterns: * and ? (M5) */
-int rx_wildmatch(const char *pat, const char *str)
-{
+int rx_wildmatch(const char* pat, const char* str) {
     const char *p = pat, *s = str;
     const char *star = NULL, *ss = NULL;
     while (*s) {

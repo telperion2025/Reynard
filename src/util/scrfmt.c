@@ -23,65 +23,81 @@
 
 /* ============================ model ============================ */
 
-const char *scrf_type_name(int t)
-{
+const char* scrf_type_name(int t) {
     switch (t) {
-    case SCR_SAY: return "SAY";
-    case SCR_GET: return "GET";
-    case SCR_BOX: return "BOX";
-    case SCR_LINE: return "LINE";
-    case SCR_BUTTON: return "BUTTON";
-    case SCR_RADIO: return "RADIO";
-    case SCR_CHECK: return "CHECK";
-    case SCR_POPUP: return "POPUP";
-    case SCR_SPIN: return "SPIN";
-    case SCR_INVB: return "INVB";
-    default: return "?";
+    case SCR_SAY:
+        return "SAY";
+    case SCR_GET:
+        return "GET";
+    case SCR_BOX:
+        return "BOX";
+    case SCR_LINE:
+        return "LINE";
+    case SCR_BUTTON:
+        return "BUTTON";
+    case SCR_RADIO:
+        return "RADIO";
+    case SCR_CHECK:
+        return "CHECK";
+    case SCR_POPUP:
+        return "POPUP";
+    case SCR_SPIN:
+        return "SPIN";
+    case SCR_INVB:
+        return "INVB";
+    default:
+        return "?";
     }
 }
 
-static int type_from_name(const char *s)
-{
-    if (!strcmp(s, "SAY")) return SCR_SAY;
-    if (!strcmp(s, "GET")) return SCR_GET;
-    if (!strcmp(s, "BOX")) return SCR_BOX;
-    if (!strcmp(s, "LINE")) return SCR_LINE;
-    if (!strcmp(s, "BUTTON")) return SCR_BUTTON;
-    if (!strcmp(s, "RADIO")) return SCR_RADIO;
-    if (!strcmp(s, "CHECK")) return SCR_CHECK;
-    if (!strcmp(s, "POPUP")) return SCR_POPUP;
-    if (!strcmp(s, "SPIN")) return SCR_SPIN;
-    if (!strcmp(s, "INVB")) return SCR_INVB;
+static int type_from_name(const char* s) {
+    if (!strcmp(s, "SAY"))
+        return SCR_SAY;
+    if (!strcmp(s, "GET"))
+        return SCR_GET;
+    if (!strcmp(s, "BOX"))
+        return SCR_BOX;
+    if (!strcmp(s, "LINE"))
+        return SCR_LINE;
+    if (!strcmp(s, "BUTTON"))
+        return SCR_BUTTON;
+    if (!strcmp(s, "RADIO"))
+        return SCR_RADIO;
+    if (!strcmp(s, "CHECK"))
+        return SCR_CHECK;
+    if (!strcmp(s, "POPUP"))
+        return SCR_POPUP;
+    if (!strcmp(s, "SPIN"))
+        return SCR_SPIN;
+    if (!strcmp(s, "INVB"))
+        return SCR_INVB;
     return 0;
 }
 
-void scrf_init(scr_file *sf, const char *name)
-{
+void scrf_init(scr_file* sf, const char* name) {
     memset(sf, 0, sizeof(*sf));
     snprintf(sf->name, sizeof(sf->name), "%s", name ? name : "SCREEN");
     sf->h = 24;
     sf->w = 80;
 }
 
-void scrf_free(scr_file *sf)
-{
+void scrf_free(scr_file* sf) {
     free(sf->items);
     sf->items = NULL;
     sf->nitems = sf->capitems = 0;
 }
 
-scr_item *scrf_add(scr_file *sf)
-{
+scr_item* scrf_add(scr_file* sf) {
     if (sf->nitems == sf->capitems) {
         size_t nc = sf->capitems ? sf->capitems * 2 : 16;
-        scr_item *ni = realloc(sf->items, nc * sizeof(scr_item));
+        scr_item* ni = realloc(sf->items, nc * sizeof(scr_item));
         if (!ni) {
             RX_FATAL("out of memory");
         }
         sf->items = ni;
         sf->capitems = nc;
     }
-    scr_item *it = &sf->items[sf->nitems++];
+    scr_item* it = &sf->items[sf->nitems++];
     memset(it, 0, sizeof(*it));
     it->h = 1;
     it->w = 10;
@@ -91,10 +107,9 @@ scr_item *scrf_add(scr_file *sf)
 
 /* ============================ .SCR text ============================ */
 
-static void put_quoted(strbuf *sb, const char *s)
-{
+static void put_quoted(strbuf* sb, const char* s) {
     sb_putc(sb, '"');
-    for (const char *p = s; *p; p++) {
+    for (const char* p = s; *p; p++) {
         if (*p == '"' || *p == '\\') {
             sb_putc(sb, '\\');
         }
@@ -104,13 +119,12 @@ static void put_quoted(strbuf *sb, const char *s)
 }
 
 /* canonical serialization: fixed field order, one ITEM per line */
-int scrf_serialize(const scr_file *sf, strbuf *sb)
-{
+int scrf_serialize(const scr_file* sf, strbuf* sb) {
     sb_printf(sb, "REYNARD SCREEN 1\n");
     sb_printf(sb, "NAME %s\n", sf->name);
     sb_printf(sb, "SIZE %d,%d\n", sf->h, sf->w);
     for (size_t i = 0; i < sf->nitems; i++) {
-        const scr_item *it = &sf->items[i];
+        const scr_item* it = &sf->items[i];
         switch (it->type) {
         case SCR_SAY:
             sb_printf(sb, "ITEM SAY %d,%d SCHEME %d ", it->row, it->col, it->scheme);
@@ -148,8 +162,8 @@ int scrf_serialize(const scr_file *sf, strbuf *sb)
             break;
         case SCR_BOX:
         case SCR_LINE:
-            sb_printf(sb, "ITEM %s %d,%d TO %d,%d SCHEME %d\n", scrf_type_name(it->type),
-                      it->row, it->col, it->row2, it->col2, it->scheme);
+            sb_printf(sb, "ITEM %s %d,%d TO %d,%d SCHEME %d\n", scrf_type_name(it->type), it->row,
+                      it->col, it->row2, it->col2, it->scheme);
             break;
         default: /* controls */
             sb_printf(sb, "ITEM %s %d,%d PROMPT ", scrf_type_name(it->type), it->row, it->col);
@@ -171,10 +185,9 @@ typedef struct {
     char tok[300];
 } scr_tok;
 
-static size_t scr_tokenize(char *line, scr_tok *toks, size_t max)
-{
+static size_t scr_tokenize(char* line, scr_tok* toks, size_t max) {
     size_t n = 0;
-    char *p = line;
+    char* p = line;
     while (*p && n < max) {
         while (*p == ' ' || *p == '\t') {
             p++;
@@ -182,7 +195,7 @@ static size_t scr_tokenize(char *line, scr_tok *toks, size_t max)
         if (!*p) {
             break;
         }
-        char *out = toks[n].tok;
+        char* out = toks[n].tok;
         size_t ol = 0;
         if (*p == '"') {
             p++;
@@ -207,8 +220,7 @@ static size_t scr_tokenize(char *line, scr_tok *toks, size_t max)
 }
 
 /* parse one ITEM line; raw tail fields use the untokenized remainder */
-static int scrf_parse_item(char *line, scr_item *it)
-{
+static int scrf_parse_item(char* line, scr_item* it) {
     /* find the raw tail for WHEN/VALID/RANGE/DEFAULT: locate keyword in the
        raw line (outside quotes) and copy the rest verbatim */
     scr_tok tk[24];
@@ -250,7 +262,7 @@ static int scrf_parse_item(char *line, scr_item *it)
     }
     /* GET and controls */
     for (; i < n; i++) {
-        const char *k = tk[i].tok;
+        const char* k = tk[i].tok;
         if (strcmp(k, "VAR") == 0 && i + 1 < n) {
             snprintf(it->var, sizeof(it->var), "%.63s", tk[i + 1].tok);
             i++;
@@ -277,14 +289,14 @@ static int scrf_parse_item(char *line, scr_item *it)
     }
     /* raw tail fields: each keyword's expression runs to the next clause
        keyword (canonical order WHEN, VALID, RANGE, DEFAULT, SCHEME) */
-    static const char *kws[] = { "WHEN", "VALID", "RANGE", "DEFAULT", NULL };
-    char *dsts[] = { it->when, it->valid, it->rang, it->deflt };
-    size_t caps[] = { sizeof(it->when), sizeof(it->valid), sizeof(it->rang), sizeof(it->deflt) };
-    static const char *stops[] = { " WHEN ", " VALID ", " RANGE ", " DEFAULT ", " SCHEME ", NULL };
+    static const char* kws[] = {"WHEN", "VALID", "RANGE", "DEFAULT", NULL};
+    char* dsts[] = {it->when, it->valid, it->rang, it->deflt};
+    size_t caps[] = {sizeof(it->when), sizeof(it->valid), sizeof(it->rang), sizeof(it->deflt)};
+    static const char* stops[] = {" WHEN ", " VALID ", " RANGE ", " DEFAULT ", " SCHEME ", NULL};
     for (int wi = 0; kws[wi]; wi++) {
-        const char *kw = strstr(line, kws[wi]);
+        const char* kw = strstr(line, kws[wi]);
         /* match as a keyword: preceded by space/start and followed by space */
-        while (kw && !(kw == line || kw[-1] == ' ') ) {
+        while (kw && !(kw == line || kw[-1] == ' ')) {
             kw = strstr(kw + 1, kws[wi]);
         }
         if (!kw) {
@@ -296,7 +308,7 @@ static int scrf_parse_item(char *line, scr_item *it)
         }
         size_t tlen = strlen(kw);
         for (int si = 0; stops[si]; si++) {
-            const char *hit = strstr(kw, stops[si]);
+            const char* hit = strstr(kw, stops[si]);
             if (hit && (size_t)(hit - kw) < tlen) {
                 tlen = (size_t)(hit - kw);
             }
@@ -313,12 +325,11 @@ static int scrf_parse_item(char *line, scr_item *it)
     return R_OK;
 }
 
-int scrf_load_text(const char *text, scr_file *sf)
-{
+int scrf_load_text(const char* text, scr_file* sf) {
     scrf_init(sf, "SCREEN");
-    char *copy = rx_strdup(text);
-    char *save = NULL;
-    for (char *line = strtok_r(copy, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) {
+    char* copy = rx_strdup(text);
+    char* save = NULL;
+    for (char* line = strtok_r(copy, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) {
         while (*line == ' ' || *line == '\t') {
             line++;
         }
@@ -344,7 +355,7 @@ int scrf_load_text(const char *text, scr_file *sf)
             break;
         }
         if (strncmp(line, "ITEM ", 5) == 0) {
-            scr_item *it = scrf_add(sf);
+            scr_item* it = scrf_add(sf);
             int rc = scrf_parse_item(line, it);
             if (rc != R_OK) {
                 free(copy);
@@ -359,9 +370,8 @@ int scrf_load_text(const char *text, scr_file *sf)
     return R_OK;
 }
 
-static char *read_all(const char *path, size_t *n)
-{
-    FILE *f = fopen(path, "rb");
+static char* read_all(const char* path, size_t* n) {
+    FILE* f = fopen(path, "rb");
     if (!f) {
         return NULL;
     }
@@ -384,10 +394,9 @@ static char *read_all(const char *path, size_t *n)
     return sb.buf;
 }
 
-int scrf_load(const char *path, scr_file *sf)
-{
+int scrf_load(const char* path, scr_file* sf) {
     size_t n = 0;
-    char *text = read_all(path, &n);
+    char* text = read_all(path, &n);
     if (!text) {
         return R_ERR_IO_NOTFOUND;
     }
@@ -396,12 +405,11 @@ int scrf_load(const char *path, scr_file *sf)
     return rc;
 }
 
-int scrf_save(const char *path, const scr_file *sf)
-{
+int scrf_save(const char* path, const scr_file* sf) {
     strbuf sb;
     sb_init(&sb);
     scrf_serialize(sf, &sb);
-    FILE *f = fopen(path, "w");
+    FILE* f = fopen(path, "w");
     if (!f) {
         sb_free(&sb);
         return R_ERR_IO_OPEN;
@@ -421,28 +429,23 @@ int scrf_save(const char *path, const scr_file *sf)
 #define RSO_VERSION 1u
 #define RSO_ITEM_REC 896u
 
-static void put_u16(uint8_t *p, uint16_t v)
-{
+static void put_u16(uint8_t* p, uint16_t v) {
     p[0] = (uint8_t)(v & 0xFF);
     p[1] = (uint8_t)(v >> 8);
 }
-static void put_u32(uint8_t *p, uint32_t v)
-{
+static void put_u32(uint8_t* p, uint32_t v) {
     p[0] = (uint8_t)(v & 0xFF);
     p[1] = (uint8_t)((v >> 8) & 0xFF);
     p[2] = (uint8_t)((v >> 16) & 0xFF);
     p[3] = (uint8_t)((v >> 24) & 0xFF);
 }
-static uint16_t get_u16(const uint8_t *p)
-{
+static uint16_t get_u16(const uint8_t* p) {
     return (uint16_t)(p[0] | (p[1] << 8));
 }
-static uint32_t get_u32(const uint8_t *p)
-{
+static uint32_t get_u32(const uint8_t* p) {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
-static void put_str(uint8_t *dst, size_t cap, const char *s)
-{
+static void put_str(uint8_t* dst, size_t cap, const char* s) {
     memset(dst, 0, cap);
     if (s) {
         size_t n = strlen(s);
@@ -452,8 +455,7 @@ static void put_str(uint8_t *dst, size_t cap, const char *s)
         memcpy(dst, s, n);
     }
 }
-static void get_str(const uint8_t *src, size_t cap, char *out)
-{
+static void get_str(const uint8_t* src, size_t cap, char* out) {
     size_t n = 0;
     while (n < cap && src[n]) {
         n++;
@@ -462,8 +464,7 @@ static void get_str(const uint8_t *src, size_t cap, char *out)
     out[n < cap ? n : cap - 1] = '\0';
 }
 
-static void item_to_rec(const scr_item *it, uint8_t *rec)
-{
+static void item_to_rec(const scr_item* it, uint8_t* rec) {
     memset(rec, 0, RSO_ITEM_REC);
     put_u16(rec + 0, (uint16_t)it->type);
     put_u16(rec + 2, (uint16_t)it->row);
@@ -483,8 +484,7 @@ static void item_to_rec(const scr_item *it, uint8_t *rec)
     put_str(rec + 768, 96, it->deflt);
 }
 
-static void item_from_rec(const uint8_t *rec, scr_item *it)
-{
+static void item_from_rec(const uint8_t* rec, scr_item* it) {
     memset(it, 0, sizeof(*it));
     it->type = get_u16(rec + 0);
     it->row = get_u16(rec + 2);
@@ -504,14 +504,13 @@ static void item_from_rec(const uint8_t *rec, scr_item *it)
     get_str(rec + 768, 96, it->deflt);
 }
 
-int scrf_compile(const char *rsopath, const scr_file *sf)
-{
+int scrf_compile(const char* rsopath, const scr_file* sf) {
     strbuf sb;
     sb_init(&sb);
     scrf_serialize(sf, &sb);
     uint8_t hash[32];
     rx_sha256(sb.buf ? sb.buf : "", sb.len, hash);
-    FILE *f = fopen(rsopath, "wb");
+    FILE* f = fopen(rsopath, "wb");
     if (!f) {
         sb_free(&sb);
         return R_ERR_IO_OPEN;
@@ -531,7 +530,7 @@ int scrf_compile(const char *rsopath, const scr_file *sf)
     if (fwrite(hdr, 1, 120, f) != 120) {
         rc = R_ERR_IO_WRITE;
     }
-    uint8_t *rec = calloc(1, RSO_ITEM_REC);
+    uint8_t* rec = calloc(1, RSO_ITEM_REC);
     if (!rec) {
         RX_FATAL("out of memory");
     }
@@ -547,10 +546,9 @@ int scrf_compile(const char *rsopath, const scr_file *sf)
     return rc;
 }
 
-int scrf_load_rso(const char *rsopath, scr_file *sf)
-{
+int scrf_load_rso(const char* rsopath, scr_file* sf) {
     size_t n = 0;
-    uint8_t *buf = (uint8_t *)read_all(rsopath, &n);
+    uint8_t* buf = (uint8_t*)read_all(rsopath, &n);
     if (!buf) {
         return R_ERR_IO_NOTFOUND;
     }
@@ -569,7 +567,7 @@ int scrf_load_rso(const char *rsopath, scr_file *sf)
         return R_ERR_CDX_VARIANT;
     }
     for (uint32_t i = 0; i < ni; i++) {
-        scr_item *it = scrf_add(sf);
+        scr_item* it = scrf_add(sf);
         item_from_rec(buf + 120 + (size_t)i * RSO_ITEM_REC, it);
     }
     free(buf);
@@ -578,17 +576,15 @@ int scrf_load_rso(const char *rsopath, scr_file *sf)
 
 /* ============================ .PRG codegen ============================ */
 
-static void gen_quoted(strbuf *sb, const char *s)
-{
+static void gen_quoted(strbuf* sb, const char* s) {
     put_quoted(sb, s);
 }
 
-int scrf_generate(const scr_file *sf, strbuf *out)
-{
+int scrf_generate(const scr_file* sf, strbuf* out) {
     sb_printf(out, "* Reynard generated screen %s (from %s.scr)\n", sf->name, sf->name);
     sb_puts(out, "* Regenerate with GENERATE SCREEN; edit the .SCR, not this file.\n");
     for (size_t i = 0; i < sf->nitems; i++) {
-        const scr_item *it = &sf->items[i];
+        const scr_item* it = &sf->items[i];
         switch (it->type) {
         case SCR_SAY:
             sb_printf(out, "@ %d,%d SAY ", it->row, it->col);
@@ -645,4 +641,3 @@ int scrf_generate(const scr_file *sf, strbuf *out)
     sb_puts(out, "READ CYCLE\n");
     return R_OK;
 }
-

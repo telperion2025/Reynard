@@ -25,8 +25,8 @@
 #include "data.h"
 
 #define RX_CDX_BLOCK 500
-#define RX_CDX_SIG 0x58444352u   /* "RCDX" */
-#define RX_IDX_SIG 0x58444449u   /* "RIDX" */
+#define RX_CDX_SIG 0x58444352u /* "RCDX" */
+#define RX_IDX_SIG 0x58444449u /* "RIDX" */
 #define RX_CDX_VERSION 1u
 
 #define RX_NODE_ROOT 1
@@ -38,7 +38,7 @@
 #define RX_DIR_ENTRIES ((RX_CDX_BLOCK - RX_DIR_HDR_SIZE) / RX_TAG_HDR_SIZE)
 
 typedef struct rx_ent {
-    uint8_t *key;
+    uint8_t* key;
     size_t klen;
     uint32_t recno;
 } rx_ent;
@@ -48,7 +48,7 @@ typedef struct rx_tag {
     char key_expr[256];
     char for_expr[65]; /* 64 on disk + NUL */
     int flags;
-    rx_ent *ents;
+    rx_ent* ents;
     size_t n, cap;
     int dirty;
     int sorted; /**< ents[] sorted when set; cleared on append (lazy sort) */
@@ -56,41 +56,41 @@ typedef struct rx_tag {
 
 struct rx_idx {
     char path[264];
-    int is_cdx;      /* compound CDX vs standalone IDX */
-    int is_ntx;      /* read-only NTX/NDX import */
-    int structural;  /* opened automatically with the DBF */
+    int is_cdx;     /* compound CDX vs standalone IDX */
+    int is_ntx;     /* read-only NTX/NDX import */
+    int structural; /* opened automatically with the DBF */
     int writable;
     int fd;
-    rx_tag *tags;
+    rx_tag* tags;
     size_t ntags, captags;
 };
 
 /* cdx.c */
-int rx_cdx_write_tree(int fd, rx_tag *t, uint32_t *next, uint32_t *root_out);
+int rx_cdx_write_tree(int fd, rx_tag* t, uint32_t* next, uint32_t* root_out);
 int rx_cdx_blk_read(int fd, uint32_t blk, uint8_t out[RX_CDX_BLOCK]);
 int rx_cdx_blk_write(int fd, uint32_t blk, const uint8_t buf[RX_CDX_BLOCK]);
-uint16_t rx_cdx_get_u16(const uint8_t *p);
-uint32_t rx_cdx_get_u32(const uint8_t *p);
-uint64_t rx_cdx_get_u64(const uint8_t *p);
-void rx_cdx_wr_u16(uint8_t *p, uint16_t v);
-void rx_cdx_wr_u32(uint8_t *p, uint32_t v);
-void rx_cdx_wr_u64(uint8_t *p, uint64_t v);
-void rx_cdx_tag_clear_ents(rx_tag *t);
+uint16_t rx_cdx_get_u16(const uint8_t* p);
+uint32_t rx_cdx_get_u32(const uint8_t* p);
+uint64_t rx_cdx_get_u64(const uint8_t* p);
+void rx_cdx_wr_u16(uint8_t* p, uint16_t v);
+void rx_cdx_wr_u32(uint8_t* p, uint32_t v);
+void rx_cdx_wr_u64(uint8_t* p, uint64_t v);
+void rx_cdx_tag_clear_ents(rx_tag* t);
 /** Append one entry assuming ascending key order already holds (NTX import). */
-int rx_cdx_tag_push(rx_tag *t, const uint8_t *key, size_t klen, uint32_t recno);
+int rx_cdx_tag_push(rx_tag* t, const uint8_t* key, size_t klen, uint32_t recno);
 /** Sorted insert honoring the tag's UNIQUE/DESCENDING flags (lazy: O(1)
  *  append + qsort on first read). */
-int rx_cdx_tag_insert_sorted(rx_tag *t, const uint8_t *key, size_t klen, uint32_t recno);
+int rx_cdx_tag_insert_sorted(rx_tag* t, const uint8_t* key, size_t klen, uint32_t recno);
 /** Sort the entry array if dirty (seek / positional access / flush). */
-void rx_cdx_tag_ensure_sorted(rx_tag *t);
-int rx_cdx_idx_add(rx_dbf *dbf, rx_idx *ix);
-int rx_cdx_idx_add_front(rx_dbf *dbf, rx_idx *ix);
-rx_idx *rx_cdx_idx_new(const char *path, int is_cdx, int is_ntx);
+void rx_cdx_tag_ensure_sorted(rx_tag* t);
+int rx_cdx_idx_add(rx_dbf* dbf, rx_idx* ix);
+int rx_cdx_idx_add_front(rx_dbf* dbf, rx_idx* ix);
+rx_idx* rx_cdx_idx_new(const char* path, int is_cdx, int is_ntx);
 
 /* idx.c */
-int rx_idx_write_file(rx_idx *ix);
+int rx_idx_write_file(rx_idx* ix);
 
 /* ntx_read.c */
-int rx_ntx_read_file(rx_dbf *dbf, const char *path, rx_idx *ix);
+int rx_ntx_read_file(rx_dbf* dbf, const char* path, rx_idx* ix);
 
 #endif /* REYNARD_CDX_INTERNAL_H */

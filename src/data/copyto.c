@@ -16,18 +16,16 @@
 #include "data/data.h"
 #include "util/util.h"
 
-static int is_memoish(uint8_t t)
-{
+static int is_memoish(uint8_t t) {
     return t == RFT_M || t == RFT_G || t == RFT_P || t == RFT_B;
 }
 
-static size_t line_len(const rx_dbf *dbf, const size_t *flds, size_t nf, int delim_mode,
-                       int quote)
-{
+static size_t line_len(const rx_dbf* dbf, const size_t* flds, size_t nf, int delim_mode,
+                       int quote) {
     (void)0;
     size_t n = 2; /* CRLF */
     for (size_t i = 0; i < nf; i++) {
-        const rx_fielddef *f = &dbf->fields[flds[i]];
+        const rx_fielddef* f = &dbf->fields[flds[i]];
         if (is_memoish(f->type)) {
             continue;
         }
@@ -46,16 +44,15 @@ static size_t line_len(const rx_dbf *dbf, const size_t *flds, size_t nf, int del
     return n + 8;
 }
 
-int rx_sdf_write_line(const rx_dbf *dbf, const size_t *flds, size_t nf, const uint8_t *rec,
-                      char *out, size_t outsz, size_t *outn)
-{
+int rx_sdf_write_line(const rx_dbf* dbf, const size_t* flds, size_t nf, const uint8_t* rec,
+                      char* out, size_t outsz, size_t* outn) {
     size_t need = line_len(dbf, flds, nf, 0, 0);
     if (outsz < need) {
         return R_ERR_RANGE;
     }
     size_t p = 0;
     for (size_t i = 0; i < nf; i++) {
-        const rx_fielddef *f = &dbf->fields[flds[i]];
+        const rx_fielddef* f = &dbf->fields[flds[i]];
         if (is_memoish(f->type)) {
             continue;
         }
@@ -70,10 +67,9 @@ int rx_sdf_write_line(const rx_dbf *dbf, const size_t *flds, size_t nf, const ui
 
 /* store a token into a raw field: C left-aligned padded, N/F right-aligned,
    D/L single-char or 8-char formats, overflow fills '*' */
-static void store_token(const rx_dbf *dbf, size_t fi, const char *tok, size_t tn, uint8_t *raw)
-{
-    const rx_fielddef *f = &dbf->fields[fi];
-    uint8_t *dst = raw + dbf->foff[fi];
+static void store_token(const rx_dbf* dbf, size_t fi, const char* tok, size_t tn, uint8_t* raw) {
+    const rx_fielddef* f = &dbf->fields[fi];
+    uint8_t* dst = raw + dbf->foff[fi];
     memset(dst, ' ', f->len);
     /* trim surrounding spaces */
     while (tn > 0 && tok[0] == ' ') {
@@ -142,13 +138,12 @@ static void store_token(const rx_dbf *dbf, size_t fi, const char *tok, size_t tn
     }
 }
 
-int rx_sdf_parse_line(const rx_dbf *dbf, const size_t *flds, size_t nf, const char *line,
-                      size_t n, uint8_t *rec)
-{
+int rx_sdf_parse_line(const rx_dbf* dbf, const size_t* flds, size_t nf, const char* line, size_t n,
+                      uint8_t* rec) {
     size_t pos = 0;
     for (size_t i = 0; i < nf; i++) {
         size_t fi = flds[i];
-        const rx_fielddef *f = &dbf->fields[fi];
+        const rx_fielddef* f = &dbf->fields[fi];
         if (is_memoish(f->type)) {
             memset(rec + dbf->foff[fi], ' ', f->len);
             continue;
@@ -157,7 +152,7 @@ int rx_sdf_parse_line(const rx_dbf *dbf, const size_t *flds, size_t nf, const ch
         if (pos + take > n) {
             take = n - pos;
         }
-        uint8_t *dst = rec + dbf->foff[fi];
+        uint8_t* dst = rec + dbf->foff[fi];
         memset(dst, ' ', f->len);
         if (take) {
             memcpy(dst, line + pos, take);
@@ -170,9 +165,8 @@ int rx_sdf_parse_line(const rx_dbf *dbf, const size_t *flds, size_t nf, const ch
     return R_OK;
 }
 
-int rx_delim_write_line(const rx_dbf *dbf, const size_t *flds, size_t nf, const uint8_t *rec,
-                        char delim, int quote, char *out, size_t outsz, size_t *outn)
-{
+int rx_delim_write_line(const rx_dbf* dbf, const size_t* flds, size_t nf, const uint8_t* rec,
+                        char delim, int quote, char* out, size_t outsz, size_t* outn) {
     size_t need = line_len(dbf, flds, nf, 1, quote);
     (void)delim;
     if (outsz < need) {
@@ -182,7 +176,7 @@ int rx_delim_write_line(const rx_dbf *dbf, const size_t *flds, size_t nf, const 
     int first = 1;
     for (size_t i = 0; i < nf; i++) {
         size_t fi = flds[i];
-        const rx_fielddef *f = &dbf->fields[fi];
+        const rx_fielddef* f = &dbf->fields[fi];
         if (is_memoish(f->type)) {
             continue;
         }
@@ -190,7 +184,7 @@ int rx_delim_write_line(const rx_dbf *dbf, const size_t *flds, size_t nf, const 
             out[p++] = delim;
         }
         first = 0;
-        const uint8_t *raw = rec + dbf->foff[fi];
+        const uint8_t* raw = rec + dbf->foff[fi];
         if (f->type == RFT_C && quote) {
             out[p++] = '"';
             for (size_t k = 0; k < f->len; k++) {
@@ -227,17 +221,16 @@ int rx_delim_write_line(const rx_dbf *dbf, const size_t *flds, size_t nf, const 
     return R_OK;
 }
 
-int rx_delim_parse_line(const rx_dbf *dbf, const size_t *flds, size_t nf, const char *line,
-                        size_t n, char delim, int quote, uint8_t *rec)
-{
+int rx_delim_parse_line(const rx_dbf* dbf, const size_t* flds, size_t nf, const char* line,
+                        size_t n, char delim, int quote, uint8_t* rec) {
     size_t pos = 0;
     for (size_t i = 0; i < nf; i++) {
         size_t fi = flds[i];
-        const rx_fielddef *f = &dbf->fields[fi];
+        const rx_fielddef* f = &dbf->fields[fi];
         /* extract the next token (heap copy only on the quoted path) */
-        const char *tok = "";
+        const char* tok = "";
         size_t tn = 0;
-        char *owned = NULL;
+        char* owned = NULL;
         if (pos < n && quote && line[pos] == '"') {
             pos++;
             strbuf sb;

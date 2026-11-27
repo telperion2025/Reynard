@@ -28,20 +28,20 @@ extern "C" {
 #endif
 
 /** CRC-32 (IEEE, reflected, as used by ZIP). */
-uint32_t rx_crc32(const void *data, size_t n);
+uint32_t rx_crc32(const void* data, size_t n);
 
 /* ---------------- writer ---------------- */
 
 typedef struct rx_zipw rx_zipw;
 
-rx_zipw *rx_zipw_new(void);
+rx_zipw* rx_zipw_new(void);
 /** Append one stored entry. name is truncated to 127 bytes. */
-int rx_zipw_add(rx_zipw *w, const char *name, const void *data, size_t n);
+int rx_zipw_add(rx_zipw* w, const char* name, const void* data, size_t n);
 /** Serialize to canonical bytes (owned buffer in *out). */
-int rx_zipw_finish(rx_zipw *w, char **out, size_t *outn);
+int rx_zipw_finish(rx_zipw* w, char** out, size_t* outn);
 /** Number of entries added so far. */
-size_t rx_zipw_count(const rx_zipw *w);
-void rx_zipw_free(rx_zipw *w);
+size_t rx_zipw_count(const rx_zipw* w);
+void rx_zipw_free(rx_zipw* w);
 
 /* ---------------- reader ---------------- */
 
@@ -53,20 +53,20 @@ typedef struct rx_rpp_ent {
 } rx_rpp_ent;
 
 typedef struct rx_rpp {
-    uint8_t *data;     /**< whole file (owned) */
+    uint8_t* data; /**< whole file (owned) */
     size_t len;
-    rx_rpp_ent *ents;  /**< central directory (owned) */
+    rx_rpp_ent* ents; /**< central directory (owned) */
     size_t nents;
 } rx_rpp;
 
 /** Open and index a .rpp file (stored entries only). */
-int rx_rpp_open(const char *path, rx_rpp *out);
+int rx_rpp_open(const char* path, rx_rpp* out);
 /** Index an in-memory image. */
-int rx_rpp_open_mem(const void *data, size_t n, rx_rpp *out);
-const rx_rpp_ent *rx_rpp_find(const rx_rpp *r, const char *name);
+int rx_rpp_open_mem(const void* data, size_t n, rx_rpp* out);
+const rx_rpp_ent* rx_rpp_find(const rx_rpp* r, const char* name);
 /** Read + CRC-verify one entry into an owned buffer. */
-int rx_rpp_read(const rx_rpp *r, const rx_rpp_ent *e, uint8_t **out, size_t *outn);
-void rx_rpp_close(rx_rpp *r);
+int rx_rpp_read(const rx_rpp* r, const rx_rpp_ent* e, uint8_t** out, size_t* outn);
+void rx_rpp_close(rx_rpp* r);
 
 #ifdef __cplusplus
 }

@@ -5,8 +5,8 @@
  * @brief Environment commands: ?/??, assignment, STORE, SET, QUIT, CLEAR,
  *        BROWSE (NOUI in batch). Spec §7.1 environment family.
  */
-#include "lang/lang.h"
 #include "lang/funcs.h"
+#include "lang/lang.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -15,8 +15,7 @@
 #include "reynard/dbf.h"
 #include "util/util.h"
 
-int rx_cmd_print(rx_ctx *ctx, rx_stmt *s, int newline)
-{
+int rx_cmd_print(rx_ctx* ctx, rx_stmt* s, int newline) {
     for (size_t i = 0; i < s->nexpr; i++) {
         rval v;
         rx_rval_undef(&v);
@@ -42,8 +41,7 @@ int rx_cmd_print(rx_ctx *ctx, rx_stmt *s, int newline)
     return R_OK;
 }
 
-int rx_cmd_assign(rx_ctx *ctx, rx_stmt *s)
-{
+int rx_cmd_assign(rx_ctx* ctx, rx_stmt* s) {
     if (s->nidx > 0) {
         /* M5 array element: a[i] = v or a[i,j] = v (index exprs first, value last) */
         double di = 1, dj = 1;
@@ -72,8 +70,7 @@ int rx_cmd_assign(rx_ctx *ctx, rx_stmt *s)
         if (rc != R_OK) {
             return rc;
         }
-        rc = rx_array_set(ctx, s->target, (size_t)(di < 1 ? 1 : di), (size_t)(dj < 1 ? 1 : dj),
-                          &v);
+        rc = rx_array_set(ctx, s->target, (size_t)(di < 1 ? 1 : di), (size_t)(dj < 1 ? 1 : dj), &v);
         rx_rval_free(&v);
         if (rc == R_ERR_TYPE) {
             return rx_raise(ctx, R_ERR_TYPE, s->line, s->col, "Variable is not an array");
@@ -94,8 +91,7 @@ int rx_cmd_assign(rx_ctx *ctx, rx_stmt *s)
     return rc;
 }
 
-int rx_cmd_store(rx_ctx *ctx, rx_stmt *s)
-{
+int rx_cmd_store(rx_ctx* ctx, rx_stmt* s) {
     rval v;
     rx_rval_undef(&v);
     int rc = rx_eval(ctx, s->exprs[0], &v, &ctx->err);
@@ -114,21 +110,22 @@ int rx_cmd_store(rx_ctx *ctx, rx_stmt *s)
 
 /* Appendix B full v1.0 keyword list: accepted by the parser now, semantics
    land per milestone (see docs/language.md status table). */
-static const char *set_known[] = {
-    "ALTERNATE", "ANSI", "BELL", "BLINK", "BLOCKSIZE", "BORDER", "CARRY", "CENTURY", "CLEAR",
-    "CLOCK", "COLOR", "COMPATIBLE", "CONFIRM", "CONSOLE", "CURRENCY", "CURSOR", "DATE", "DEBUG",
-    "DECIMALS", "DEFAULT", "DELETED", "DELIMITERS", "DEVICE", "DISPLAY", "DOHISTORY", "ECHO",
-    "ESCAPE", "EXACT", "EXCLUSIVE", "FIELDS", "FILTER", "FIXED", "FORMAT", "FULLPATH", "FUNCTION",
-    "HEADINGS", "HELP", "HOURS", "INTENSITY", "KEY", "KEYCOMP", "LOCK", "LOGERRORS", "MACKEY",
-    "MARGIN", "MARK", "MEMOWIDTH", "MESSAGE", "MOUSE", "MULTILOCKS", "NEAR", "NOTIFY",
-    "ODOMETER", "OPTIMIZE", "ORDER", "PALETTE", "PATH", "PDSETUP", "POINT", "PRINTER",
-    "PROCEDURE", "REFRESH", "REPROCESS", "RESOURCE", "SAFETY", "SCOREBOARD", "SEPARATOR",
-    "SHADOWS", "SKIP", "SPACE", "STATUS", "STEP", "STICKY", "SYSFORMATS", "SYSMENU", "TALK",
-    "TEXTMERGE", "TOPIC", "TYPEAHEAD", "UDFPARMS", "UNIQUE", "VIEW",
+static const char* set_known[] = {
+    "ALTERNATE",  "ANSI",      "BELL",       "BLINK",      "BLOCKSIZE",  "BORDER",   "CARRY",
+    "CENTURY",    "CLEAR",     "CLOCK",      "COLOR",      "COMPATIBLE", "CONFIRM",  "CONSOLE",
+    "CURRENCY",   "CURSOR",    "DATE",       "DEBUG",      "DECIMALS",   "DEFAULT",  "DELETED",
+    "DELIMITERS", "DEVICE",    "DISPLAY",    "DOHISTORY",  "ECHO",       "ESCAPE",   "EXACT",
+    "EXCLUSIVE",  "FIELDS",    "FILTER",     "FIXED",      "FORMAT",     "FULLPATH", "FUNCTION",
+    "HEADINGS",   "HELP",      "HOURS",      "INTENSITY",  "KEY",        "KEYCOMP",  "LOCK",
+    "LOGERRORS",  "MACKEY",    "MARGIN",     "MARK",       "MEMOWIDTH",  "MESSAGE",  "MOUSE",
+    "MULTILOCKS", "NEAR",      "NOTIFY",     "ODOMETER",   "OPTIMIZE",   "ORDER",    "PALETTE",
+    "PATH",       "PDSETUP",   "POINT",      "PRINTER",    "PROCEDURE",  "REFRESH",  "REPROCESS",
+    "RESOURCE",   "SAFETY",    "SCOREBOARD", "SEPARATOR",  "SHADOWS",    "SKIP",     "SPACE",
+    "STATUS",     "STEP",      "STICKY",     "SYSFORMATS", "SYSMENU",    "TALK",     "TEXTMERGE",
+    "TOPIC",      "TYPEAHEAD", "UDFPARMS",   "UNIQUE",     "VIEW",
 };
 
-static int set_known_p(const char *w)
-{
+static int set_known_p(const char* w) {
     for (size_t i = 0; i < sizeof(set_known) / sizeof(set_known[0]); i++) {
         if (rx_strcasecmp(w, set_known[i]) == 0) {
             return 1;
@@ -137,8 +134,7 @@ static int set_known_p(const char *w)
     return 0;
 }
 
-static int parse_on_off(const char *w, int *out)
-{
+static int parse_on_off(const char* w, int* out) {
     if (rx_strcasecmp(w, "ON") == 0) {
         *out = 1;
         return 1;
@@ -152,11 +148,10 @@ static int parse_on_off(const char *w, int *out)
 
 /* ---- SET RELATION / SET SKIP (spec §8.1, M4) ---- */
 
-int rx_rel_alias_area(const char *alias)
-{
+int rx_rel_alias_area(const char* alias) {
     for (int i = 1; i <= 255; i++) {
         if (rx_wa_used(i)) {
-            const char *a;
+            const char* a;
             rx_wa_alias(i, &a);
             if (rx_strcasecmp(a, alias) == 0) {
                 return i;
@@ -166,21 +161,20 @@ int rx_rel_alias_area(const char *alias)
     return -1;
 }
 
-void rx_rel_apply(rx_ctx *ctx, int driver, int via_skip)
-{
+void rx_rel_apply(rx_ctx* ctx, int driver, int via_skip) {
     if (ctx->nrels == 0) {
         return;
     }
     int saved = rx_wa_current();
     for (size_t i = 0; i < ctx->nrels; i++) {
-        rx_rel *r = &ctx->rels[i];
+        rx_rel* r = &ctx->rels[i];
         if (r->driver != driver) {
             continue;
         }
         if (via_skip && r->target >= 1 && r->target <= 255 && ctx->skip_to[r->target]) {
             continue; /* SET SKIP TO: one-to-many — target holds its position on skips */
         }
-        rx_dbf *target;
+        rx_dbf* target;
         if (rx_wa_dbf(r->target, &target) != R_OK) {
             continue;
         }
@@ -227,8 +221,7 @@ void rx_rel_apply(rx_ctx *ctx, int driver, int via_skip)
     rx_wa_select(saved);
 }
 
-static int rel_clause_present(rx_stmt *s)
-{
+static int rel_clause_present(rx_stmt* s) {
     for (size_t i = 0; i < s->nclause; i++) {
         if (strcmp(s->clauses[i].key, "REL") == 0 || strcmp(s->clauses[i].key, "REL_OFF") == 0 ||
             strcmp(s->clauses[i].key, "REL_CLEAR") == 0 || strcmp(s->clauses[i].key, "SKIP") == 0 ||
@@ -240,8 +233,7 @@ static int rel_clause_present(rx_stmt *s)
     return 0;
 }
 
-static int rx_cmd_set_relations(rx_ctx *ctx, rx_stmt *s)
-{
+static int rx_cmd_set_relations(rx_ctx* ctx, rx_stmt* s) {
     int additive = 0;
     for (size_t i = 0; i < s->nclause; i++) {
         if (strcmp(s->clauses[i].key, "REL_ADD") == 0) {
@@ -250,7 +242,7 @@ static int rx_cmd_set_relations(rx_ctx *ctx, rx_stmt *s)
     }
     int driver = rx_wa_current();
     for (size_t i = 0; i < s->nclause; i++) {
-        rx_clause *c = &s->clauses[i];
+        rx_clause* c = &s->clauses[i];
         if (strcmp(c->key, "REL_CLEAR") == 0) {
             /* SET RELATION TO (no args): drop all relations driven here */
             size_t w = 0;
@@ -305,7 +297,7 @@ static int rx_cmd_set_relations(rx_ctx *ctx, rx_stmt *s)
             }
             if (ctx->nrels == ctx->caprels) {
                 size_t nc = ctx->caprels ? ctx->caprels * 2 : 4;
-                rx_rel *nr = realloc(ctx->rels, nc * sizeof(rx_rel));
+                rx_rel* nr = realloc(ctx->rels, nc * sizeof(rx_rel));
                 if (!nr) {
                     RX_FATAL("out of memory");
                 }
@@ -313,7 +305,7 @@ static int rx_cmd_set_relations(rx_ctx *ctx, rx_stmt *s)
                 ctx->caprels = nc;
             }
             ctx->rels[ctx->nrels].driver = driver;
-            ctx->rels[ctx->nrels].e = c->e;     /* take ownership */
+            ctx->rels[ctx->nrels].e = c->e;       /* take ownership */
             ctx->rels[ctx->nrels].text = c->text; /* M6: RELATION() text */
             c->e = NULL;
             c->text = NULL;
@@ -333,8 +325,7 @@ static int rx_cmd_set_relations(rx_ctx *ctx, rx_stmt *s)
     return R_OK;
 }
 
-int rx_cmd_set(rx_ctx *ctx, rx_stmt *s)
-{
+int rx_cmd_set(rx_ctx* ctx, rx_stmt* s) {
     int has_filter_clause = 0;
     int has_idx_clause = 0, has_ord_clause = 0;
     for (size_t i = 0; i < s->nclause; i++) {
@@ -386,13 +377,13 @@ int rx_cmd_set(rx_ctx *ctx, rx_stmt *s)
         }
         return R_OK;
     }
-    const char *opt = s->strs[0];
+    const char* opt = s->strs[0];
     if (!set_known_p(opt)) {
         return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "Unknown SET option %s", opt);
     }
     /* forms: SET X ON|OFF | SET X TO v | SET X v */
     int val = -1;
-    const char *toval = NULL;
+    const char* toval = NULL;
     if (s->nstrs >= 2) {
         if (rx_strcasecmp(s->strs[1], "TO") == 0) {
             if (s->nstrs >= 3) {
@@ -465,9 +456,8 @@ int rx_cmd_set(rx_ctx *ctx, rx_stmt *s)
     return R_OK;
 }
 
-int rx_cmd_browse(rx_ctx *ctx, rx_stmt *s)
-{
-    rx_dbf *dbf;
+int rx_cmd_browse(rx_ctx* ctx, rx_stmt* s) {
+    rx_dbf* dbf;
     int rc = rx_wa_dbf(0, &dbf);
     if (rc != R_OK) {
         return rx_raise(ctx, R_ERR_DBF_NOTOPEN, s->line, s->col, "No table in use");

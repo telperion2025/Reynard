@@ -18,8 +18,7 @@
 #include "lang/funcs.h"
 #include "util/util.h"
 
-static int f_os(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_os(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "OS() expects no arguments");
@@ -27,43 +26,41 @@ static int f_os(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
     }
     (void)argv;
 #if defined(__linux__)
-    const char *v = "Linux";
+    const char* v = "Linux";
 #elif defined(__APPLE__)
-    const char *v = "macOS";
+    const char* v = "macOS";
 #elif defined(__FreeBSD__)
-    const char *v = "FreeBSD";
+    const char* v = "FreeBSD";
 #elif defined(__OpenBSD__)
-    const char *v = "OpenBSD";
+    const char* v = "OpenBSD";
 #elif defined(__NetBSD__)
-    const char *v = "NetBSD";
+    const char* v = "NetBSD";
 #else
-    const char *v = "Unix";
+    const char* v = "Unix";
 #endif
     f_str(out, rx_strdup(v), strlen(v));
     (void)c;
     return R_OK;
 }
 
-static int f_version(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_version(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "VERSION() expects no arguments");
         return err->code;
     }
     (void)argv;
-    const char *v = "Reynard 0.1.0 (FoxPro 2.6a compatible)";
+    const char* v = "Reynard 0.1.0 (FoxPro 2.6a compatible)";
     f_str(out, rx_strdup(v), strlen(v));
     (void)c;
     return R_OK;
 }
 
-static int f_getenv(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_getenv(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (f_argc(err, argc, 1, "GETENV") != 0) {
         return err->code;
     }
-    const char *s;
+    const char* s;
     size_t n;
     if (!rv_to_str(&argv[0], &s, &n)) {
         err->code = R_ERR_TYPE;
@@ -74,7 +71,7 @@ static int f_getenv(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *
     size_t k = n < 255 ? n : 255;
     memcpy(nm, s, k);
     nm[k] = '\0';
-    const char *v = getenv(nm);
+    const char* v = getenv(nm);
     if (!v) {
         v = "";
     }
@@ -83,8 +80,7 @@ static int f_getenv(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *
     return R_OK;
 }
 
-static int f_memory(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_memory(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "MEMORY() expects no arguments");
@@ -96,16 +92,15 @@ static int f_memory(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *
     return R_OK;
 }
 
-static int f_diskspace(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_diskspace(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 1) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "DISKSPACE() expects 0 or 1 arguments");
         return err->code;
     }
-    const char *path = ".";
+    const char* path = ".";
     if (argc == 1) {
-        const char *s;
+        const char* s;
         size_t n;
         if (rv_to_str(&argv[0], &s, &n)) {
             static _Thread_local char buf[260];
@@ -125,8 +120,7 @@ static int f_diskspace(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_er
     return R_OK;
 }
 
-static int f_sys(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_sys(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (f_argc(err, argc, 1, "SYS") != 0) {
         return err->code;
     }
@@ -170,9 +164,8 @@ static int f_sys(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err
     return R_OK;
 }
 
-static int f_logic_const(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err,
-                         rx_logic v, const char *nm)
-{
+static int f_logic_const(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err,
+                         rx_logic v, const char* nm) {
     if (argc > 1) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "%s() expects 0 or 1 arguments", nm);
@@ -192,23 +185,19 @@ static int f_logic_const(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_
     return R_OK;
 }
 
-static int f_capslock(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_capslock(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return f_logic_const(c, a, v, o, e, L_F, "CAPSLOCK");
 }
 
-static int f_numlock(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_numlock(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return f_logic_const(c, a, v, o, e, L_T, "NUMLOCK");
 }
 
-static int f_insmode(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_insmode(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return f_logic_const(c, a, v, o, e, L_F, "INSMODE");
 }
 
-static int f_inkey(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_inkey(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 1) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "INKEY() expects 0 or 1 arguments");
@@ -219,8 +208,7 @@ static int f_inkey(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
     return R_OK;
 }
 
-static int f_lastkey(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_lastkey(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "LASTKEY() expects no arguments");
@@ -232,8 +220,7 @@ static int f_lastkey(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
     return R_OK;
 }
 
-static int f_readkey(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_readkey(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "READKEY() expects no arguments");
@@ -245,14 +232,13 @@ static int f_readkey(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
     return R_OK;
 }
 
-static int f_set(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_set(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc < 1 || argc > 2) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "SET() expects 1 or 2 arguments");
         return err->code;
     }
-    const char *s;
+    const char* s;
     size_t n;
     if (!rv_to_str(&argv[0], &s, &n)) {
         err->code = R_ERR_TYPE;
@@ -299,8 +285,7 @@ static int f_set(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err
     return R_OK;
 }
 
-static int f_scols(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_scols(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "SCOLS() expects no arguments");
@@ -311,8 +296,7 @@ static int f_scols(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
     return R_OK;
 }
 
-static int f_srows(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_srows(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "SROWS() expects no arguments");
@@ -323,8 +307,7 @@ static int f_srows(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
     return R_OK;
 }
 
-static int f_curdir(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_curdir(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "CURDIR() expects no arguments");
@@ -340,12 +323,11 @@ static int f_curdir(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *
     return R_OK;
 }
 
-static int f_file(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_file(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (f_argc(err, argc, 1, "FILE") != 0) {
         return err->code;
     }
-    const char *s;
+    const char* s;
     size_t n;
     if (!rv_to_str(&argv[0], &s, &n)) {
         err->code = R_ERR_TYPE;
@@ -361,8 +343,7 @@ static int f_file(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
     return R_OK;
 }
 
-static int f_error(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_error(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     /* M5 §7.4: ERROR() is the trapped error number (0 when none) */
     if (argc > 0) {
         err->code = R_ERR_TYPE;
@@ -374,8 +355,7 @@ static int f_error(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
     return R_OK;
 }
 
-static int f_message(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_message(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     /* M5 §7.4: MESSAGE() is the trapped error text; MESSAGE(1) the source line */
     double which = 0;
     if (argc >= 1) {
@@ -386,9 +366,9 @@ static int f_message(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
         }
     }
     if (which == 1) {
-        const char *line = "";
+        const char* line = "";
         if (c->src && c->err.line > 0) {
-            const char *p = c->src;
+            const char* p = c->src;
             int cur = 1;
             while (*p && cur < c->err.line) {
                 if (*p == '\n') {
@@ -396,7 +376,7 @@ static int f_message(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
                 }
                 p++;
             }
-            const char *eol = p;
+            const char* eol = p;
             while (*eol && *eol != '\n') {
                 eol++;
             }
@@ -417,60 +397,77 @@ static int f_message(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
 }
 
 /* M7 §9.2 form introspection */
-static int f_row(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_row(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     (void)argc;
     (void)argv;
     if (c->ngets > 0) {
-        f_num(c, out, (double)c->gets[c->cur_obj >= 0 && (size_t)c->cur_obj < c->ngets ? (size_t)c->cur_obj : 0].row);
+        f_num(c, out,
+              (double)c
+                  ->gets[c->cur_obj >= 0 && (size_t)c->cur_obj < c->ngets ? (size_t)c->cur_obj : 0]
+                  .row);
     } else {
         f_num(c, out, 0);
     }
     (void)err;
     return R_OK;
 }
-static int f_col(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_col(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     (void)argc;
     (void)argv;
     if (c->ngets > 0) {
-        f_num(c, out, (double)c->gets[c->cur_obj >= 0 && (size_t)c->cur_obj < c->ngets ? (size_t)c->cur_obj : 0].col);
+        f_num(c, out,
+              (double)c
+                  ->gets[c->cur_obj >= 0 && (size_t)c->cur_obj < c->ngets ? (size_t)c->cur_obj : 0]
+                  .col);
     } else {
         f_num(c, out, 0);
     }
     (void)err;
     return R_OK;
 }
-static int f_rdlevel(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_rdlevel(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     (void)argc;
     (void)argv;
     (void)err;
     f_num(c, out, c->read_active ? 1 : 0);
     return R_OK;
 }
-static int f_objnum(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_objnum(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     (void)argc;
     (void)argv;
     (void)err;
     f_num(c, out, c->cur_obj + 1);
     return R_OK;
 }
-static int f_curobj(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_curobj(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     return f_objnum(c, argc, argv, out, err);
 }
 
 const rx_funcdef rx_funcs_sys[] = {
-    { "OS", f_os },           { "VERSION", f_version }, { "GETENV", f_getenv },
-    { "ERROR", f_error },     { "MESSAGE", f_message },
-    { "MEMORY", f_memory },   { "DISKSPACE", f_diskspace }, { "SYS", f_sys },
-    { "CAPSLOCK", f_capslock }, { "NUMLOCK", f_numlock }, { "INSMODE", f_insmode },
-    { "INKEY", f_inkey },     { "LASTKEY", f_lastkey }, { "READKEY", f_readkey },
-    { "ROW", f_row }, { "COL", f_col }, { "RDLEVEL", f_rdlevel }, { "OBJNUM", f_objnum }, { "CUROBJ", f_curobj },
-    { "SET", f_set },         { "SCOLS", f_scols },     { "SROWS", f_srows },
-    { "CURDIR", f_curdir },   { "FILE", f_file },
+    {"OS", f_os},
+    {"VERSION", f_version},
+    {"GETENV", f_getenv},
+    {"ERROR", f_error},
+    {"MESSAGE", f_message},
+    {"MEMORY", f_memory},
+    {"DISKSPACE", f_diskspace},
+    {"SYS", f_sys},
+    {"CAPSLOCK", f_capslock},
+    {"NUMLOCK", f_numlock},
+    {"INSMODE", f_insmode},
+    {"INKEY", f_inkey},
+    {"LASTKEY", f_lastkey},
+    {"READKEY", f_readkey},
+    {"ROW", f_row},
+    {"COL", f_col},
+    {"RDLEVEL", f_rdlevel},
+    {"OBJNUM", f_objnum},
+    {"CUROBJ", f_curobj},
+    {"SET", f_set},
+    {"SCOLS", f_scols},
+    {"SROWS", f_srows},
+    {"CURDIR", f_curdir},
+    {"FILE", f_file},
 };
 
 const size_t rx_funcs_sys_n = sizeof(rx_funcs_sys) / sizeof(rx_funcs_sys[0]);

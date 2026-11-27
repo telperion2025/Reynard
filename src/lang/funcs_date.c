@@ -19,25 +19,22 @@
 #define RX_TEST_MONTH 1
 #define RX_TEST_DAY 1
 
-static r_date test_date(void)
-{
-    r_date d = { RX_TEST_YEAR, RX_TEST_MONTH, RX_TEST_DAY };
+static r_date test_date(void) {
+    r_date d = {RX_TEST_YEAR, RX_TEST_MONTH, RX_TEST_DAY};
     return d;
 }
 
-static r_date now_date(void)
-{
+static r_date now_date(void) {
     time_t t = time(NULL);
     struct tm tmv;
     localtime_r(&t, &tmv);
-    r_date d = { (int16_t)(tmv.tm_year + 1900), (int16_t)(tmv.tm_mon + 1), (int16_t)tmv.tm_mday };
+    r_date d = {(int16_t)(tmv.tm_year + 1900), (int16_t)(tmv.tm_mon + 1), (int16_t)tmv.tm_mday};
     return d;
 }
 
 /** Extract a date from a D/T value; character accepted as YYYYMMDD or
  *  MM/DD/YY[YY]. Returns R_OK or an error code (err filled). */
-static int arg_date(const rval *v, r_date *out, r_err *err)
-{
+static int arg_date(const rval* v, r_date* out, r_err* err) {
     memset(out, 0, sizeof(*out));
     if (v->t == RX_T_D) {
         *out = v->u.d;
@@ -48,7 +45,7 @@ static int arg_date(const rval *v, r_date *out, r_err *err)
         return R_OK;
     }
     if (v->t == RX_T_C) {
-        const char *s = v->u.c.utf8 ? v->u.c.utf8 : "";
+        const char* s = v->u.c.utf8 ? v->u.c.utf8 : "";
         size_t n = v->u.c.n;
         int y = 0, m = 0, d = 0;
         if (n == 8 && s[4] != '/') {
@@ -75,8 +72,7 @@ static int arg_date(const rval *v, r_date *out, r_err *err)
     return err->code;
 }
 
-static int f_datefn(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_datefn(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "DATE() expects no arguments");
@@ -87,15 +83,14 @@ static int f_datefn(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *
     return R_OK;
 }
 
-static int f_time(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_time(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "TIME() expects no arguments");
         return err->code;
     }
     (void)argv;
-    const char *t = "00:00:00";
+    const char* t = "00:00:00";
     if (!c->test_mode) {
         time_t now = time(NULL);
         struct tm tmv;
@@ -108,8 +103,7 @@ static int f_time(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
     return R_OK;
 }
 
-static int f_seconds(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_seconds(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "SECONDS() expects no arguments");
@@ -127,9 +121,8 @@ static int f_seconds(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
     return R_OK;
 }
 
-static int d_part(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err, int part,
-                  const char *nm)
-{
+static int d_part(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err, int part,
+                  const char* nm) {
     if (f_argc(err, argc, 1, nm) != 0) {
         return err->code;
     }
@@ -158,8 +151,8 @@ static int d_part(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
         break;
     }
     case 4: { /* CDOW */
-        static const char *names[] = { "Sunday", "Monday", "Tuesday", "Wednesday",
-                                       "Thursday", "Friday", "Saturday" };
+        static const char* names[] = {"Sunday",   "Monday", "Tuesday", "Wednesday",
+                                      "Thursday", "Friday", "Saturday"};
         long j = rx_julian(d.y, d.m, d.d);
         long dow = (j + 1) % 7;
         if (dow < 0) {
@@ -169,9 +162,9 @@ static int d_part(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
         break;
     }
     case 5: { /* CMONTH */
-        static const char *mons[] = { "January", "February", "March", "April", "May", "June",
-                                       "July", "August", "September", "October", "November",
-                                       "December" };
+        static const char* mons[] = {"January",   "February", "March",    "April",
+                                     "May",       "June",     "July",     "August",
+                                     "September", "October",  "November", "December"};
         f_str(out, rx_strdup(mons[d.m - 1]), strlen(mons[d.m - 1]));
         break;
     }
@@ -195,48 +188,39 @@ static int d_part(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
     return R_OK;
 }
 
-static int f_year(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_year(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return d_part(c, a, v, o, e, 0, "YEAR");
 }
 
-static int f_month(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_month(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return d_part(c, a, v, o, e, 1, "MONTH");
 }
 
-static int f_day(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_day(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return d_part(c, a, v, o, e, 2, "DAY");
 }
 
-static int f_dow(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_dow(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return d_part(c, a, v, o, e, 3, "DOW");
 }
 
-static int f_cdow(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_cdow(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return d_part(c, a, v, o, e, 4, "CDOW");
 }
 
-static int f_cmonth(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_cmonth(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return d_part(c, a, v, o, e, 5, "CMONTH");
 }
 
-static int f_quarter(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_quarter(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return d_part(c, a, v, o, e, 6, "QUARTER");
 }
 
-static int f_week(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_week(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return d_part(c, a, v, o, e, 7, "WEEK");
 }
 
-static int f_dtos(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_dtos(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (f_argc(err, argc, 1, "DTOS") != 0) {
         return err->code;
     }
@@ -256,8 +240,7 @@ static int f_dtos(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
     return R_OK;
 }
 
-static int f_dtoc(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_dtoc(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc < 1 || argc > 2) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "DTOC() expects 1 or 2 arguments");
@@ -280,8 +263,7 @@ static int f_dtoc(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
     return R_OK;
 }
 
-static int f_ctod(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_ctod(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (f_argc(err, argc, 1, "CTOD") != 0) {
         return err->code;
     }
@@ -289,7 +271,7 @@ static int f_ctod(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
     int rc = arg_date(&argv[0], &d, err);
     if (rc != R_OK) {
         /* FoxPro CTOD("") is the empty date, not an error */
-        const char *s;
+        const char* s;
         size_t n;
         if (rv_to_str(&argv[0], &s, &n) && n == 0) {
             memset(&d, 0, sizeof(d));
@@ -303,8 +285,7 @@ static int f_ctod(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
     return R_OK;
 }
 
-static int f_gomonth(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_gomonth(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     (void)c;
     if (f_argc(err, argc, 2, "GOMONTH") != 0) {
         return err->code;
@@ -328,19 +309,18 @@ static int f_gomonth(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
         y -= 1;
     }
     int dd = d.d;
-    static const int mdays[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    static const int mdays[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
     int leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
     int maxd = mdays[m - 1] + (m == 2 && leap ? 1 : 0);
     if (dd > maxd) {
         dd = maxd;
     }
-    r_date r = { (int16_t)y, (int16_t)m, (int16_t)dd };
+    r_date r = {(int16_t)y, (int16_t)m, (int16_t)dd};
     f_date(out, r);
     return R_OK;
 }
 
-static int f_mdy(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_mdy(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (f_argc(err, argc, 1, "MDY") != 0) {
         return err->code;
     }
@@ -349,9 +329,9 @@ static int f_mdy(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err
     if (rc != R_OK) {
         return rc;
     }
-    static const char *mons[] = { "January", "February", "March", "April", "May", "June",
-                                   "July", "August", "September", "October", "November",
-                                   "December" };
+    static const char* mons[] = {"January",   "February", "March",    "April",
+                                 "May",       "June",     "July",     "August",
+                                 "September", "October",  "November", "December"};
     char buf[32];
     snprintf(buf, sizeof(buf), "%s %02d, %04d", mons[d.m - 1], d.d, d.y);
     f_str(out, rx_strdup(buf), strlen(buf));
@@ -359,8 +339,7 @@ static int f_mdy(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err
     return R_OK;
 }
 
-static int f_dmy(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_dmy(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (f_argc(err, argc, 1, "DMY") != 0) {
         return err->code;
     }
@@ -369,9 +348,9 @@ static int f_dmy(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err
     if (rc != R_OK) {
         return rc;
     }
-    static const char *mons[] = { "January", "February", "March", "April", "May", "June",
-                                   "July", "August", "September", "October", "November",
-                                   "December" };
+    static const char* mons[] = {"January",   "February", "March",    "April",
+                                 "May",       "June",     "July",     "August",
+                                 "September", "October",  "November", "December"};
     char buf[32];
     snprintf(buf, sizeof(buf), "%02d %s %04d", d.d, mons[d.m - 1], d.y);
     f_str(out, rx_strdup(buf), strlen(buf));
@@ -379,9 +358,8 @@ static int f_dmy(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err
     return R_OK;
 }
 
-static int dt_part(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err, int part,
-                   const char *nm)
-{
+static int dt_part(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err, int part,
+                   const char* nm) {
     if (f_argc(err, argc, 1, nm) != 0) {
         return err->code;
     }
@@ -404,27 +382,24 @@ static int dt_part(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
     return R_OK;
 }
 
-static int f_hour(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_hour(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return dt_part(c, a, v, o, e, 0, "HOUR");
 }
 
-static int f_minute(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_minute(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return dt_part(c, a, v, o, e, 1, "MINUTE");
 }
 
-static int f_sec(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_sec(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return dt_part(c, a, v, o, e, 2, "SEC");
 }
 
 const rx_funcdef rx_funcs_date[] = {
-    { "DATE", f_datefn },   { "TIME", f_time },   { "SECONDS", f_seconds }, { "YEAR", f_year },
-    { "MONTH", f_month }, { "DAY", f_day },     { "DOW", f_dow },         { "CDOW", f_cdow },
-    { "CMONTH", f_cmonth }, { "DTOS", f_dtos }, { "DTOC", f_dtoc },       { "CTOD", f_ctod },
-    { "GOMONTH", f_gomonth }, { "MDY", f_mdy }, { "DMY", f_dmy },         { "QUARTER", f_quarter },
-    { "WEEK", f_week },   { "HOUR", f_hour },   { "MINUTE", f_minute },   { "SEC", f_sec },
+    {"DATE", f_datefn},     {"TIME", f_time}, {"SECONDS", f_seconds}, {"YEAR", f_year},
+    {"MONTH", f_month},     {"DAY", f_day},   {"DOW", f_dow},         {"CDOW", f_cdow},
+    {"CMONTH", f_cmonth},   {"DTOS", f_dtos}, {"DTOC", f_dtoc},       {"CTOD", f_ctod},
+    {"GOMONTH", f_gomonth}, {"MDY", f_mdy},   {"DMY", f_dmy},         {"QUARTER", f_quarter},
+    {"WEEK", f_week},       {"HOUR", f_hour}, {"MINUTE", f_minute},   {"SEC", f_sec},
 };
 
 const size_t rx_funcs_date_n = sizeof(rx_funcs_date) / sizeof(rx_funcs_date[0]);

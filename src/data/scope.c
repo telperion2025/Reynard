@@ -9,9 +9,8 @@
  */
 #include "data/data.h"
 
-int rx_scope_range(const rx_dbf *dbf, const rx_scope *sc, uint32_t *start, uint32_t *end,
-                   int *restore)
-{
+int rx_scope_range(const rx_dbf* dbf, const rx_scope* sc, uint32_t* start, uint32_t* end,
+                   int* restore) {
     if (!dbf || !sc || !start || !end) {
         return R_ERR_RANGE;
     }

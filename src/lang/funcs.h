@@ -15,10 +15,10 @@
 extern "C" {
 #endif
 
-typedef int (*rx_fnh)(rx_ctx *ctx, size_t argc, const rval *argv, rval *out, r_err *err);
+typedef int (*rx_fnh)(rx_ctx* ctx, size_t argc, const rval* argv, rval* out, r_err* err);
 
 typedef struct rx_funcdef {
-    const char *name;
+    const char* name;
     rx_fnh fn;
 } rx_funcdef;
 
@@ -38,8 +38,7 @@ extern const size_t rx_funcs_array_n;
 /* ---- coercion helpers shared by all funcs_*.c ---- */
 
 /** Numeric coercion: N/I/Y/B -> double. Returns 0 on type mismatch. */
-static inline int rv_to_num(const rval *v, double *d)
-{
+static inline int rv_to_num(const rval* v, double* d) {
     switch (v->t) {
     case RX_T_N:
         *d = v->u.n.d;
@@ -58,8 +57,7 @@ static inline int rv_to_num(const rval *v, double *d)
     }
 }
 
-static inline int rv_to_logic(const rval *v, rx_logic *l)
-{
+static inline int rv_to_logic(const rval* v, rx_logic* l) {
     if (v->t != RX_T_L) {
         return 0;
     }
@@ -67,8 +65,7 @@ static inline int rv_to_logic(const rval *v, rx_logic *l)
     return 1;
 }
 
-static inline int rv_to_str(const rval *v, const char **s, size_t *n)
-{
+static inline int rv_to_str(const rval* v, const char** s, size_t* n) {
     if (v->t == RX_T_C) {
         *s = v->u.c.utf8 ? v->u.c.utf8 : "";
         *n = v->u.c.n;
@@ -82,39 +79,33 @@ static inline int rv_to_str(const rval *v, const char **s, size_t *n)
     return 0;
 }
 
-static inline void f_num(rx_ctx *ctx, rval *out, double d)
-{
+static inline void f_num(rx_ctx* ctx, rval* out, double d) {
     out->t = RX_T_N;
     out->u.n.d = d;
     out->u.n.dec = ctx ? ctx->set.decimals : 2;
 }
 
-static inline void f_int(rval *out, int32_t i)
-{
+static inline void f_int(rval* out, int32_t i) {
     out->t = RX_T_I;
     out->u.i = i;
 }
 
-static inline void f_logic(rval *out, rx_logic l)
-{
+static inline void f_logic(rval* out, rx_logic l) {
     out->t = RX_T_L;
     out->u.l = l;
 }
 
-static inline void f_date(rval *out, r_date d)
-{
+static inline void f_date(rval* out, r_date d) {
     out->t = RX_T_D;
     out->u.d = d;
 }
 
 /** out becomes a C string value; takes ownership of utf8. */
-static inline void f_str(rval *out, char *utf8, size_t n)
-{
+static inline void f_str(rval* out, char* utf8, size_t n) {
     rval_set_str(out, utf8, n);
 }
 
-static inline int f_argc(r_err *err, size_t argc, size_t want, const char *name)
-{
+static inline int f_argc(r_err* err, size_t argc, size_t want, const char* name) {
     if (argc != want) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "%s() expects %zu argument(s)", name, want);

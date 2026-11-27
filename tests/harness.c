@@ -20,24 +20,24 @@
 #include <fcntl.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <time.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/resource.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "reynard/dbf.h"
 #include "term/mouse.h"
 #include "term/term_if.h"
-#include "util/util.h"
 #include "util/scrfmt.h"
+#include "util/util.h"
 
 static int failures = 0;
 
-static void rm_rf(const char *path);
+static void rm_rf(const char* path);
 
 #define CHECK(cond, msg)                                                                           \
     do {                                                                                           \
@@ -51,17 +51,15 @@ static void rm_rf(const char *path);
 
 static int pairs_seen = 0;
 
-static void count_pair(int idx, uint8_t fg, uint8_t bg)
-{
+static void count_pair(int idx, uint8_t fg, uint8_t bg) {
     (void)idx;
     (void)fg;
     (void)bg;
     pairs_seen++;
 }
 
-static int write_file(const char *path, const char *content)
-{
-    FILE *f = fopen(path, "w");
+static int write_file(const char* path, const char* content) {
+    FILE* f = fopen(path, "w");
     if (!f) {
         return -1;
     }
@@ -70,9 +68,8 @@ static int write_file(const char *path, const char *content)
     return 0;
 }
 
-static char *read_file(const char *path, size_t *n)
-{
-    FILE *f = fopen(path, "r");
+static char* read_file(const char* path, size_t* n) {
+    FILE* f = fopen(path, "r");
     if (!f) {
         return NULL;
     }
@@ -92,8 +89,7 @@ static char *read_file(const char *path, size_t *n)
     return sb.buf;
 }
 
-static int selftest_term(void)
-{
+static int selftest_term(void) {
     char dir[] = "/tmp/rx-selftest-XXXXXX";
     if (rx_mkdtemp(dir) != 0) {
         perror("mkdtemp");
@@ -102,22 +98,21 @@ static int selftest_term(void)
     char evpath[300], dumppath[300];
     snprintf(evpath, sizeof(evpath), "%s/t.events", dir);
     snprintf(dumppath, sizeof(dumppath), "%s/t.dump", dir);
-    write_file(evpath,
-               "# comment line\n"
-               "key a\n"
-               "key enter\n"
-               "key f5\n"
-               "key ctrl-a\n"
-               "text hi\n"
-               "mouse press 3 4 1\n"
-               "mouse release 3 4 1\n"
-               "mouse wheelup 0 0 0\n"
-               "resize 40 10\n"
-               "eof\n");
+    write_file(evpath, "# comment line\n"
+                       "key a\n"
+                       "key enter\n"
+                       "key f5\n"
+                       "key ctrl-a\n"
+                       "text hi\n"
+                       "mouse press 3 4 1\n"
+                       "mouse release 3 4 1\n"
+                       "mouse wheelup 0 0 0\n"
+                       "resize 40 10\n"
+                       "eof\n");
     setenv("RX_EVENTS", evpath, 1);
     setenv("RX_DUMP", dumppath, 1);
 
-    const term_backend *tb = rx_term_script();
+    const term_backend* tb = rx_term_script();
     CHECK(tb != NULL, "script backend exists");
     CHECK(tb->init() == R_OK, "script init");
 
@@ -156,7 +151,7 @@ static int selftest_term(void)
 
     tb->shutdown();
     size_t n;
-    char *dump = read_file(dumppath, &n);
+    char* dump = read_file(dumppath, &n);
     CHECK(dump != NULL, "dump written");
     if (dump) {
         CHECK(strcmp(dump, "Rey!\nfox\n") == 0, "dump content matches grid");
@@ -168,66 +163,64 @@ static int selftest_term(void)
     return failures;
 }
 
-static int selftest_mouse(void)
-{
+static int selftest_mouse(void) {
     /* SGR 1006 press: ESC [ < 0 ; 11 ; 6 M  -> button 1 at (10,5) */
-    const uint8_t sgr_press[] = { 0x1B, '[', '<', '0', ';', '1', '1', ';', '6', 'M' };
+    const uint8_t sgr_press[] = {0x1B, '[', '<', '0', ';', '1', '1', ';', '6', 'M'};
     rmouse m;
     size_t used = 0;
     CHECK(mouse_decode(sgr_press, sizeof(sgr_press), &m, &used) == 1, "sgr press decodes");
     CHECK(used == sizeof(sgr_press) && m.kind == RM_PRESS && m.button == 1 && m.x == 10 && m.y == 5,
           "sgr press fields");
     /* SGR release: ... m */
-    const uint8_t sgr_rel[] = { 0x1B, '[', '<', '0', ';', '1', '1', ';', '6', 'm' };
+    const uint8_t sgr_rel[] = {0x1B, '[', '<', '0', ';', '1', '1', ';', '6', 'm'};
     CHECK(mouse_decode(sgr_rel, sizeof(sgr_rel), &m, &used) == 1 && m.kind == RM_RELEASE,
           "sgr release");
     /* SGR wheel up: button 64 */
-    const uint8_t sgr_wheel[] = { 0x1B, '[', '<', '6', '4', ';', '1', ';', '1', 'M' };
+    const uint8_t sgr_wheel[] = {0x1B, '[', '<', '6', '4', ';', '1', ';', '1', 'M'};
     CHECK(mouse_decode(sgr_wheel, sizeof(sgr_wheel), &m, &used) == 1 && m.kind == RM_WHEEL_UP,
           "sgr wheel up");
     /* legacy 1000: ESC [ M C! 4  -> b=67-32=35? use b=32(' ')+0 -> button1, x=33+32... */
-    const uint8_t legacy[] = { 0x1B, '[', 'M', (uint8_t)(' ' + 0), (uint8_t)(' ' + 10),
-                               (uint8_t)(' ' + 5) };
+    const uint8_t legacy[] = {
+        0x1B, '[', 'M', (uint8_t)(' ' + 0), (uint8_t)(' ' + 10), (uint8_t)(' ' + 5)};
     CHECK(mouse_decode(legacy, sizeof(legacy), &m, &used) == 1 && used == 6 && m.kind == RM_PRESS &&
               m.button == 1 && m.x == 9 && m.y == 4,
           "legacy 1000 decodes");
     /* SGR drag: motion (32) + button1 (0) -> b=32 */
-    const uint8_t sgr_drag[] = { 0x1B, '[', '<', '3', '2', ';', '1', '1', ';', '6', 'M' };
+    const uint8_t sgr_drag[] = {0x1B, '[', '<', '3', '2', ';', '1', '1', ';', '6', 'M'};
     CHECK(mouse_decode(sgr_drag, sizeof(sgr_drag), &m, &used) == 1 && m.kind == RM_DRAG &&
               m.button == 1 && m.x == 10 && m.y == 5,
           "sgr drag decodes");
     /* SGR hover: motion with no button -> b=35 */
-    const uint8_t sgr_move[] = { 0x1B, '[', '<', '3', '5', ';', '1', ';', '1', 'M' };
+    const uint8_t sgr_move[] = {0x1B, '[', '<', '3', '5', ';', '1', ';', '1', 'M'};
     CHECK(mouse_decode(sgr_move, sizeof(sgr_move), &m, &used) == 1 && m.kind == RM_MOVE &&
               m.button == 0,
           "sgr hover decodes");
     /* legacy 1002/1003 drag: b = 32|0 -> byte 64 ('@') */
-    const uint8_t legacy_drag[] = { 0x1B, '[', 'M', (uint8_t)('@'), (uint8_t)(' ' + 10),
-                                    (uint8_t)(' ' + 5) };
+    const uint8_t legacy_drag[] = {
+        0x1B, '[', 'M', (uint8_t)('@'), (uint8_t)(' ' + 10), (uint8_t)(' ' + 5)};
     CHECK(mouse_decode(legacy_drag, sizeof(legacy_drag), &m, &used) == 1 && used == 6 &&
               m.kind == RM_DRAG && m.button == 1 && m.x == 9 && m.y == 4,
           "legacy drag decodes");
     /* legacy X10 release: b = 3 -> byte 35 ('#') */
-    const uint8_t legacy_rel[] = { 0x1B, '[', 'M', (uint8_t)('#'), (uint8_t)(' ' + 10),
-                                   (uint8_t)(' ' + 5) };
+    const uint8_t legacy_rel[] = {
+        0x1B, '[', 'M', (uint8_t)('#'), (uint8_t)(' ' + 10), (uint8_t)(' ' + 5)};
     CHECK(mouse_decode(legacy_rel, sizeof(legacy_rel), &m, &used) == 1 && m.kind == RM_RELEASE,
           "legacy release decodes");
     /* incomplete: needs more bytes */
-    const uint8_t part[] = { 0x1B, '[', '<', '0', ';' };
+    const uint8_t part[] = {0x1B, '[', '<', '0', ';'};
     CHECK(mouse_decode(part, sizeof(part), &m, &used) == 0, "incomplete returns 0");
     /* garbage */
-    const uint8_t bad[] = { 'x', 'y', 'z' };
+    const uint8_t bad[] = {'x', 'y', 'z'};
     CHECK(mouse_decode(bad, sizeof(bad), &m, &used) == -1, "garbage rejected");
     return failures;
 }
 
 /* ---------------- conformance ---------------- */
 
-static int cmp_files(const char *a, const char *b, char *diffbuf, size_t diffsz)
-{
+static int cmp_files(const char* a, const char* b, char* diffbuf, size_t diffsz) {
     size_t na, nb;
-    char *ca = read_file(a, &na);
-    char *cb = read_file(b, &nb);
+    char* ca = read_file(a, &na);
+    char* cb = read_file(b, &nb);
     if (!ca || !cb) {
         free(ca);
         free(cb);
@@ -244,13 +237,12 @@ static int cmp_files(const char *a, const char *b, char *diffbuf, size_t diffsz)
     return eq ? 0 : 1;
 }
 
-static void copy_file(const char *src, const char *dst)
-{
-    FILE *in = fopen(src, "r");
+static void copy_file(const char* src, const char* dst) {
+    FILE* in = fopen(src, "r");
     if (!in) {
         return;
     }
-    FILE *out = fopen(dst, "w");
+    FILE* out = fopen(dst, "w");
     if (!out) {
         fclose(in);
         return;
@@ -264,16 +256,15 @@ static void copy_file(const char *src, const char *dst)
     fclose(out);
 }
 
-static void rm_rf(const char *path)
-{
+static void rm_rf(const char* path) {
     struct stat st;
     if (lstat(path, &st) != 0) {
         return;
     }
     if (S_ISDIR(st.st_mode)) {
-        DIR *d = opendir(path);
+        DIR* d = opendir(path);
         if (d) {
-            struct dirent *e;
+            struct dirent* e;
             while ((e = readdir(d))) {
                 if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) {
                     continue;
@@ -290,14 +281,13 @@ static void rm_rf(const char *path)
     }
 }
 
-static int filter_prg(const struct dirent *d)
-{
+static int filter_prg(const struct dirent* d) {
     size_t n = strlen(d->d_name);
     return n > 4 && strcmp(d->d_name + n - 4, ".prg") == 0;
 }
 
-static int conformance(const char *dir, const char *bin, const char *fixtures, const char *workroot)
-{
+static int conformance(const char* dir, const char* bin, const char* fixtures,
+                       const char* workroot) {
     /* the child chdir()s into its sandbox, so the binary path must be absolute */
     char absbin[1200];
     if (bin[0] == '/') {
@@ -323,7 +313,7 @@ static int conformance(const char *dir, const char *bin, const char *fixtures, c
         snprintf(absroot, sizeof(absroot), "%s/%s", cwd, workroot);
     }
     mkdir(absroot, 0755); /* may exist */
-    struct dirent **names = NULL;
+    struct dirent** names = NULL;
     int n = scandir(dir, &names, filter_prg, NULL);
     if (n < 0) {
         perror("scandir");
@@ -333,7 +323,7 @@ static int conformance(const char *dir, const char *bin, const char *fixtures, c
     for (int i = 0; i < n; i++) {
         for (int j = i + 1; j < n; j++) {
             if (strcmp(names[i]->d_name, names[j]->d_name) > 0) {
-                struct dirent *t = names[i];
+                struct dirent* t = names[i];
                 names[i] = names[j];
                 names[j] = t;
             }
@@ -358,7 +348,7 @@ static int conformance(const char *dir, const char *bin, const char *fixtures, c
             continue;
         }
         /* copy fixtures */
-        struct dirent **fx = NULL;
+        struct dirent** fx = NULL;
         int nf = scandir(fixtures, &fx, NULL, alphasort);
         if (nf > 0) {
             for (int k = 0; k < nf; k++) {
@@ -380,7 +370,8 @@ static int conformance(const char *dir, const char *bin, const char *fixtures, c
         snprintf(caseprg, sizeof(caseprg), "%s/case.prg", wd);
         copy_file(prg, caseprg);
         /* per-case form siblings ship as case.scr / case.frm / case.rlb */
-        static const char *exts3[5] = { "scr", "frm", "rlb", "rpj", "mpr" }; /* M9: project + menu siblings */
+        static const char* exts3[5] = {"scr", "frm", "rlb", "rpj",
+                                       "mpr"}; /* M9: project + menu siblings */
         for (int ei = 0; ei < 5; ei++) {
             char srcf[1200], dstf[1200];
             snprintf(srcf, sizeof(srcf), "%s.%s", base, exts3[ei]);
@@ -405,12 +396,12 @@ static int conformance(const char *dir, const char *bin, const char *fixtures, c
             }
             setenv("HOME", wd, 1); /* isolate the .RXP fallback cache */
             if (has_stdin) {
-                FILE *fi = freopen("stdin.txt", "r", stdin);
+                FILE* fi = freopen("stdin.txt", "r", stdin);
                 (void)fi;
             }
-            FILE *fe = freopen(errp, "w", stderr);
+            FILE* fe = freopen(errp, "w", stderr);
             (void)fe;
-            execl(bin, "reynard", "-t", "-o", "out.txt", "case.prg", (char *)NULL);
+            execl(bin, "reynard", "-t", "-o", "out.txt", "case.prg", (char*)NULL);
             _exit(127);
         }
         int status = 0;
@@ -433,7 +424,7 @@ static int conformance(const char *dir, const char *bin, const char *fixtures, c
         } else {
             if (exitcode != 0) {
                 size_t ne;
-                char *e = read_file(errp, &ne);
+                char* e = read_file(errp, &ne);
                 snprintf(diff, sizeof(diff), "exit code %d; stderr: %s", exitcode,
                          e ? e : "(none)");
                 free(e);
@@ -462,16 +453,14 @@ static int conformance(const char *dir, const char *bin, const char *fixtures, c
 
 /* ---------------- roundtrip (M2 gate: byte-identical read/write) ---------------- */
 
-static int filter_dbf(const struct dirent *d)
-{
+static int filter_dbf(const struct dirent* d) {
     size_t n = strlen(d->d_name);
     return n > 4 && strcmp(d->d_name + n - 4, ".dbf") == 0;
 }
 
 /* read the raw 32-byte header of a dbf file */
-static int read_hdr32(const char *path, uint8_t hdr[32])
-{
-    FILE *f = fopen(path, "r");
+static int read_hdr32(const char* path, uint8_t hdr[32]) {
+    FILE* f = fopen(path, "r");
     if (!f) {
         return -1;
     }
@@ -480,8 +469,7 @@ static int read_hdr32(const char *path, uint8_t hdr[32])
     return n == 32 ? 0 : -1;
 }
 
-static int roundtrip(const char *fixtures, const char *workroot)
-{
+static int roundtrip(const char* fixtures, const char* workroot) {
     rx_data_session(1, 0x01); /* frozen header date: byte-identical output */
     char absroot[1000];
     if (workroot[0] == '/') {
@@ -495,7 +483,7 @@ static int roundtrip(const char *fixtures, const char *workroot)
         snprintf(absroot, sizeof(absroot), "%s/%s", cwd, workroot);
     }
     mkdir(absroot, 0755);
-    struct dirent **names = NULL;
+    struct dirent** names = NULL;
     int n = scandir(fixtures, &names, filter_dbf, alphasort);
     if (n < 0) {
         perror("scandir");
@@ -517,7 +505,7 @@ static int roundtrip(const char *fixtures, const char *workroot)
         }
         uint8_t version = hdr[0], mark = hdr[29];
         int yy = 1900 + hdr[1], mm = hdr[2], dd = hdr[3];
-        rx_dbf *in = NULL;
+        rx_dbf* in = NULL;
         int rc = rx_dbf_open(src, RD_READONLY, &in);
         if (rc != R_OK) {
             printf("FAIL %s: open %d\n", names[i]->d_name, rc);
@@ -527,11 +515,11 @@ static int roundtrip(const char *fixtures, const char *workroot)
         }
         size_t nf;
         rx_dbf_field_count(in, &nf);
-        rx_fielddef *defs = calloc(nf, sizeof(rx_fielddef));
+        rx_fielddef* defs = calloc(nf, sizeof(rx_fielddef));
         for (size_t k = 0; k < nf; k++) {
             rx_dbf_field_def(in, k, &defs[k]);
         }
-        rx_dbf *out = NULL;
+        rx_dbf* out = NULL;
         rc = rx_dbf_create_full(dst, defs, nf, version, mark, yy, mm, dd, &out);
         free(defs);
         if (rc != R_OK) {
@@ -545,7 +533,7 @@ static int roundtrip(const char *fixtures, const char *workroot)
         rx_dbf_recount(in, &nrec);
         uint16_t rsz;
         rx_dbf_recsize(in, &rsz);
-        uint8_t *raw = malloc(rsz);
+        uint8_t* raw = malloc(rsz);
         for (uint32_t r = 1; r <= nrec; r++) {
             rc = rx_dbf_read_raw(in, r, raw);
             if (rc != R_OK) {
@@ -576,8 +564,8 @@ static int roundtrip(const char *fixtures, const char *workroot)
         }
         /* byte-identical check */
         size_t na, nb;
-        char *ca = read_file(src, &na);
-        char *cb = read_file(dst, &nb);
+        char* ca = read_file(src, &na);
+        char* cb = read_file(dst, &nb);
         int eq = ca && cb && na == nb && memcmp(ca, cb, na) == 0;
         free(ca);
         free(cb);
@@ -585,20 +573,20 @@ static int roundtrip(const char *fixtures, const char *workroot)
         char dst2[1400];
         snprintf(dst2, sizeof(dst2), "%s/rt2-%s", absroot, names[i]->d_name);
         unlink(dst2);
-        rx_dbf *in2 = NULL;
+        rx_dbf* in2 = NULL;
         rx_dbf_open(src, RD_READONLY, &in2);
         size_t nf2;
         rx_dbf_field_count(in2, &nf2);
-        rx_fielddef *defs2 = calloc(nf2, sizeof(rx_fielddef));
+        rx_fielddef* defs2 = calloc(nf2, sizeof(rx_fielddef));
         for (size_t k = 0; k < nf2; k++) {
             rx_dbf_field_def(in2, k, &defs2[k]);
         }
-        rx_dbf *out2 = NULL;
+        rx_dbf* out2 = NULL;
         rx_dbf_create_full(dst2, defs2, nf2, version, mark, yy, mm, dd, &out2);
         free(defs2);
         uint32_t nrec2;
         rx_dbf_recount(in2, &nrec2);
-        uint8_t *raw2 = malloc(rsz);
+        uint8_t* raw2 = malloc(rsz);
         for (uint32_t r = 1; r <= nrec2; r++) {
             rx_dbf_read_raw(in2, r, raw2);
             uint32_t nr;
@@ -610,8 +598,8 @@ static int roundtrip(const char *fixtures, const char *workroot)
         rx_dbf_close(in2);
         rx_dbf_close(out2);
         size_t nc;
-        char *cc = read_file(dst, &na);
-        char *cd = read_file(dst2, &nc);
+        char* cc = read_file(dst, &na);
+        char* cd = read_file(dst2, &nc);
         int det = cc && cd && na == nc && memcmp(cc, cd, na) == 0;
         free(cc);
         free(cd);
@@ -634,15 +622,16 @@ static int roundtrip(const char *fixtures, const char *workroot)
         char p1[1200], p2[1200];
         snprintf(p1, sizeof(p1), "%s/m1.dbf", wd);
         snprintf(p2, sizeof(p2), "%s/m2.dbf", wd);
-        rx_fielddef mf[2] = { { "ID", RFT_N, 4, 0, 0 }, { "NOTES", RFT_M, 10, 0, 0 } };
-        const char *texts[3] = { "alpha memo", "a much longer memo payload that spans "
-                                         "multiple 64-byte FPT blocks for sure........"
-                                         "..............................................",
-                                 "" };
+        rx_fielddef mf[2] = {{"ID", RFT_N, 4, 0, 0}, {"NOTES", RFT_M, 10, 0, 0}};
+        const char* texts[3] = {"alpha memo",
+                                "a much longer memo payload that spans "
+                                "multiple 64-byte FPT blocks for sure........"
+                                "..............................................",
+                                ""};
         int ok = 1;
         for (int pass = 0; pass < 2 && ok; pass++) {
-            const char *pp = pass == 0 ? p1 : p2;
-            rx_dbf *d = NULL;
+            const char* pp = pass == 0 ? p1 : p2;
+            rx_dbf* d = NULL;
             int rc = rx_dbf_create(pp, mf, 2, &d);
             if (rc != R_OK) {
                 ok = 0;
@@ -653,7 +642,7 @@ static int roundtrip(const char *fixtures, const char *workroot)
                 rx_dbf_append(d, &nr);
                 rval v;
                 rx_rval_undef(&v);
-                char num[8];
+                char num[16];
                 snprintf(num, sizeof(num), "%d", i + 1);
                 rval_set_str(&v, rx_strdup(num), strlen(num));
                 rx_dbf_put(d, 0, &v);
@@ -668,14 +657,14 @@ static int roundtrip(const char *fixtures, const char *workroot)
         }
         if (ok) {
             /* reopen p1 and verify memo text */
-            rx_dbf *d = NULL;
+            rx_dbf* d = NULL;
             if (rx_dbf_open(p1, RD_READONLY, &d) == R_OK) {
                 for (int i = 0; i < 3; i++) {
                     rx_dbf_goto(d, (uint32_t)(i + 1));
                     rval v;
                     rx_rval_undef(&v);
                     if (rx_dbf_get(d, 1, &v) == R_OK) {
-                        const char *s = "";
+                        const char* s = "";
                         size_t sn = 0;
                         if (v.t == RX_T_M && v.u.memo.loaded) {
                             s = v.u.memo.loaded->utf8 ? v.u.memo.loaded->utf8 : "";
@@ -700,10 +689,10 @@ static int roundtrip(const char *fixtures, const char *workroot)
             snprintf(f1, sizeof(f1), "%s/m1.FPT", wd);
             snprintf(f2, sizeof(f2), "%s/m2.FPT", wd);
             size_t n1, n2, n3, n4;
-            char *b1 = read_file(p1, &n1);
-            char *b2 = read_file(p2, &n2);
-            char *g1 = read_file(f1, &n3);
-            char *g2 = read_file(f2, &n4);
+            char* b1 = read_file(p1, &n1);
+            char* b2 = read_file(p2, &n2);
+            char* g1 = read_file(f1, &n3);
+            char* g2 = read_file(f2, &n4);
             /* fpt may be created with uppercase ext; find it */
             if (!g1) {
                 snprintf(f1, sizeof(f1), "%s/m1.fpt", wd);
@@ -740,7 +729,7 @@ static int roundtrip(const char *fixtures, const char *workroot)
         if (stat(src, &st) == 0) {
             ran++;
             copy_file(src, dst);
-            rx_dbf *d = NULL;
+            rx_dbf* d = NULL;
             int ok = 1;
             if (rx_dbf_open(dst, RD_EXCLUSIVE, &d) == R_OK) {
                 if (rx_dbf_goto(d, 2) != R_OK || rx_dbf_set_deleted(d, 1) != R_OK ||
@@ -761,7 +750,7 @@ static int roundtrip(const char *fixtures, const char *workroot)
                 rx_rval_undef(&v);
                 rx_dbf_goto(d, 2);
                 if (rx_dbf_get(d, 0, &v) == R_OK) {
-                    const char *s = v.t == RX_T_C ? v.u.c.utf8 : "";
+                    const char* s = v.t == RX_T_C ? v.u.c.utf8 : "";
                     if (strncmp(s, "Bob", 3) == 0) {
                         ok = 0; /* Bob must be gone */
                     }
@@ -770,7 +759,7 @@ static int roundtrip(const char *fixtures, const char *workroot)
                 rx_dbf_goto(d, 2);
                 rx_rval_undef(&v);
                 if (rx_dbf_get(d, 0, &v) == R_OK) {
-                    const char *s = v.t == RX_T_C ? v.u.c.utf8 : "";
+                    const char* s = v.t == RX_T_C ? v.u.c.utf8 : "";
                     if (strncmp(s, "Carol", 5) != 0) {
                         ok = 0;
                     }
@@ -796,8 +785,7 @@ static int roundtrip(const char *fixtures, const char *workroot)
 
 #define RACE_ITERS 200
 
-static int lockrace(const char *workroot)
-{
+static int lockrace(const char* workroot) {
     rx_data_session(1, 0x01);
     rx_data_set_reprocess(-1); /* AUTOMATIC: exercise the retry policy (spec §7.4) */
     char absroot[1000];
@@ -815,8 +803,8 @@ static int lockrace(const char *workroot)
     char path[1200];
     snprintf(path, sizeof(path), "%s/race.dbf", absroot);
     unlink(path);
-    rx_fielddef f[1] = { { "N1", RFT_N, 10, 0, 0 } };
-    rx_dbf *d = NULL;
+    rx_fielddef f[1] = {{"N1", RFT_N, 10, 0, 0}};
+    rx_dbf* d = NULL;
     int rc = rx_dbf_create(path, f, 1, &d);
     CHECK(rc == R_OK, "race.dbf created");
     uint32_t nr;
@@ -831,13 +819,13 @@ static int lockrace(const char *workroot)
     rx_dbf_close(d);
 
     /* phase 1: mutual exclusion — parent holds rec 1, child must conflict */
-    rx_dbf *pd = NULL;
+    rx_dbf* pd = NULL;
     CHECK(rx_dbf_open(path, RD_SHARED, &pd) == R_OK, "parent open shared");
     CHECK(rx_rlock(pd, 1) == R_OK, "parent rlock 1");
     CHECK(rx_rlock_query(pd, 1) == 0, "own lock not reported as foreign");
     pid_t pid = fork();
     if (pid == 0) {
-        rx_dbf *cd = NULL;
+        rx_dbf* cd = NULL;
         if (rx_dbf_open(path, RD_SHARED, &cd) != R_OK) {
             _exit(10);
         }
@@ -867,7 +855,7 @@ static int lockrace(const char *workroot)
     for (int c = 0; c < 2; c++) {
         pid = fork();
         if (pid == 0) {
-            rx_dbf *cd = NULL;
+            rx_dbf* cd = NULL;
             if (rx_dbf_open(path, RD_SHARED, &cd) != R_OK) {
                 _exit(20);
             }
@@ -912,7 +900,7 @@ static int lockrace(const char *workroot)
         }
     }
     CHECK(!bad, "race children clean");
-    rx_dbf *vd = NULL;
+    rx_dbf* vd = NULL;
     CHECK(rx_dbf_open(path, RD_READONLY, &vd) == R_OK, "verify open");
     rx_dbf_goto(vd, 1);
     rval vv;
@@ -936,17 +924,15 @@ static int lockrace(const char *workroot)
 
 /* ---------------- golden screens (M3 gate: §12 event replay + cell dumps) ---------------- */
 
-static int filter_events(const struct dirent *d)
-{
+static int filter_events(const struct dirent* d) {
     size_t n = strlen(d->d_name);
     return n > 7 && strcmp(d->d_name + n - 7, ".events") == 0;
 }
 
-static int cmp_lines(const char *a, const char *b, char *diffbuf, size_t diffsz)
-{
+static int cmp_lines(const char* a, const char* b, char* diffbuf, size_t diffsz) {
     size_t na, nb;
-    char *ca = read_file(a, &na);
-    char *cb = read_file(b, &nb);
+    char* ca = read_file(a, &na);
+    char* cb = read_file(b, &nb);
     if (!ca || !cb) {
         free(ca);
         free(cb);
@@ -957,8 +943,8 @@ static int cmp_lines(const char *a, const char *b, char *diffbuf, size_t diffsz)
     char *pa = ca, *pb = cb;
     char *enda = ca + na, *endb = cb + nb;
     while (pa < enda && pb < endb) {
-        char *nla = memchr(pa, '\n', (size_t)(enda - pa));
-        char *nlb = memchr(pb, '\n', (size_t)(endb - pb));
+        char* nla = memchr(pa, '\n', (size_t)(enda - pa));
+        char* nlb = memchr(pb, '\n', (size_t)(endb - pb));
         size_t sa = nla ? (size_t)(nla - pa) : (size_t)(enda - pa);
         size_t sb = nlb ? (size_t)(nlb - pb) : (size_t)(endb - pb);
         if (sa != sb || memcmp(pa, pb, sa) != 0) {
@@ -984,8 +970,7 @@ static int cmp_lines(const char *a, const char *b, char *diffbuf, size_t diffsz)
     return 0;
 }
 
-static void abs_path(const char *p, char *out, size_t outsz)
-{
+static void abs_path(const char* p, char* out, size_t outsz) {
     if (p[0] == '/') {
         snprintf(out, outsz, "%s", p);
         return;
@@ -999,14 +984,13 @@ static void abs_path(const char *p, char *out, size_t outsz)
     snprintf(out, outsz, "%s/%s", cwd, p);
 }
 
-static int golden(const char *dir, const char *bin, const char *fixtures, const char *workroot,
-                  int update)
-{
+static int golden(const char* dir, const char* bin, const char* fixtures, const char* workroot,
+                  int update) {
     char absbin[1200], absroot[1000];
     abs_path(bin, absbin, sizeof(absbin));
     abs_path(workroot, absroot, sizeof(absroot));
     mkdir(absroot, 0755);
-    struct dirent **names = NULL;
+    struct dirent** names = NULL;
     int n = scandir(dir, &names, filter_events, NULL);
     if (n < 0) {
         perror("scandir");
@@ -1015,7 +999,7 @@ static int golden(const char *dir, const char *bin, const char *fixtures, const 
     for (int i = 0; i < n; i++) {
         for (int j = i + 1; j < n; j++) {
             if (strcmp(names[i]->d_name, names[j]->d_name) > 0) {
-                struct dirent *t = names[i];
+                struct dirent* t = names[i];
                 names[i] = names[j];
                 names[j] = t;
             }
@@ -1040,7 +1024,7 @@ static int golden(const char *dir, const char *bin, const char *fixtures, const 
             failures++;
             continue;
         }
-        struct dirent **fx = NULL;
+        struct dirent** fx = NULL;
         int nf = scandir(fixtures, &fx, NULL, alphasort);
         if (nf > 0) {
             for (int k = 0; k < nf; k++) {
@@ -1064,13 +1048,13 @@ static int golden(const char *dir, const char *bin, const char *fixtures, const 
 
         int cols = 0, rows = 0;
         size_t sn;
-        char *sz = read_file(sizep, &sn);
+        char* sz = read_file(sizep, &sn);
         if (sz) {
             sscanf(sz, "%d %d", &cols, &rows);
             free(sz);
         }
         int want_exit = 0;
-        char *ex = read_file(exitp, &sn);
+        char* ex = read_file(exitp, &sn);
         if (ex) {
             want_exit = (int)strtol(ex, NULL, 10);
             free(ex);
@@ -1081,8 +1065,8 @@ static int golden(const char *dir, const char *bin, const char *fixtures, const 
             if (chdir(wd) != 0) {
                 _exit(99);
             }
-            FILE *fo = freopen(outp, "w", stdout);
-            FILE *fe = freopen(errp, "w", stderr);
+            FILE* fo = freopen(outp, "w", stdout);
+            FILE* fe = freopen(errp, "w", stderr);
             (void)fo;
             (void)fe;
             setenv("RX_EVENTS", absev, 1);
@@ -1098,7 +1082,7 @@ static int golden(const char *dir, const char *bin, const char *fixtures, const 
                 setenv("RX_COLS", cb, 1);
                 setenv("RX_ROWS", rb, 1);
             }
-            execl(absbin, "reynard", "-t", (char *)NULL);
+            execl(absbin, "reynard", "-t", (char*)NULL);
             _exit(127);
         }
         int status = 0;
@@ -1109,7 +1093,7 @@ static int golden(const char *dir, const char *bin, const char *fixtures, const 
         int bad = 0;
         if (exitcode != want_exit) {
             size_t ne;
-            char *e = read_file(errp, &ne);
+            char* e = read_file(errp, &ne);
             snprintf(diff, sizeof(diff), "exit code %d (want %d); stderr: %s", exitcode, want_exit,
                      e ? e : "(none)");
             free(e);
@@ -1147,16 +1131,15 @@ static int golden(const char *dir, const char *bin, const char *fixtures, const 
    and asserts the average per-event handle+render time. */
 /* Write a valid 100k-record DBF (v0x03, no memo) with a few block writes;
    shared by browseperf and the perf gate mode (spec 11.3). */
-static int write_large_dbf(const char *dbfpath)
-{
-    static const char *fnames[] = { "ID", "NAME", "SCORE", "BORN", "MARRIED" };
-    static const char ftypes[] = { 'N', 'C', 'N', 'D', 'L' };
-    static const uint8_t flens[] = { 8, 20, 8, 8, 1 };
+static int write_large_dbf(const char* dbfpath) {
+    static const char* fnames[] = {"ID", "NAME", "SCORE", "BORN", "MARRIED"};
+    static const char ftypes[] = {'N', 'C', 'N', 'D', 'L'};
+    static const uint8_t flens[] = {8, 20, 8, 8, 1};
     const size_t nf = 5;
     const uint16_t hdr_size = (uint16_t)(32 + 32 * nf + 1);
     const uint16_t rec_size = (uint16_t)(1 + 8 + 20 + 8 + 8 + 1);
     const uint32_t nrec = 100000;
-    uint8_t *buf = malloc((size_t)hdr_size + (size_t)nrec * rec_size + 1);
+    uint8_t* buf = malloc((size_t)hdr_size + (size_t)nrec * rec_size + 1);
     if (!buf) {
         fprintf(stderr, "write_large_dbf: out of memory\n");
         return 1;
@@ -1174,7 +1157,7 @@ static int write_large_dbf(const char *dbfpath)
     buf[9] = (uint8_t)(hdr_size >> 8);
     buf[10] = (uint8_t)(rec_size & 0xFF);
     buf[11] = (uint8_t)(rec_size >> 8);
-    uint8_t *fd = buf + 32;
+    uint8_t* fd = buf + 32;
     for (size_t i = 0; i < nf; i++) {
         memset(fd, 0, 32);
         memcpy(fd, fnames[i], strlen(fnames[i]));
@@ -1184,7 +1167,7 @@ static int write_large_dbf(const char *dbfpath)
         fd += 32;
     }
     buf[32 + 32 * nf] = 0x0D;
-    uint8_t *rec = buf + hdr_size;
+    uint8_t* rec = buf + hdr_size;
     for (uint32_t i = 1; i <= nrec; i++) {
         memset(rec, ' ', rec_size);
         rec[0] = ' ';
@@ -1203,7 +1186,7 @@ static int write_large_dbf(const char *dbfpath)
         rec += rec_size;
     }
     *rec = 0x1A;
-    FILE *df = fopen(dbfpath, "wb");
+    FILE* df = fopen(dbfpath, "wb");
     if (!df) {
         perror("fopen large.dbf");
         free(buf);
@@ -1221,8 +1204,7 @@ static int write_large_dbf(const char *dbfpath)
     return 0;
 }
 
-static int browseperf(const char *workroot, const char *bin)
-{
+static int browseperf(const char* workroot, const char* bin) {
     char absbin[1200], absroot[1000];
     abs_path(bin, absbin, sizeof(absbin));
     abs_path(workroot, absroot, sizeof(absroot));
@@ -1248,7 +1230,7 @@ static int browseperf(const char *workroot, const char *bin)
     snprintf(home, sizeof(home), "%s/home", wd);
     snprintf(outp, sizeof(outp), "%s/out.txt", wd);
     snprintf(errp, sizeof(errp), "%s/err.txt", wd);
-    FILE *f = fopen(evp, "w");
+    FILE* f = fopen(evp, "w");
     if (!f) {
         perror("fopen");
         return 1;
@@ -1268,8 +1250,8 @@ static int browseperf(const char *workroot, const char *bin)
         if (chdir(wd) != 0) {
             _exit(99);
         }
-        FILE *fo = freopen(outp, "w", stdout);
-        FILE *fe = freopen(errp, "w", stderr);
+        FILE* fo = freopen(outp, "w", stdout);
+        FILE* fe = freopen(errp, "w", stderr);
         (void)fo;
         (void)fe;
         setenv("RX_EVENTS", absev, 1);
@@ -1279,14 +1261,14 @@ static int browseperf(const char *workroot, const char *bin)
         char xdg[1400];
         snprintf(xdg, sizeof(xdg), "%s/.cache", home);
         setenv("XDG_CACHE_HOME", xdg, 1);
-        execl(absbin, "reynard", "-t", (char *)NULL);
+        execl(absbin, "reynard", "-t", (char*)NULL);
         _exit(127);
     }
     int status = 0;
     waitpid(pid, &status, 0);
     int exitcode = WIFEXITED(status) ? WEXITSTATUS(status) : 128;
     size_t pn = 0;
-    char *ptxt = read_file(perf, &pn);
+    char* ptxt = read_file(perf, &pn);
     unsigned long n = 0;
     double avg = 0, max = 0;
     if (ptxt) {
@@ -1294,11 +1276,12 @@ static int browseperf(const char *workroot, const char *bin)
         free(ptxt);
     }
     int ok = exitcode == 0 && n >= 300 && avg <= 16.0;
-    printf("browseperf: %s (exit=%d, %lu events on 100k-record dbf, avg=%.3fms max=%.3fms, gate 16ms)\n",
+    printf("browseperf: %s (exit=%d, %lu events on 100k-record dbf, avg=%.3fms max=%.3fms, gate "
+           "16ms)\n",
            ok ? "PASS" : "FAIL", exitcode, n, avg, max);
     if (!ok && exitcode != 0) {
         size_t en;
-        char *e = read_file(errp, &en);
+        char* e = read_file(errp, &en);
         if (e) {
             fprintf(stderr, "stderr: %s\n", e);
             free(e);
@@ -1312,11 +1295,9 @@ static int browseperf(const char *workroot, const char *bin)
  * For each <case>.prg: run it in two fresh sandboxes, require identical
  * stdout/stderr/exit code AND byte-identical case.rxp; then re-run in the
  * first sandbox (cache hit) and require identical output again. */
-static int run_in_sandbox(const char *bin, const char *wd, const char *fixtures,
-                          const char *prg, const char *caseprg, char *outp, char *errp,
-                          size_t sz)
-{
-    struct dirent **fx = NULL;
+static int run_in_sandbox(const char* bin, const char* wd, const char* fixtures, const char* prg,
+                          const char* caseprg, char* outp, char* errp, size_t sz) {
+    struct dirent** fx = NULL;
     int nf = scandir(fixtures, &fx, NULL, alphasort);
     if (nf > 0) {
         for (int k = 0; k < nf; k++) {
@@ -1340,9 +1321,9 @@ static int run_in_sandbox(const char *bin, const char *wd, const char *fixtures,
             _exit(99);
         }
         setenv("HOME", wd, 1);
-        FILE *fe = freopen(errp, "w", stderr);
+        FILE* fe = freopen(errp, "w", stderr);
         (void)fe;
-        execl(bin, "reynard", "-t", "-o", "out.txt", "case.prg", (char *)NULL);
+        execl(bin, "reynard", "-t", "-o", "out.txt", "case.prg", (char*)NULL);
         _exit(127);
     }
     int status = 0;
@@ -1350,8 +1331,7 @@ static int run_in_sandbox(const char *bin, const char *wd, const char *fixtures,
     return WIFEXITED(status) ? WEXITSTATUS(status) : 128;
 }
 
-static int rxp_mode(const char *dir, const char *bin, const char *fixtures, const char *workroot)
-{
+static int rxp_mode(const char* dir, const char* bin, const char* fixtures, const char* workroot) {
     char absbin[1200];
     if (bin[0] == '/') {
         snprintf(absbin, sizeof(absbin), "%s", bin);
@@ -1375,7 +1355,7 @@ static int rxp_mode(const char *dir, const char *bin, const char *fixtures, cons
         snprintf(absroot, sizeof(absroot), "%s/%s", cwd, workroot);
     }
     mkdir(absroot, 0755);
-    struct dirent **names = NULL;
+    struct dirent** names = NULL;
     int n = scandir(dir, &names, filter_prg, NULL);
     if (n < 0) {
         perror("scandir");
@@ -1384,7 +1364,7 @@ static int rxp_mode(const char *dir, const char *bin, const char *fixtures, cons
     for (int i = 0; i < n; i++) {
         for (int j = i + 1; j < n; j++) {
             if (strcmp(names[i]->d_name, names[j]->d_name) > 0) {
-                struct dirent *t = names[i];
+                struct dirent* t = names[i];
                 names[i] = names[j];
                 names[j] = t;
             }
@@ -1454,7 +1434,6 @@ static int rxp_mode(const char *dir, const char *bin, const char *fixtures, cons
     return bad ? 1 : 0;
 }
 
-
 /* ---------------- cdx (M6 gates: byte-level interop validator, deterministic
    round-trip, CDX build perf < 2s for 100k keys, spec §11.3) ----------------
    The validator below is an independent linear parser of the 500-byte block
@@ -1466,13 +1445,13 @@ static int rxp_mode(const char *dir, const char *bin, const char *fixtures, cons
 #define HTAG_HDR 236
 #define HDIR_HDR 24
 
-static uint16_t h_u16(const uint8_t *p) { return (uint16_t)(p[0] | (p[1] << 8)); }
-static uint32_t h_u32(const uint8_t *p)
-{
+static uint16_t h_u16(const uint8_t* p) {
+    return (uint16_t)(p[0] | (p[1] << 8));
+}
+static uint32_t h_u32(const uint8_t* p) {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
-static uint64_t h_u64(const uint8_t *p)
-{
+static uint64_t h_u64(const uint8_t* p) {
     uint64_t u = 0;
     for (int i = 7; i >= 0; i--) {
         u = (u << 8) | p[i];
@@ -1480,8 +1459,7 @@ static uint64_t h_u64(const uint8_t *p)
     return u;
 }
 
-static int h_blk(int fd, uint32_t blk, uint8_t out[HBLOCK])
-{
+static int h_blk(int fd, uint32_t blk, uint8_t out[HBLOCK]) {
     off_t off = (off_t)blk * HBLOCK;
     size_t got = 0;
     while (got < HBLOCK) {
@@ -1498,8 +1476,7 @@ static int h_blk(int fd, uint32_t blk, uint8_t out[HBLOCK])
    page bounds, entry bounds, recno range, key ordering (asc/desc) and the
    total key count against the tag header */
 static int h_tree_walk(int fd, uint32_t nblocks, uint32_t root, int desc, uint64_t expect_keys,
-                       uint32_t nrec, char *err, size_t errsz)
-{
+                       uint32_t nrec, char* err, size_t errsz) {
     uint8_t buf[HBLOCK];
     if (root == 0 || root >= nblocks) {
         snprintf(err, errsz, "root page %u out of range", root);
@@ -1570,7 +1547,7 @@ static int h_tree_walk(int fd, uint32_t nblocks, uint32_t root, int desc, uint64
                 snprintf(err, errsz, "entry key overrun at leaf %u", page);
                 return -1;
             }
-            const uint8_t *key = buf + off;
+            const uint8_t* key = buf + off;
             off += klen;
             uint32_t recno = h_u32(buf + off);
             off += 4;
@@ -1616,9 +1593,8 @@ static int h_tree_walk(int fd, uint32_t nblocks, uint32_t root, int desc, uint64
 }
 
 /* validate one index file (CDX or IDX) end to end; returns tags/keys */
-static int cdxcheck_file(const char *path, uint32_t nrec, int *ntags_out, uint64_t *keys_out,
-                         char *err, size_t errsz)
-{
+static int cdxcheck_file(const char* path, uint32_t nrec, int* ntags_out, uint64_t* keys_out,
+                         char* err, size_t errsz) {
     int fd = open(path, O_RDONLY);
     if (fd < 0) {
         snprintf(err, errsz, "open %s", path);
@@ -1693,7 +1669,7 @@ static int cdxcheck_file(const char *path, uint32_t nrec, int *ntags_out, uint64
                 return -1;
             }
             for (uint16_t i = 0; i < n; i++) {
-                const uint8_t *h = buf + HDIR_HDR + (size_t)i * HTAG_HDR;
+                const uint8_t* h = buf + HDIR_HDR + (size_t)i * HTAG_HDR;
                 int desc = (h_u16(h + 204) & 1) != 0;
                 uint32_t root = h_u32(h + 206);
                 uint64_t nk = h_u64(h + 222);
@@ -1725,10 +1701,9 @@ static int cdxcheck_file(const char *path, uint32_t nrec, int *ntags_out, uint64
 }
 
 /* build a table of n records (NAME C20, SCORE N(8,2)) + fill the given tags;
-   *ms_out receives the index build (insert+flush) wall time */
-static int build_table(const char *dir, const char *stem, uint32_t n, const char **tags,
-                       const char **exprs, const int *tagflags, size_t ntags, double *ms_out)
-{
+ *ms_out receives the index build (insert+flush) wall time */
+static int build_table(const char* dir, const char* stem, uint32_t n, const char** tags,
+                       const char** exprs, const int* tagflags, size_t ntags, double* ms_out) {
     char path[700];
     snprintf(path, sizeof(path), "%.660s/%.31s.dbf", dir, stem);
     rx_fielddef flds[2];
@@ -1740,7 +1715,7 @@ static int build_table(const char *dir, const char *stem, uint32_t n, const char
     flds[1].type = RFT_N;
     flds[1].len = 8;
     flds[1].dec = 2;
-    rx_dbf *dbf = NULL;
+    rx_dbf* dbf = NULL;
     int rc = rx_dbf_create(path, flds, 2, &dbf);
     if (rc != R_OK) {
         return rc;
@@ -1823,10 +1798,9 @@ static int build_table(const char *dir, const char *stem, uint32_t n, const char
     return rc;
 }
 
-static int cdx_mode(const char *workroot)
-{
+static int cdx_mode(const char* workroot) {
     rx_data_session(1, 0x01); /* frozen header date: byte-identical output */
-    mkdir(workroot, 0755); /* may exist */
+    mkdir(workroot, 0755);    /* may exist */
     char dirA[700], dirB[700];
     snprintf(dirA, sizeof(dirA), "%.687s/cdxA-XXXXXX", workroot);
     snprintf(dirB, sizeof(dirB), "%.687s/cdxB-XXXXXX", workroot);
@@ -1835,20 +1809,20 @@ static int cdx_mode(const char *workroot)
         return 1;
     }
     int ran = 0, bad = 0;
-#define CDXCHK(cond, msg)                                                                      \
-    do {                                                                                       \
-        ran++;                                                                                 \
-        if (!(cond)) {                                                                         \
-            printf("FAIL %s\n", msg);                                                          \
-            bad++;                                                                             \
-        }                                                                                      \
+#define CDXCHK(cond, msg)                                                                          \
+    do {                                                                                           \
+        ran++;                                                                                     \
+        if (!(cond)) {                                                                             \
+            printf("FAIL %s\n", msg);                                                              \
+            bad++;                                                                                 \
+        }                                                                                          \
     } while (0)
 
     /* 1. 100k-key structural CDX build, timed (spec §11.3 gate: < 2s for the
        index build itself: tag create + key insert + tree write) */
-    const char *tags1[] = { "SCORE" };
-    const char *exprs1[] = { "SCORE" };
-    const int flags1[] = { 0 };
+    const char* tags1[] = {"SCORE"};
+    const char* exprs1[] = {"SCORE"};
+    const int flags1[] = {0};
     double ms = 0;
     int rc = build_table(dirA, "big", 100000, tags1, exprs1, flags1, 1, &ms);
     CDXCHK(rc == R_OK, "build big.dbf + big.cdx (100k keys)");
@@ -1860,9 +1834,9 @@ static int cdx_mode(const char *workroot)
 
     /* 2. determinism: identical 5k multi-tag build in a second dir ->
        byte-identical CDX and DBF */
-    const char *tags3[] = { "NM", "SCORE", "SCD" };
-    const char *exprs3[] = { "NAME", "SCORE", "SCORE" };
-    const int flags3[] = { 0, 0, 1 /* RX_TAG_DESC */ };
+    const char* tags3[] = {"NM", "SCORE", "SCD"};
+    const char* exprs3[] = {"NAME", "SCORE", "SCORE"};
+    const int flags3[] = {0, 0, 1 /* RX_TAG_DESC */};
     double ms3 = 0;
     rc = build_table(dirA, "multi", 5000, tags3, exprs3, flags3, 3, &ms3);
     CDXCHK(rc == R_OK, "build multi.dbf with 3 tags (dirA)");
@@ -1879,7 +1853,7 @@ static int cdx_mode(const char *workroot)
     CDXCHK(cmp_files(dM, dMB, diff, sizeof(diff)) == 0, "DBF byte-reproducible across runs");
 
     /* 3. reopen + API verification: counts, monotonic order, seeks */
-    rx_dbf *dbf = NULL;
+    rx_dbf* dbf = NULL;
     rc = rx_dbf_open(dA, RD_EXCLUSIVE, &dbf);
     CDXCHK(rc == R_OK, "reopen big.dbf");
     if (rc == R_OK) {
@@ -1961,7 +1935,7 @@ static int cdx_mode(const char *workroot)
         flds[0].type = RFT_N;
         flds[0].len = 6;
         flds[0].dec = 0;
-        rx_dbf *sd = NULL;
+        rx_dbf* sd = NULL;
         rc = rx_dbf_create(spath, flds, 1, &sd);
         CDXCHK(rc == R_OK, "create small.dbf");
         if (rc == R_OK) {
@@ -2008,11 +1982,11 @@ static int cdx_mode(const char *workroot)
             }
             CDXCHK(ntags == 1 && keys == 1000, "cdxcheck IDX counts");
             /* reopen + attach + seek */
-            rx_dbf *sd2 = NULL;
+            rx_dbf* sd2 = NULL;
             rc = rx_dbf_open(spath, RD_EXCLUSIVE, &sd2);
             CDXCHK(rc == R_OK, "reopen small.dbf");
             if (rc == R_OK) {
-                rx_idx *ix = NULL;
+                rx_idx* ix = NULL;
                 rc = rx_index_attach(sd2, ipath, &ix);
                 CDXCHK(rc == R_OK, "attach small.idx");
                 if (rc == R_OK) {
@@ -2045,18 +2019,16 @@ static int cdx_mode(const char *workroot)
 
 /* ---------------- scrcheck (M7 gate: .SCR round-trip + .RSO + codegen) ---------------- */
 
-static int filter_scr(const struct dirent *d)
-{
+static int filter_scr(const struct dirent* d) {
     size_t n = strlen(d->d_name);
     return n > 4 && strcmp(d->d_name + n - 4, ".scr") == 0;
 }
 
-static int scrcheck(const char *dir, const char *workroot)
-{
+static int scrcheck(const char* dir, const char* workroot) {
     char absroot[1000];
     abs_path(workroot, absroot, sizeof(absroot));
     mkdir(absroot, 0755);
-    struct dirent **names = NULL;
+    struct dirent** names = NULL;
     int n = scandir(dir, &names, filter_scr, NULL);
     if (n < 0) {
         perror("scandir");
@@ -2065,7 +2037,7 @@ static int scrcheck(const char *dir, const char *workroot)
     for (int i = 0; i < n; i++) {
         for (int j = i + 1; j < n; j++) {
             if (strcmp(names[i]->d_name, names[j]->d_name) > 0) {
-                struct dirent *t = names[i];
+                struct dirent* t = names[i];
                 names[i] = names[j];
                 names[j] = t;
             }
@@ -2116,7 +2088,8 @@ static int scrcheck(const char *dir, const char *workroot)
                 if (scrf_load_rso(rso, &sf2) != R_OK) {
                     snprintf(diff, sizeof(diff), "rso load failed");
                     bad = 1;
-                } else if (scrf_save(rt2, &sf2) != R_OK || cmp_files(rt, rt2, diff, sizeof(diff)) != 0) {
+                } else if (scrf_save(rt2, &sf2) != R_OK ||
+                           cmp_files(rt, rt2, diff, sizeof(diff)) != 0) {
                     if (!diff[0]) {
                         snprintf(diff, sizeof(diff), "rso round-trip differs");
                     }
@@ -2134,7 +2107,7 @@ static int scrcheck(const char *dir, const char *workroot)
                     snprintf(diff, sizeof(diff), "generate failed");
                     bad = 1;
                 } else {
-                    FILE *f = fopen(prg, "w");
+                    FILE* f = fopen(prg, "w");
                     if (!f || fwrite(sb.buf ? sb.buf : "", 1, sb.len, f) != sb.len) {
                         snprintf(diff, sizeof(diff), "prg write failed");
                         bad = 1;
@@ -2144,7 +2117,8 @@ static int scrcheck(const char *dir, const char *workroot)
                     }
                     sb_free(&sb);
                 }
-                if (!bad && access(goldp, F_OK) == 0 && cmp_files(prg, goldp, diff, sizeof(diff)) != 0) {
+                if (!bad && access(goldp, F_OK) == 0 &&
+                    cmp_files(prg, goldp, diff, sizeof(diff)) != 0) {
                     bad = 1;
                 }
             }
@@ -2164,23 +2138,20 @@ static int scrcheck(const char *dir, const char *workroot)
     return failures ? 1 : 0;
 }
 
-
 /* ---------------- rptcheck (M8 gate: emitter determinism) ---------------- */
 
-static int filter_frm(const struct dirent *d)
-{
+static int filter_frm(const struct dirent* d) {
     size_t n = strlen(d->d_name);
     return (n > 4 && strcmp(d->d_name + n - 4, ".frm") == 0) ||
            (n > 4 && strcmp(d->d_name + n - 4, ".rlb") == 0);
 }
 
-static int rptcheck(const char *dir, const char *bin, const char *fixtures, const char *workroot)
-{
+static int rptcheck(const char* dir, const char* bin, const char* fixtures, const char* workroot) {
     char absbin[1200], absroot[1000];
     abs_path(bin, absbin, sizeof(absbin));
     abs_path(workroot, absroot, sizeof(absroot));
     mkdir(absroot, 0755);
-    struct dirent **names = NULL;
+    struct dirent** names = NULL;
     int n = scandir(dir, &names, filter_frm, NULL);
     if (n < 0) {
         perror("scandir");
@@ -2189,7 +2160,7 @@ static int rptcheck(const char *dir, const char *bin, const char *fixtures, cons
     for (int i = 0; i < n; i++) {
         for (int j = i + 1; j < n; j++) {
             if (strcmp(names[i]->d_name, names[j]->d_name) > 0) {
-                struct dirent *t = names[i];
+                struct dirent* t = names[i];
                 names[i] = names[j];
                 names[j] = t;
             }
@@ -2211,7 +2182,7 @@ static int rptcheck(const char *dir, const char *bin, const char *fixtures, cons
         }
         ran++;
         /* copy fixtures + the form as case.frm/case.rlb */
-        struct dirent **fx = NULL;
+        struct dirent** fx = NULL;
         int nf = scandir(fixtures, &fx, NULL, alphasort);
         if (nf > 0) {
             for (int k = 0; k < nf; k++) {
@@ -2233,7 +2204,7 @@ static int rptcheck(const char *dir, const char *bin, const char *fixtures, cons
         /* driver program: run the form to every emitter */
         char prg[1200];
         snprintf(prg, sizeof(prg), "%s/case.prg", wd);
-        FILE *pf = fopen(prg, "w");
+        FILE* pf = fopen(prg, "w");
         fprintf(pf, "USE people\n%s FORM case TO FILE out.txt\n", is_label ? "LABEL" : "REPORT");
         fprintf(pf, "%s FORM case TO FILE out.ps\n", is_label ? "LABEL" : "REPORT");
         fprintf(pf, "%s FORM case TO FILE out.pdf\n", is_label ? "LABEL" : "REPORT");
@@ -2249,9 +2220,9 @@ static int rptcheck(const char *dir, const char *bin, const char *fixtures, cons
                 _exit(99);
             }
             setenv("HOME", wd, 1);
-            FILE *fe = freopen(errp, "w", stderr);
+            FILE* fe = freopen(errp, "w", stderr);
             (void)fe;
-            execl(absbin, "reynard", "-t", "-o", "stdout.txt", "case.prg", (char *)NULL);
+            execl(absbin, "reynard", "-t", "-o", "stdout.txt", "case.prg", (char*)NULL);
             _exit(127);
         }
         int status = 0;
@@ -2260,13 +2231,13 @@ static int rptcheck(const char *dir, const char *bin, const char *fixtures, cons
         char diff[300] = "";
         if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
             size_t ne;
-            char *e = read_file(errp, &ne);
+            char* e = read_file(errp, &ne);
             snprintf(diff, sizeof(diff), "run failed; stderr: %s", e ? e : "(none)");
             free(e);
             bad = 1;
         }
         /* compare: .txt.golden byte-exact; .ps/.pdf/.html/.csv.<sha256> hash-stable */
-        static const char *exts[5] = { "txt", "ps", "pdf", "html", "csv" };
+        static const char* exts[5] = {"txt", "ps", "pdf", "html", "csv"};
         for (int ei = 0; ei < 5 && !bad; ei++) {
             char gp[1200], op[1200];
             snprintf(gp, sizeof(gp), "%s.%s.golden", base, exts[ei]);
@@ -2281,9 +2252,9 @@ static int rptcheck(const char *dir, const char *bin, const char *fixtures, cons
             } else {
                 /* hash compare: golden holds the sha256 hex of the output */
                 size_t gn;
-                char *want = read_file(gp, &gn);
+                char* want = read_file(gp, &gn);
                 size_t on;
-                char *ob = read_file(op, &on);
+                char* ob = read_file(op, &on);
                 uint8_t h[32];
                 char hex[65];
                 rx_sha256(ob ? ob : "", on, h);
@@ -2292,7 +2263,8 @@ static int rptcheck(const char *dir, const char *bin, const char *fixtures, cons
                 }
                 /* trim want */
                 size_t wl = gn;
-                while (wl && (want[wl - 1] == '\n' || want[wl - 1] == '\r' || want[wl - 1] == ' ')) {
+                while (wl &&
+                       (want[wl - 1] == '\n' || want[wl - 1] == '\r' || want[wl - 1] == ' ')) {
                     wl--;
                 }
                 if (!want || strncmp(want, hex, wl < 64 ? wl : 64) != 0 || wl != 64) {
@@ -2317,18 +2289,15 @@ static int rptcheck(const char *dir, const char *bin, const char *fixtures, cons
     return failures ? 1 : 0;
 }
 
-
 /* ---------------- projcheck (M9 9.6 gate: .RPJ -> .RPP -> --run) ---------------- */
 
-static int filter_rpj(const struct dirent *d)
-{
+static int filter_rpj(const struct dirent* d) {
     size_t n = strlen(d->d_name);
     return n > 4 && strcmp(d->d_name + n - 4, ".rpj") == 0;
 }
 
-static int run_child(const char *bin, const char *wd, const char *home,
-                     const char *outp, const char *errp, char *const argv[])
-{
+static int run_child(const char* bin, const char* wd, const char* home, const char* outp,
+                     const char* errp, char* const argv[]) {
     pid_t pid = fork();
     if (pid == 0) {
         if (chdir(wd) != 0) {
@@ -2338,8 +2307,8 @@ static int run_child(const char *bin, const char *wd, const char *home,
         char xdg[1400];
         snprintf(xdg, sizeof(xdg), "%s/.cache", home);
         setenv("XDG_CACHE_HOME", xdg, 1);
-        FILE *fo = freopen(outp, "w", stdout);
-        FILE *fe = freopen(errp, "w", stderr);
+        FILE* fo = freopen(outp, "w", stdout);
+        FILE* fe = freopen(errp, "w", stderr);
         (void)fo;
         (void)fe;
         execv(bin, argv);
@@ -2353,10 +2322,9 @@ static int run_child(const char *bin, const char *wd, const char *home,
     return WEXITSTATUS(status);
 }
 
-static void sha256_file_hex(const char *path, char out[65])
-{
+static void sha256_file_hex(const char* path, char out[65]) {
     size_t n;
-    char *b = read_file(path, &n);
+    char* b = read_file(path, &n);
     uint8_t h[32];
     if (b) {
         rx_sha256(b, n, h);
@@ -2369,13 +2337,12 @@ static void sha256_file_hex(const char *path, char out[65])
     }
 }
 
-static int projcheck(const char *dir, const char *bin, const char *fixtures, const char *workroot)
-{
+static int projcheck(const char* dir, const char* bin, const char* fixtures, const char* workroot) {
     char absbin[1200], absroot[1000];
     abs_path(bin, absbin, sizeof(absbin));
     abs_path(workroot, absroot, sizeof(absroot));
     mkdir(absroot, 0755);
-    struct dirent **names = NULL;
+    struct dirent** names = NULL;
     int n = scandir(dir, &names, filter_rpj, NULL);
     if (n < 0) {
         perror("scandir");
@@ -2384,7 +2351,7 @@ static int projcheck(const char *dir, const char *bin, const char *fixtures, con
     for (int i = 0; i < n; i++) {
         for (int j = i + 1; j < n; j++) {
             if (strcmp(names[i]->d_name, names[j]->d_name) > 0) {
-                struct dirent *t = names[i];
+                struct dirent* t = names[i];
                 names[i] = names[j];
                 names[j] = t;
             }
@@ -2397,7 +2364,7 @@ static int projcheck(const char *dir, const char *bin, const char *fixtures, con
         size_t bl = strlen(base);
         base[bl - 4] = '\0'; /* strip .rpj */
         char casename[64];
-        const char *slash = strrchr(base, '/');
+        const char* slash = strrchr(base, '/');
         snprintf(casename, sizeof(casename), "%.63s", slash ? slash + 1 : base);
         char wd[1100];
         snprintf(wd, sizeof(wd), "%s/proj-XXXXXX", absroot);
@@ -2408,7 +2375,7 @@ static int projcheck(const char *dir, const char *bin, const char *fixtures, con
         }
         ran++;
         /* copy fixtures + all regular files from the case dir (skip goldens) */
-        struct dirent **fx = NULL;
+        struct dirent** fx = NULL;
         int nf = scandir(fixtures, &fx, NULL, alphasort);
         if (nf > 0) {
             for (int k = 0; k < nf; k++) {
@@ -2423,11 +2390,11 @@ static int projcheck(const char *dir, const char *bin, const char *fixtures, con
             }
             free(fx);
         }
-        struct dirent **cs = NULL;
+        struct dirent** cs = NULL;
         int nc = scandir(dir, &cs, NULL, alphasort);
         if (nc > 0) {
             for (int k = 0; k < nc; k++) {
-                const char *nm = cs[k]->d_name;
+                const char* nm = cs[k]->d_name;
                 size_t l = strlen(nm);
                 int skip = (l > 7 && strcmp(nm + l - 7, ".golden") == 0) ||
                            (l > 8 && strcmp(nm + l - 8, ".sha256") == 0);
@@ -2461,13 +2428,14 @@ static int projcheck(const char *dir, const char *bin, const char *fixtures, con
         /* 1. BUILD PROJECT */
         char bcmd[600];
         snprintf(bcmd, sizeof(bcmd), "BUILD PROJECT %s FROM %s.rpj", casename, casename);
-        char *bargv[] = { (char *)"reynard", (char *)"-t", (char *)"-o", (char *)"build.txt",
-                         (char *)"-c", bcmd, NULL };
+        char* bargv[] = {(char*)"reynard", (char*)"-t", (char*)"-o", (char*)"build.txt",
+                         (char*)"-c",      bcmd,        NULL};
         int rc = run_child(absbin, wd, home, buildout, builderr, bargv);
         if (rc != 0) {
             size_t ne;
-            char *e = read_file(builderr, &ne);
-            snprintf(diff, sizeof(diff), "build failed rc=%d; stderr: %.200s", rc, e ? e : "(none)");
+            char* e = read_file(builderr, &ne);
+            snprintf(diff, sizeof(diff), "build failed rc=%d; stderr: %.200s", rc,
+                     e ? e : "(none)");
             free(e);
             bad = 1;
         }
@@ -2489,7 +2457,7 @@ static int projcheck(const char *dir, const char *bin, const char *fixtures, con
             char hex[65];
             sha256_file_hex(rpp, hex);
             size_t gn;
-            char *g = read_file(gp, &gn);
+            char* g = read_file(gp, &gn);
             char want[80];
             snprintf(want, sizeof(want), "%s", hex);
             if (!g || strncmp(g, want, 64) != 0) {
@@ -2515,8 +2483,8 @@ static int projcheck(const char *dir, const char *bin, const char *fixtures, con
             sha256_file_hex(rpp, hex1);
             char rcmd[600];
             snprintf(rcmd, sizeof(rcmd), "BUILD PROJECT %s FROM %s.rpj", casename, casename);
-            char *rargv[] = { (char *)"reynard", (char *)"-t", (char *)"-o", (char *)"rebuild.txt",
-                             (char *)"-c", rcmd, NULL };
+            char* rargv[] = {(char*)"reynard", (char*)"-t", (char*)"-o", (char*)"rebuild.txt",
+                             (char*)"-c",      rcmd,        NULL};
             rc = run_child(absbin, wd, home, rbout, rberr, rargv);
             char hex2[65];
             sha256_file_hex(rpp, hex2);
@@ -2533,13 +2501,14 @@ static int projcheck(const char *dir, const char *bin, const char *fixtures, con
         if (!bad) {
             char rpparg[400];
             snprintf(rpparg, sizeof(rpparg), "%s.rpp", casename);
-            char *runargv[] = { (char *)"reynard", (char *)"-t", (char *)"-o", (char *)"run.txt",
-                               (char *)"--run", rpparg, NULL };
+            char* runargv[] = {(char*)"reynard", (char*)"-t", (char*)"-o", (char*)"run.txt",
+                               (char*)"--run",   rpparg,      NULL};
             rc = run_child(absbin, wd, home, runout, runerr, runargv);
             if (rc != 0) {
                 size_t ne;
-                char *e = read_file(runerr, &ne);
-                snprintf(diff, sizeof(diff), "run failed rc=%d; stderr: %.200s", rc, e ? e : "(none)");
+                char* e = read_file(runerr, &ne);
+                snprintf(diff, sizeof(diff), "run failed rc=%d; stderr: %.200s", rc,
+                         e ? e : "(none)");
                 free(e);
                 bad = 1;
             } else {
@@ -2563,11 +2532,9 @@ static int projcheck(const char *dir, const char *bin, const char *fixtures, con
     return failures ? 1 : 0;
 }
 
-
 /* ---------------- perf gates (spec 11.3, M10) ---------------- */
 
-static double now_ms(void)
-{
+static double now_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
@@ -2577,9 +2544,8 @@ static double now_ms(void)
    When maxrss_kb is requested, a dedicated watcher process measures the
    child's peak RSS (RUSAGE_CHILDREN would otherwise aggregate every child
    this process has waited for). */
-static double run_timed(const char *bin, const char *wd, const char *home, char *const argv[],
-                        int *exitcode, long *maxrss_kb)
-{
+static double run_timed(const char* bin, const char* wd, const char* home, char* const argv[],
+                        int* exitcode, long* maxrss_kb) {
     double t0 = now_ms();
     int pipefd[2];
     if (maxrss_kb && pipe(pipefd) != 0) {
@@ -2599,7 +2565,7 @@ static double run_timed(const char *bin, const char *wd, const char *home, char 
                 char xdg[1400];
                 snprintf(xdg, sizeof(xdg), "%s/.cache", home);
                 setenv("XDG_CACHE_HOME", xdg, 1);
-                FILE *fo = freopen("perf-child.out", "w", stdout);
+                FILE* fo = freopen("perf-child.out", "w", stdout);
                 (void)fo;
                 execv(bin, argv);
                 _exit(127);
@@ -2628,7 +2594,7 @@ static double run_timed(const char *bin, const char *wd, const char *home, char 
         char xdg[1400];
         snprintf(xdg, sizeof(xdg), "%s/.cache", home);
         setenv("XDG_CACHE_HOME", xdg, 1);
-        FILE *fo = freopen("perf-child.out", "w", stdout);
+        FILE* fo = freopen("perf-child.out", "w", stdout);
         (void)fo;
         execv(bin, argv);
         _exit(127);
@@ -2660,8 +2626,7 @@ static double run_timed(const char *bin, const char *wd, const char *home, char 
     return ms;
 }
 
-static int perf_mode(const char *workroot, const char *bin)
-{
+static int perf_mode(const char* workroot, const char* bin) {
     char absbin[1200], absroot[1000];
     abs_path(bin, absbin, sizeof(absbin));
     abs_path(workroot, absroot, sizeof(absroot));
@@ -2678,9 +2643,17 @@ static int perf_mode(const char *workroot, const char *bin)
     /* Sanitizer builds are exempt from the wall-clock gates (spec 11.3 gates
        target the release build; the ASan runtime alone costs >20 ms of
        startup). They still run through the same code for memory checking. */
-#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_UNDEFINED__) || \
-    (defined(__has_feature) && (__has_feature(address_sanitizer) || __has_feature(undefined_behavior_sanitizer)))
-    printf("perf gates: SKIP (sanitizer build; spec 11.3 wall-clock gates run on the release build)\n");
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_UNDEFINED__) ||                            \
+    (defined(__has_feature) &&                                                                     \
+     (__has_feature(address_sanitizer) || __has_feature(undefined_behavior_sanitizer)))
+    /* still smoke-run --version once so the timing helper stays exercised */
+    {
+        char* av[] = {(char*)"reynard", (char*)"--version", NULL};
+        int ec = 0;
+        run_timed(absbin, wd, home, av, &ec, NULL);
+    }
+    printf("perf gates: SKIP (sanitizer build; spec 11.3 wall-clock gates run on the release "
+           "build)\n");
     rm_rf(wd);
     return 0;
 #else
@@ -2695,10 +2668,10 @@ static int perf_mode(const char *workroot, const char *bin)
     {
         char prg[1200];
         snprintf(prg, sizeof(prg), "%s/list.prg", wd);
-        FILE *f = fopen(prg, "w");
+        FILE* f = fopen(prg, "w");
         fprintf(f, "USE large\nLIST TO FILE list.txt\n");
         fclose(f);
-        char *av[] = { (char *)"reynard", (char *)"-t", (char *)"list.prg", NULL };
+        char* av[] = {(char*)"reynard", (char*)"-t", (char*)"list.prg", NULL};
         int ec;
         double ms = run_timed(absbin, wd, home, av, &ec, NULL);
         char lp[1200];
@@ -2707,8 +2680,8 @@ static int perf_mode(const char *workroot, const char *bin)
         double mb = (stat(lp, &st) == 0 ? (double)st.st_size : 0) / (1024.0 * 1024.0);
         double mbs = ms > 0 ? mb / (ms / 1000.0) : 0;
         int ok = ec == 0 && mbs > 60.0;
-        printf("perf LIST 100k: %s (%.1f MB in %.1f ms = %.1f MB/s, gate >60)\n", ok ? "PASS" : "FAIL",
-               mb, ms, mbs);
+        printf("perf LIST 100k: %s (%.1f MB in %.1f ms = %.1f MB/s, gate >60)\n",
+               ok ? "PASS" : "FAIL", mb, ms, mbs);
         if (!ok) {
             bad = 1;
         }
@@ -2718,10 +2691,10 @@ static int perf_mode(const char *workroot, const char *bin)
     {
         char prg[1200];
         snprintf(prg, sizeof(prg), "%s/idx.prg", wd);
-        FILE *f = fopen(prg, "w");
+        FILE* f = fopen(prg, "w");
         fprintf(f, "USE large\nSET TALK OFF\nINDEX ON id TAG id\n");
         fclose(f);
-        char *av[] = { (char *)"reynard", (char *)"-t", (char *)"idx.prg", NULL };
+        char* av[] = {(char*)"reynard", (char*)"-t", (char*)"idx.prg", NULL};
         int ec;
         double ms = run_timed(absbin, wd, home, av, &ec, NULL);
         int ok = ec == 0 && ms < 2000.0;
@@ -2736,16 +2709,17 @@ static int perf_mode(const char *workroot, const char *bin)
     {
         char prg[1200];
         snprintf(prg, sizeof(prg), "%s/big.prg", wd);
-        FILE *f = fopen(prg, "w");
+        FILE* f = fopen(prg, "w");
         size_t written = 0;
         while (written < 6u * 1024 * 1024) {
-            written += fprintf(f, "* %s\n", "lorem ipsum dolor sit amet consectetur adipiscing elit sed do");
+            written += fprintf(f, "* %s\n",
+                               "lorem ipsum dolor sit amet consectetur adipiscing elit sed do");
         }
         fprintf(f, "? \"parsed\"\n");
         fclose(f);
         struct stat st;
         stat(prg, &st);
-        char *av[] = { (char *)"reynard", (char *)"-t", (char *)"big.prg", NULL };
+        char* av[] = {(char*)"reynard", (char*)"-t", (char*)"big.prg", NULL};
         int ec;
         double ms = run_timed(absbin, wd, home, av, &ec, NULL);
         double mbs = ms > 0 ? (double)st.st_size / (1024.0 * 1024.0) / (ms / 1000.0) : 0;
@@ -2761,7 +2735,7 @@ static int perf_mode(const char *workroot, const char *bin)
     {
         double best = 1e9;
         for (int i = 0; i < 5; i++) {
-            char *av[] = { (char *)"reynard", (char *)"--version", NULL };
+            char* av[] = {(char*)"reynard", (char*)"--version", NULL};
             int ec;
             double ms = run_timed(absbin, wd, home, av, &ec, NULL);
             if (ms < best) {
@@ -2769,8 +2743,8 @@ static int perf_mode(const char *workroot, const char *bin)
             }
         }
         int ok = best < 20.0;
-        printf("perf startup --version: %s (%.2f ms best of 5, gate <20 ms)\n", ok ? "PASS" : "FAIL",
-               best);
+        printf("perf startup --version: %s (%.2f ms best of 5, gate <20 ms)\n",
+               ok ? "PASS" : "FAIL", best);
         if (!ok) {
             bad = 1;
         }
@@ -2782,7 +2756,7 @@ static int perf_mode(const char *workroot, const char *bin)
     printf("perf RSS batch: SKIP (sanitizer build)\n");
 #else
     {
-        char *av[] = { (char *)"reynard", (char *)"-t", (char *)"-c", (char *)"? 1+1", NULL };
+        char* av[] = {(char*)"reynard", (char*)"-t", (char*)"-c", (char*)"? 1+1", NULL};
         int ec;
         long rss = 0;
         run_timed(absbin, wd, home, av, &ec, &rss);
@@ -2801,8 +2775,7 @@ static int perf_mode(const char *workroot, const char *bin)
 #endif
 }
 
-int main(int argc, char **argv)
-{
+int main(int argc, char** argv) {
     rx_log_init();
     if (argc >= 2 && strcmp(argv[1], "selftest") == 0) {
         int before = failures;
@@ -2849,13 +2822,15 @@ int main(int argc, char **argv)
     if (argc >= 6 && strcmp(argv[1], "projcheck") == 0) {
         return projcheck(argv[2], argv[3], argv[4], argv[5]);
     }
-    fprintf(stderr, "usage: %s selftest | conformance <dir> <reynard> <fixtures> <workroot>"
-                    " | rxp <dir> <reynard> <fixtures> <workroot>"
-                    " | roundtrip <fixtures> <workroot> | lockrace <workroot>"
-                    " | golden <dir> <reynard> <fixtures> <workroot> [update]"
-                    " | browseperf <workroot> <reynard> | perf <workroot> <reynard> | cdx <workroot> | scrcheck <dir> <workroot>\n"
-                    " | rptcheck <dir> <reynard> <fixtures> <workroot>"
-                    " | projcheck <dir> <reynard> <fixtures> <workroot>\n",
+    fprintf(stderr,
+            "usage: %s selftest | conformance <dir> <reynard> <fixtures> <workroot>"
+            " | rxp <dir> <reynard> <fixtures> <workroot>"
+            " | roundtrip <fixtures> <workroot> | lockrace <workroot>"
+            " | golden <dir> <reynard> <fixtures> <workroot> [update]"
+            " | browseperf <workroot> <reynard> | perf <workroot> <reynard> | cdx <workroot> | "
+            "scrcheck <dir> <workroot>\n"
+            " | rptcheck <dir> <reynard> <fixtures> <workroot>"
+            " | projcheck <dir> <reynard> <fixtures> <workroot>\n",
             argv[0]);
     return 2;
 }

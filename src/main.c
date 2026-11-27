@@ -23,27 +23,24 @@ extern const char rx_license_text[];
 
 #define RX_VERSION "0.1.0"
 
-static void usage(FILE *f)
-{
-    fprintf(f,
-            "Usage: reynard [options] [script.prg]\n"
-            "  -c \"cmd; cmd\"   run commands then exit (batch)\n"
-            "  -t               test mode: deterministic batch (DATE/TIME/RAND frozen)\n"
-            "  -o <file>        batch stdout redirect\n"
-            "  --run <app.rpp>  run a packaged application (M9)\n"
-            "  --cfg <file>     alternate config file\n"
-            "  --no-mouse       disable all mouse backends\n"
-            "  --mouse=<m>      force mouse backend: auto|sgr|u1000|1002|1015|gpm|sysmouse\n"
-            "  --utf8=on|off    force wide-char mode\n"
-            "  --version, -V    print version\n"
-            "  --help, -h       this help\n"
-            "  --dump-license   print the 2-clause BSD license\n"
-            "Exit codes: 0 success, 1 script/runtime error, 2 usage/environment,\n"
-            "            3 lock conflict, 4 internal assertion (bug)\n");
+static void usage(FILE* f) {
+    fprintf(f, "Usage: reynard [options] [script.prg]\n"
+               "  -c \"cmd; cmd\"   run commands then exit (batch)\n"
+               "  -t               test mode: deterministic batch (DATE/TIME/RAND frozen)\n"
+               "  -o <file>        batch stdout redirect\n"
+               "  --run <app.rpp>  run a packaged application (M9)\n"
+               "  --cfg <file>     alternate config file\n"
+               "  --no-mouse       disable all mouse backends\n"
+               "  --mouse=<m>      force mouse backend: auto|sgr|u1000|1002|1015|gpm|sysmouse\n"
+               "  --utf8=on|off    force wide-char mode\n"
+               "  --version, -V    print version\n"
+               "  --help, -h       this help\n"
+               "  --dump-license   print the 2-clause BSD license\n"
+               "Exit codes: 0 success, 1 script/runtime error, 2 usage/environment,\n"
+               "            3 lock conflict, 4 internal assertion (bug)\n");
 }
 
-static char *read_all(FILE *f, size_t *outn)
-{
+static char* read_all(FILE* f, size_t* outn) {
     strbuf sb;
     sb_init(&sb);
     char buf[8192];
@@ -59,20 +56,19 @@ static char *read_all(FILE *f, size_t *outn)
     return sb.buf;
 }
 
-int main(int argc, char **argv)
-{
+int main(int argc, char** argv) {
     rx_log_init();
-    const char *script = NULL;
-    const char *carg = NULL;
-    const char *ofile = NULL;
-    const char *cfgfile = NULL;
-    const char *runapp = NULL;
+    const char* script = NULL;
+    const char* carg = NULL;
+    const char* ofile = NULL;
+    const char* cfgfile = NULL;
+    const char* runapp = NULL;
     int test_mode = 0;
     int no_mouse = 0;
-    const char *mouse_forced = NULL;
+    const char* mouse_forced = NULL;
 
     for (int i = 1; i < argc; i++) {
-        const char *a = argv[i];
+        const char* a = argv[i];
         if (strcmp(a, "-c") == 0 && i + 1 < argc) {
             carg = argv[++i];
         } else if (strcmp(a, "-t") == 0) {
@@ -118,7 +114,7 @@ int main(int argc, char **argv)
         setenv("REYNARD_NO_MOUSE", "1", 1);
     }
 
-    FILE *out = stdout;
+    FILE* out = stdout;
     if (ofile) {
         out = fopen(ofile, "w");
         if (!out) {
@@ -136,7 +132,7 @@ int main(int argc, char **argv)
        from REYNARD_CODEPAGE or the config file (spec §8.2) */
     {
         int cp = 0;
-        const char *env = getenv("REYNARD_CODEPAGE");
+        const char* env = getenv("REYNARD_CODEPAGE");
         if (env && *env) {
             cp = (int)strtol(env, NULL, 10);
         } else if (cfg.codepage) {
@@ -157,9 +153,9 @@ int main(int argc, char **argv)
         }
     } else if (carg) {
         /* -c: semicolons split commands (spec §6.4) */
-        char *copy = rx_strdup(carg);
-        char *save = NULL;
-        for (char *part = strtok_r(copy, ";", &save); part; part = strtok_r(NULL, ";", &save)) {
+        char* copy = rx_strdup(carg);
+        char* save = NULL;
+        for (char* part = strtok_r(copy, ";", &save); part; part = strtok_r(NULL, ";", &save)) {
             if (rx_run_source(&ctx, part, "<command>") != R_OK && !ctx.quit) {
                 rc = 1;
                 break;
@@ -179,7 +175,7 @@ int main(int argc, char **argv)
         }
     } else if (script && strcmp(script, "-") == 0) {
         size_t n;
-        char *src = read_all(stdin, &n);
+        char* src = read_all(stdin, &n);
         if (rx_run_source(&ctx, src, "<stdin>") != R_OK && !ctx.quit) {
             rc = 1;
         }
@@ -188,7 +184,7 @@ int main(int argc, char **argv)
         /* interactive full-screen shell (spec §3.3, §6). The script backend
            is selected when RX_EVENTS is set (golden-screen tests); otherwise
            the production ncurses backend. */
-        const term_backend *tb = getenv("RX_EVENTS") ? rx_term_script() : rx_term_ncurses();
+        const term_backend* tb = getenv("RX_EVENTS") ? rx_term_script() : rx_term_ncurses();
         if (!tb) {
             fprintf(stderr,
                     "reynard: interactive UI needs a terminal backend (ncurses not available "

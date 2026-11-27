@@ -16,12 +16,11 @@
 
 /* split text into pages on \f */
 typedef struct {
-    char **pages;
+    char** pages;
     size_t npages, cappages;
 } pv_doc;
 
-static void pv_free(pv_doc *d)
-{
+static void pv_free(pv_doc* d) {
     for (size_t i = 0; i < d->npages; i++) {
         free(d->pages[i]);
     }
@@ -30,24 +29,23 @@ static void pv_free(pv_doc *d)
     d->npages = d->cappages = 0;
 }
 
-static void pv_load(pv_doc *d, const char *text)
-{
+static void pv_load(pv_doc* d, const char* text) {
     memset(d, 0, sizeof(*d));
-    const char *p = text;
-    const char *start = text;
+    const char* p = text;
+    const char* start = text;
     for (;;) {
         if (*p == '\f' || !*p) {
             size_t n = (size_t)(p - start);
             if (d->npages == d->cappages) {
                 size_t nc = d->cappages ? d->cappages * 2 : 4;
-                char **np = realloc(d->pages, nc * sizeof(char *));
+                char** np = realloc(d->pages, nc * sizeof(char*));
                 if (!np) {
                     RX_FATAL("out of memory");
                 }
                 d->pages = np;
                 d->cappages = nc;
             }
-            char *pg = malloc(n + 1);
+            char* pg = malloc(n + 1);
             if (!pg) {
                 RX_FATAL("out of memory");
             }
@@ -66,11 +64,10 @@ static void pv_load(pv_doc *d, const char *text)
     }
 }
 
-static const int zoom_pct[4] = { 80, 100, 133, 200 };
+static const int zoom_pct[4] = {80, 100, 133, 200};
 
-int ui_preview(void *ud, const char *title, const char *text)
-{
-    rx_ui *ui = ud;
+int ui_preview(void* ud, const char* title, const char* text) {
+    rx_ui* ui = ud;
     pv_doc doc;
     pv_load(&doc, text);
     size_t page = 0;
@@ -83,17 +80,19 @@ int ui_preview(void *ud, const char *title, const char *text)
         scr_fill(&ui->scr, wx, wy, ww, wh, ' ', RXA_DESKTOP);
         /* title bar line */
         char hdr[300];
-        snprintf(hdr, sizeof(hdr), " Preview: %s  Page %zu/%zu  Zoom %d%%  (PgUp/PgDn pages, arrows scroll, +/- zoom, Esc quit)",
+        snprintf(hdr, sizeof(hdr),
+                 " Preview: %s  Page %zu/%zu  Zoom %d%%  (PgUp/PgDn pages, arrows scroll, +/- "
+                 "zoom, Esc quit)",
                  title, page + 1, doc.npages, zoom_pct[zi]);
         scr_textn_clip(&ui->scr, wx + 1, wy, hdr, strlen(hdr), RXA(RXC_BLACK, RXC_WHITE), ww - 2);
         /* page content, scaled by zoom */
         double z = zoom_pct[zi] / 100.0;
-        const char *pg = doc.pages[page];
+        const char* pg = doc.pages[page];
         /* split into lines */
         int y = wy + 1;
-        const char *lp = pg;
+        const char* lp = pg;
         while (*lp && y < wy + wh) {
-            const char *nl = strchr(lp, '\n');
+            const char* nl = strchr(lp, '\n');
             size_t ln = nl ? (size_t)(nl - lp) : strlen(lp);
             int x = wx + 1;
             for (size_t i = 0; i < ln && x < wx + ww - 1; i++, x++) {
@@ -141,7 +140,7 @@ int ui_preview(void *ud, const char *title, const char *text)
             continue;
         }
         if (ev.kind == EV_MOUSE) {
-            const rmouse *m = &ev.u.m;
+            const rmouse* m = &ev.u.m;
             if (m->kind == RM_WHEEL_UP && scroll > 0) {
                 scroll--;
             } else if (m->kind == RM_WHEEL_DN) {
@@ -161,7 +160,7 @@ int ui_preview(void *ud, const char *title, const char *text)
         if (ev.kind != EV_KEY) {
             continue;
         }
-        const rkey *k = &ev.u.k;
+        const rkey* k = &ev.u.k;
         switch (k->sym) {
         case RXK_ESC:
         case RXK_CTL('W'):

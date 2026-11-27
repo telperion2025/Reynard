@@ -16,8 +16,7 @@
 #include "reynard/status.h"
 #include "util/util.h"
 
-int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
-{
+int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     /* write to a temp file and open read-only; never trust the bytes */
     char path[] = "/tmp/rx-fuzz-XXXXXX";
     int fd = rx_mkstemp(path);
@@ -30,7 +29,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         return 0;
     }
     close(fd);
-    rx_dbf *dbf = NULL;
+    rx_dbf* dbf = NULL;
     int rc = rx_dbf_open(path, RD_READONLY, &dbf);
     if (rc == R_OK) {
         uint32_t nrec = 0, recno = 0;

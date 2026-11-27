@@ -14,11 +14,10 @@
 #include "lang/lang.h"
 #include "util/util.h"
 
-static rx_menu_def *menu_find(rx_ctx *ctx, const char *name)
-{
+static rx_menu_def* menu_find(rx_ctx* ctx, const char* name) {
     char up[64];
     snprintf(up, sizeof(up), "%.*s", (int)sizeof(up) - 1, name);
-    for (char *c = up; *c; c++) {
+    for (char* c = up; *c; c++) {
         *c = (char)toupper((unsigned char)*c);
     }
     for (size_t i = 0; i < ctx->nmenus; i++) {
@@ -29,15 +28,14 @@ static rx_menu_def *menu_find(rx_ctx *ctx, const char *name)
     return NULL;
 }
 
-static rx_menu_def *menu_ensure(rx_ctx *ctx, const char *name, int is_popup)
-{
-    rx_menu_def *m = menu_find(ctx, name);
+static rx_menu_def* menu_ensure(rx_ctx* ctx, const char* name, int is_popup) {
+    rx_menu_def* m = menu_find(ctx, name);
     if (m) {
         return m;
     }
     if (ctx->nmenus == ctx->capmenus) {
         size_t nc = ctx->capmenus ? ctx->capmenus * 2 : 8;
-        rx_menu_def *nm = realloc(ctx->menus, nc * sizeof(rx_menu_def));
+        rx_menu_def* nm = realloc(ctx->menus, nc * sizeof(rx_menu_def));
         if (!nm) {
             RX_FATAL("out of memory");
         }
@@ -47,18 +45,17 @@ static rx_menu_def *menu_ensure(rx_ctx *ctx, const char *name, int is_popup)
     m = &ctx->menus[ctx->nmenus++];
     memset(m, 0, sizeof(*m));
     snprintf(m->name, sizeof(m->name), "%.*s", (int)sizeof(m->name) - 1, name);
-    for (char *c = m->name; *c; c++) {
+    for (char* c = m->name; *c; c++) {
         *c = (char)toupper((unsigned char)*c);
     }
     m->is_popup = is_popup;
     return m;
 }
 
-static rx_menu_item_def *item_ensure(rx_menu_def *m, const char *name)
-{
+static rx_menu_item_def* item_ensure(rx_menu_def* m, const char* name) {
     char up[64];
     snprintf(up, sizeof(up), "%.*s", (int)sizeof(up) - 1, name);
-    for (char *c = up; *c; c++) {
+    for (char* c = up; *c; c++) {
         *c = (char)toupper((unsigned char)*c);
     }
     for (size_t i = 0; i < m->nitems; i++) {
@@ -69,24 +66,23 @@ static rx_menu_item_def *item_ensure(rx_menu_def *m, const char *name)
     if (m->nitems >= 32) {
         return NULL;
     }
-    rx_menu_item_def *it = &m->items[m->nitems++];
+    rx_menu_item_def* it = &m->items[m->nitems++];
     memset(it, 0, sizeof(*it));
     snprintf(it->name, sizeof(it->name), "%s", up);
-    snprintf(it->label, sizeof(it->label), "%.*s", (int)sizeof(it->label) - 1, up); /* default prompt = name */
+    snprintf(it->label, sizeof(it->label), "%.*s", (int)sizeof(it->label) - 1,
+             up); /* default prompt = name */
     return it;
 }
 
 /* re-sync the menubar's app pad from ctx (ui hook) */
-void rx_menu_sync(rx_ctx *ctx)
-{
+void rx_menu_sync(rx_ctx* ctx) {
     if (ctx->menu_sync_fn) {
         ctx->menu_sync_fn(ctx->menu_sync_ud);
     }
 }
 
 /* called by the ui hook with the ui as ud; the model is on ui->ctx */
-int rx_cmd_menu(rx_ctx *ctx, rx_stmt *s)
-{
+int rx_cmd_menu(rx_ctx* ctx, rx_stmt* s) {
     switch (s->kind) {
     case ST_DEFINE_MENU: {
         /* strs: name */
@@ -108,8 +104,8 @@ int rx_cmd_menu(rx_ctx *ctx, rx_stmt *s)
         if (s->nstrs < 2) {
             return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "DEFINE PAD p OF m PROMPT ...");
         }
-        rx_menu_def *m = menu_ensure(ctx, s->strs[1], 0);
-        rx_menu_item_def *it = item_ensure(m, s->strs[0]);
+        rx_menu_def* m = menu_ensure(ctx, s->strs[1], 0);
+        rx_menu_item_def* it = item_ensure(m, s->strs[0]);
         if (!it) {
             return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "Too many pads");
         }
@@ -129,10 +125,11 @@ int rx_cmd_menu(rx_ctx *ctx, rx_stmt *s)
         if (s->nstrs < 2) {
             return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "DEFINE BAR n OF p PROMPT ...");
         }
-        rx_menu_def *m = menu_ensure(ctx, s->strs[1], 1);
+        rx_menu_def* m = menu_ensure(ctx, s->strs[1], 1);
         char lbl[64];
-        snprintf(lbl, sizeof(lbl), "%.*s", (int)sizeof(lbl) - 1, s->strs[0]); /* bar number as label key */
-        rx_menu_item_def *it = item_ensure(m, lbl);
+        snprintf(lbl, sizeof(lbl), "%.*s", (int)sizeof(lbl) - 1,
+                 s->strs[0]); /* bar number as label key */
+        rx_menu_item_def* it = item_ensure(m, lbl);
         if (!it) {
             return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "Too many bars");
         }
@@ -146,17 +143,18 @@ int rx_cmd_menu(rx_ctx *ctx, rx_stmt *s)
         if (s->nstrs < 2) {
             return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "ON PAD p OF m cmd");
         }
-        rx_menu_def *m = menu_find(ctx, s->strs[1]);
+        rx_menu_def* m = menu_find(ctx, s->strs[1]);
         if (!m) {
             return rx_raise(ctx, R_ERR_VAR, s->line, s->col, "Undefined menu %s", s->strs[1]);
         }
         /* ON PAD p OF m cmd: the command runs when pad p is selected
            (menubar run_item in the UI, or ACTIVATE MENU m PAD p) */
-        rx_menu_item_def *it = item_ensure(m, s->strs[0]);
+        rx_menu_item_def* it = item_ensure(m, s->strs[0]);
         if (it) {
             for (size_t i = 0; i < s->nclause; i++) {
                 if (strcmp(s->clauses[i].key, "CMD") == 0) {
-                    snprintf(it->cmd, sizeof(it->cmd), "%.*s", (int)sizeof(it->cmd) - 1, s->clauses[i].word);
+                    snprintf(it->cmd, sizeof(it->cmd), "%.*s", (int)sizeof(it->cmd) - 1,
+                             s->clauses[i].word);
                 }
             }
         }
@@ -164,7 +162,7 @@ int rx_cmd_menu(rx_ctx *ctx, rx_stmt *s)
     }
     case ST_ON_SELECTION: {
         /* strs: kind(PAD|BAR|ALL), name, menu; clause CMD */
-        const char *cmd = "";
+        const char* cmd = "";
         for (size_t i = 0; i < s->nclause; i++) {
             if (strcmp(s->clauses[i].key, "CMD") == 0) {
                 cmd = s->clauses[i].word;
@@ -173,16 +171,17 @@ int rx_cmd_menu(rx_ctx *ctx, rx_stmt *s)
         if (s->nstrs < 3) {
             return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "ON SELECTION PAD/BAR ...");
         }
-        rx_menu_def *m = menu_find(ctx, s->strs[2]);
+        rx_menu_def* m = menu_find(ctx, s->strs[2]);
         if (!m) {
             return rx_raise(ctx, R_ERR_VAR, s->line, s->col, "Undefined menu %s", s->strs[2]);
         }
         if (strcmp(s->strs[0], "ALL") == 0) {
             for (size_t i = 0; i < m->nitems; i++) {
-                snprintf(m->items[i].cmd, sizeof(m->items[i].cmd), "%.*s", (int)sizeof(m->items[i].cmd) - 1, cmd);
+                snprintf(m->items[i].cmd, sizeof(m->items[i].cmd), "%.*s",
+                         (int)sizeof(m->items[i].cmd) - 1, cmd);
             }
         } else {
-            rx_menu_item_def *it = item_ensure(m, s->strs[1]);
+            rx_menu_item_def* it = item_ensure(m, s->strs[1]);
             if (it) {
                 snprintf(it->cmd, sizeof(it->cmd), "%.*s", (int)sizeof(it->cmd) - 1, cmd);
             }
@@ -193,17 +192,18 @@ int rx_cmd_menu(rx_ctx *ctx, rx_stmt *s)
         if (s->nstrs < 1) {
             return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "ACTIVATE MENU needs a name");
         }
-        rx_menu_def *m = menu_find(ctx, s->strs[0]);
+        rx_menu_def* m = menu_find(ctx, s->strs[0]);
         if (!m) {
             return rx_raise(ctx, R_ERR_VAR, s->line, s->col, "Undefined menu %s", s->strs[0]);
         }
-        snprintf(ctx->active_menu, sizeof(ctx->active_menu), "%.*s", (int)sizeof(ctx->active_menu) - 1, m->name);
+        snprintf(ctx->active_menu, sizeof(ctx->active_menu), "%.*s",
+                 (int)sizeof(ctx->active_menu) - 1, m->name);
         m->active = 1;
         m->shown = 1;
         rx_menu_sync(ctx);
         /* ACTIVATE MENU m PAD p selects pad p immediately: run its ON PAD
            command (same path the menubar's run_item takes in the UI) */
-        const char *pad = "";
+        const char* pad = "";
         for (size_t i = 0; i < s->nclause; i++) {
             if (strcmp(s->clauses[i].key, "PAD") == 0) {
                 pad = s->clauses[i].word;
@@ -225,10 +225,11 @@ int rx_cmd_menu(rx_ctx *ctx, rx_stmt *s)
         if (s->nstrs < 1) {
             return R_OK;
         }
-        rx_menu_def *m = menu_find(ctx, s->strs[0]);
+        rx_menu_def* m = menu_find(ctx, s->strs[0]);
         if (m) {
             m->shown = 1;
-            snprintf(ctx->active_menu, sizeof(ctx->active_menu), "%.*s", (int)sizeof(ctx->active_menu) - 1, m->name);
+            snprintf(ctx->active_menu, sizeof(ctx->active_menu), "%.*s",
+                     (int)sizeof(ctx->active_menu) - 1, m->name);
             rx_menu_sync(ctx);
         }
         return R_OK;
@@ -249,7 +250,7 @@ int rx_cmd_menu(rx_ctx *ctx, rx_stmt *s)
             rx_menu_sync(ctx);
             return R_OK;
         }
-        rx_menu_def *m = menu_find(ctx, s->strs[0]);
+        rx_menu_def* m = menu_find(ctx, s->strs[0]);
         if (m) {
             size_t idx = (size_t)(m - ctx->menus);
             memmove(&ctx->menus[idx], &ctx->menus[idx + 1],

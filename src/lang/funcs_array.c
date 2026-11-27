@@ -18,10 +18,9 @@
 
 #include "reynard/dbf.h"
 
-static int arr_dims(rx_ctx *c, const rval *v, const char *name, size_t *d1, size_t *d2,
-                    r_err *err)
-{
-    const char *s;
+static int arr_dims(rx_ctx* c, const rval* v, const char* name, size_t* d1, size_t* d2,
+                    r_err* err) {
+    const char* s;
     size_t n;
     if (!rv_to_str(v, &s, &n)) {
         err->code = R_ERR_TYPE;
@@ -40,15 +39,13 @@ static int arr_dims(rx_ctx *c, const rval *v, const char *name, size_t *d1, size
     return 0;
 }
 
-static size_t elem_num(size_t d1, size_t d2, size_t i, size_t j)
-{
+static size_t elem_num(size_t d1, size_t d2, size_t i, size_t j) {
     (void)d1;
     size_t cols = d2 ? d2 : 1;
     return (i - 1) * cols + (j - 1) + 1;
 }
 
-static int f_alen(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_alen(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc < 1 || argc > 2) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "ALEN() expects 1-2 arguments");
@@ -68,8 +65,7 @@ static int f_alen(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
     return R_OK;
 }
 
-static int f_aelement(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_aelement(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc < 2 || argc > 3) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "AELEMENT() expects 2-3 arguments");
@@ -100,8 +96,7 @@ static int f_aelement(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err
     return R_OK;
 }
 
-static int f_asubscript(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_asubscript(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     /* ASUBSCRIPT(a, n, dim): subscript of element n in dimension dim (1 or 2) */
     if (argc != 3) {
         err->code = R_ERR_TYPE;
@@ -132,9 +127,8 @@ static int f_asubscript(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_e
     return R_OK;
 }
 
-static int name_of(rx_ctx *c, const rval *v, char *out, size_t outsz, r_err *err, const char *fn)
-{
-    const char *s;
+static int name_of(rx_ctx* c, const rval* v, char* out, size_t outsz, r_err* err, const char* fn) {
+    const char* s;
     size_t n;
     if (!rv_to_str(v, &s, &n)) {
         err->code = R_ERR_TYPE;
@@ -144,15 +138,14 @@ static int name_of(rx_ctx *c, const rval *v, char *out, size_t outsz, r_err *err
     size_t l = n < outsz - 1 ? n : outsz - 1;
     memcpy(out, s, l);
     out[l] = '\0';
-    for (char *q = out; *q; q++) {
+    for (char* q = out; *q; q++) {
         *q = (char)toupper((unsigned char)*q);
     }
     (void)c;
     return 0;
 }
 
-static int f_acopy(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_acopy(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc < 2 || argc > 5) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "ACOPY() expects 2-5 arguments");
@@ -221,8 +214,7 @@ static int f_acopy(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
     return R_OK;
 }
 
-static int f_adel(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_adel(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     /* ADEL(a, n [, 2]) — delete element n (or row/column if dim==2) */
     if (argc < 2 || argc > 3) {
         err->code = R_ERR_TYPE;
@@ -275,8 +267,7 @@ static int f_adel(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
     return R_OK;
 }
 
-static int f_ains(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_ains(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc < 2 || argc > 3) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "AINS() expects 2-3 arguments");
@@ -319,8 +310,7 @@ static int f_ains(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
     return R_OK;
 }
 
-static int val_eq(rx_ctx *c, const rval *a, const rval *b)
-{
+static int val_eq(rx_ctx* c, const rval* a, const rval* b) {
     /* ASCAN exact comparison: use the VM's comparison via display strings for
        non-numerics, == for numerics/dates/logicals */
     if (a->t == RX_T_N || a->t == RX_T_I || a->t == RX_T_Y || a->t == RX_T_B) {
@@ -345,8 +335,7 @@ static int val_eq(rx_ctx *c, const rval *a, const rval *b)
     return 0;
 }
 
-static int f_ascan(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_ascan(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc < 2 || argc > 5) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "ASCAN() expects 2-5 arguments");
@@ -398,8 +387,7 @@ static int f_ascan(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
     return R_OK;
 }
 
-static int cmp_rval(const void *pa, const void *pb)
-{
+static int cmp_rval(const void* pa, const void* pb) {
     const rval *a = pa, *b = pb;
     double x, y;
     if (rv_to_num(a, &x) && rv_to_num(b, &y)) {
@@ -417,8 +405,7 @@ static int cmp_rval(const void *pa, const void *pb)
     return (int)a->t - (int)b->t;
 }
 
-static int f_asort(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_asort(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc < 1 || argc > 4) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "ASORT() expects 1-4 arguments");
@@ -459,7 +446,7 @@ static int f_asort(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
     if (start + count - 1 > total) {
         count = total - start + 1;
     }
-    rval *tmp = calloc(count ? count : 1, sizeof(rval));
+    rval* tmp = calloc(count ? count : 1, sizeof(rval));
     if (!tmp) {
         RX_FATAL("out of memory");
     }
@@ -484,8 +471,7 @@ static int f_asort(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
     return R_OK;
 }
 
-static int f_afields(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_afields(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     /* AFIELDS(a [, workarea]) — rows: name, type, len, dec */
     if (argc < 1 || argc > 2) {
         err->code = R_ERR_TYPE;
@@ -496,19 +482,19 @@ static int f_afields(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
     if (name_of(c, &argv[0], nm, sizeof(nm), err, "AFIELDS") != 0) {
         return err->code;
     }
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     int area = 0;
     if (argc == 2) {
         double d;
         if (rv_to_num(&argv[1], &d)) {
             area = (int)d;
         } else {
-            const char *s;
+            const char* s;
             size_t n;
             if (rv_to_str(&argv[1], &s, &n)) {
                 for (int i = 1; i <= 255; i++) {
                     if (rx_wa_used(i)) {
-                        const char *a;
+                        const char* a;
                         rx_wa_alias(i, &a);
                         if (strlen(a) == n && memcmp(a, s, n) == 0) {
                             area = i;
@@ -537,7 +523,7 @@ static int f_afields(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
         v.u.c.utf8 = rx_strdup(fd.name);
         rx_array_set(c, nm, i + 1, 1, &v);
         rx_rval_free(&v);
-        char ty[2] = { (char)fd.type, 0 };
+        char ty[2] = {(char)fd.type, 0};
         rx_rval_undef(&v);
         v.t = RX_T_C;
         v.u.c.n = 1;
@@ -557,8 +543,7 @@ static int f_afields(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
     return R_OK;
 }
 
-static int f_adir(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_adir(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     /* ADIR(a, pattern) — rows: name, size, date (D), time (C), attr (C) */
     if (argc < 2 || argc > 3) {
         err->code = R_ERR_TYPE;
@@ -569,7 +554,7 @@ static int f_adir(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
     if (name_of(c, &argv[0], nm, sizeof(nm), err, "ADIR") != 0) {
         return err->code;
     }
-    const char *pat;
+    const char* pat;
     size_t pn;
     if (!rv_to_str(&argv[1], &pat, &pn)) {
         err->code = R_ERR_TYPE;
@@ -580,20 +565,20 @@ static int f_adir(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
     size_t l = pn < sizeof(patb) - 1 ? pn : sizeof(patb) - 1;
     memcpy(patb, pat, l);
     patb[l] = '\0';
-    DIR *dir = opendir(".");
+    DIR* dir = opendir(".");
     if (!dir) {
         err->code = R_ERR_IO_OPEN;
         snprintf(err->msg, sizeof(err->msg), "ADIR() cannot open directory");
         return err->code;
     }
-    char **names = NULL;
+    char** names = NULL;
     size_t nn = 0, cap = 0;
-    struct dirent *e;
+    struct dirent* e;
     while ((e = readdir(dir))) {
         if (rx_wildmatch(patb, e->d_name)) {
             if (nn == cap) {
                 cap = cap ? cap * 2 : 32;
-                names = realloc(names, cap * sizeof(char *));
+                names = realloc(names, cap * sizeof(char*));
                 if (!names) {
                     RX_FATAL("out of memory");
                 }
@@ -619,7 +604,7 @@ static int f_adir(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
         rx_array_set(c, nm, i + 1, 2, &v);
         rx_rval_undef(&v);
         if (stat(names[i], &st) == 0) {
-            struct tm *tm = localtime(&st.st_mtime);
+            struct tm* tm = localtime(&st.st_mtime);
             v.t = RX_T_D;
             v.u.d.y = (int16_t)(tm->tm_year + 1900);
             v.u.d.m = (int16_t)(tm->tm_mon + 1);
@@ -630,7 +615,7 @@ static int f_adir(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
         rx_array_set(c, nm, i + 1, 3, &v);
         rx_rval_undef(&v);
         if (stat(names[i], &st) == 0) {
-            struct tm *tm = localtime(&st.st_mtime);
+            struct tm* tm = localtime(&st.st_mtime);
             char tb[16];
             snprintf(tb, sizeof(tb), "%02d:%02d:%02d", tm->tm_hour, tm->tm_min, tm->tm_sec);
             v.t = RX_T_C;
@@ -657,9 +642,10 @@ static int f_adir(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
 }
 
 const rx_funcdef rx_funcs_array[] = {
-    { "AELEMENT", f_aelement }, { "ASUBSCRIPT", f_asubscript }, { "ACOPY", f_acopy },
-    { "ADEL", f_adel },         { "AINS", f_ains },           { "ASCAN", f_ascan },
-    { "ASORT", f_asort },       { "AFIELDS", f_afields },     { "ADIR", f_adir },
-    { "ALEN", f_alen },
+    {"AELEMENT", f_aelement}, {"ASUBSCRIPT", f_asubscript},
+    {"ACOPY", f_acopy},       {"ADEL", f_adel},
+    {"AINS", f_ains},         {"ASCAN", f_ascan},
+    {"ASORT", f_asort},       {"AFIELDS", f_afields},
+    {"ADIR", f_adir},         {"ALEN", f_alen},
 };
 const size_t rx_funcs_array_n = sizeof(rx_funcs_array) / sizeof(rx_funcs_array[0]);

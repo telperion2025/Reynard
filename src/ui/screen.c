@@ -13,8 +13,7 @@
 
 #define SCR_MAX_DMG 512
 
-void scr_init(rx_screen *s, int w, int h)
-{
+void scr_init(rx_screen* s, int w, int h) {
     memset(s, 0, sizeof(*s));
     s->w = w;
     s->h = h;
@@ -33,27 +32,23 @@ void scr_init(rx_screen *s, int w, int h)
     }
 }
 
-void scr_free(rx_screen *s)
-{
+void scr_free(rx_screen* s) {
     free(s->cells);
     free(s->dmg);
     memset(s, 0, sizeof(*s));
 }
 
-static void mark_full(rx_screen *s)
-{
+static void mark_full(rx_screen* s) {
     s->ndmg = 1;
-    s->dmg[0] = (struct rrect){ 0, 0, (uint16_t)s->w, (uint16_t)s->h };
+    s->dmg[0] = (struct rrect){0, 0, (uint16_t)s->w, (uint16_t)s->h};
 }
 
-static int rects_touch(const struct rrect *a, const struct rrect *b)
-{
+static int rects_touch(const struct rrect* a, const struct rrect* b) {
     return a->x <= b->x + b->w + 1 && b->x <= a->x + a->w + 1 && a->y <= b->y + b->h + 1 &&
            b->y <= a->y + a->h + 1;
 }
 
-static void mark(rx_screen *s, int x, int y, int w, int h)
-{
+static void mark(rx_screen* s, int x, int y, int w, int h) {
     if (w <= 0 || h <= 0) {
         return;
     }
@@ -61,24 +56,22 @@ static void mark(rx_screen *s, int x, int y, int w, int h)
         s->dmg[0].h == s->h) {
         return;
     }
-    struct rrect r = { (uint16_t)x, (uint16_t)y, (uint16_t)w, (uint16_t)h };
+    struct rrect r = {(uint16_t)x, (uint16_t)y, (uint16_t)w, (uint16_t)h};
     for (size_t i = 0; i < s->ndmg; i++) {
         if (rects_touch(&s->dmg[i], &r)) {
             int x0 = s->dmg[i].x < r.x ? s->dmg[i].x : r.x;
             int y0 = s->dmg[i].y < r.y ? s->dmg[i].y : r.y;
-            int x1 = s->dmg[i].x + s->dmg[i].w > r.x + r.w ? s->dmg[i].x + s->dmg[i].w
-                                                           : r.x + r.w;
-            int y1 = s->dmg[i].y + s->dmg[i].h > r.y + r.h ? s->dmg[i].y + s->dmg[i].h
-                                                           : r.y + r.h;
-            s->dmg[i] = (struct rrect){ (uint16_t)x0, (uint16_t)y0, (uint16_t)(x1 - x0),
-                                        (uint16_t)(y1 - y0) };
+            int x1 = s->dmg[i].x + s->dmg[i].w > r.x + r.w ? s->dmg[i].x + s->dmg[i].w : r.x + r.w;
+            int y1 = s->dmg[i].y + s->dmg[i].h > r.y + r.h ? s->dmg[i].y + s->dmg[i].h : r.y + r.h;
+            s->dmg[i] = (struct rrect){(uint16_t)x0, (uint16_t)y0, (uint16_t)(x1 - x0),
+                                       (uint16_t)(y1 - y0)};
             return;
         }
     }
     if (s->ndmg >= SCR_MAX_DMG || s->ndmg >= s->capdmg) {
         if (s->ndmg >= s->capdmg) {
             size_t nc = s->capdmg * 2;
-            struct rrect *nd = realloc(s->dmg, nc * sizeof(struct rrect));
+            struct rrect* nd = realloc(s->dmg, nc * sizeof(struct rrect));
             if (!nd) {
                 RX_FATAL("out of memory");
             }
@@ -93,12 +86,11 @@ static void mark(rx_screen *s, int x, int y, int w, int h)
     s->dmg[s->ndmg++] = r;
 }
 
-void scr_resize(rx_screen *s, int w, int h)
-{
+void scr_resize(rx_screen* s, int w, int h) {
     if (w == s->w && h == s->h) {
         return;
     }
-    rcell *nc = calloc((size_t)w * h, sizeof(rcell));
+    rcell* nc = calloc((size_t)w * h, sizeof(rcell));
     if (!nc) {
         RX_FATAL("out of memory");
     }
@@ -114,12 +106,11 @@ void scr_resize(rx_screen *s, int w, int h)
     mark_full(s);
 }
 
-void scr_put(rx_screen *s, int x, int y, uint32_t ch, uint16_t attr)
-{
+void scr_put(rx_screen* s, int x, int y, uint32_t ch, uint16_t attr) {
     if (x < 0 || y < 0 || x >= s->w || y >= s->h) {
         return;
     }
-    rcell *c = &s->cells[(size_t)y * s->w + x];
+    rcell* c = &s->cells[(size_t)y * s->w + x];
     if (c->ch == ch && c->attr == attr) {
         return;
     }
@@ -128,9 +119,8 @@ void scr_put(rx_screen *s, int x, int y, uint32_t ch, uint16_t attr)
     mark(s, x, y, 1, 1);
 }
 
-void scr_textn_clip(rx_screen *s, int x, int y, const char *utf8, size_t n, uint16_t attr,
-                    int maxw)
-{
+void scr_textn_clip(rx_screen* s, int x, int y, const char* utf8, size_t n, uint16_t attr,
+                    int maxw) {
     if (maxw <= 0) {
         return;
     }
@@ -155,18 +145,15 @@ void scr_textn_clip(rx_screen *s, int x, int y, const char *utf8, size_t n, uint
     }
 }
 
-void scr_textn(rx_screen *s, int x, int y, const char *utf8, size_t n, uint16_t attr)
-{
+void scr_textn(rx_screen* s, int x, int y, const char* utf8, size_t n, uint16_t attr) {
     scr_textn_clip(s, x, y, utf8, n, attr, x < s->w ? s->w - x : 0);
 }
 
-void scr_text(rx_screen *s, int x, int y, const char *utf8, uint16_t attr)
-{
+void scr_text(rx_screen* s, int x, int y, const char* utf8, uint16_t attr) {
     scr_textn(s, x, y, utf8, strlen(utf8), attr);
 }
 
-void scr_fill(rx_screen *s, int x, int y, int w, int h, uint32_t ch, uint16_t attr)
-{
+void scr_fill(rx_screen* s, int x, int y, int w, int h, uint32_t ch, uint16_t attr) {
     if (x < 0) {
         w += x;
         x = 0;
@@ -191,25 +178,23 @@ void scr_fill(rx_screen *s, int x, int y, int w, int h, uint32_t ch, uint16_t at
     }
 }
 
-void scr_hline(rx_screen *s, int x, int y, int w, uint32_t ch, uint16_t attr)
-{
+void scr_hline(rx_screen* s, int x, int y, int w, uint32_t ch, uint16_t attr) {
     scr_fill(s, x, y, w, 1, ch, attr);
 }
 
-void scr_box(rx_screen *s, int x, int y, int w, int h, const char *title, uint16_t attr)
-{
+void scr_box(rx_screen* s, int x, int y, int w, int h, const char* title, uint16_t attr) {
     if (w < 2 || h < 2) {
         return;
     }
-    scr_hline(s, x, y, w, 0x2500, attr);         /* ─ */
+    scr_hline(s, x, y, w, 0x2500, attr); /* ─ */
     scr_hline(s, x, y + h - 1, w, 0x2500, attr);
     for (int yy = y + 1; yy < y + h - 1; yy++) {
-        scr_put(s, x, yy, 0x2502, attr);         /* │ */
+        scr_put(s, x, yy, 0x2502, attr); /* │ */
         scr_put(s, x + w - 1, yy, 0x2502, attr);
     }
-    scr_put(s, x, y, 0x250C, attr);              /* ┌ */
-    scr_put(s, x + w - 1, y, 0x2510, attr);      /* ┐ */
-    scr_put(s, x, y + h - 1, 0x2514, attr);      /* └ */
+    scr_put(s, x, y, 0x250C, attr);                 /* ┌ */
+    scr_put(s, x + w - 1, y, 0x2510, attr);         /* ┐ */
+    scr_put(s, x, y + h - 1, 0x2514, attr);         /* └ */
     scr_put(s, x + w - 1, y + h - 1, 0x2518, attr); /* ┘ */
     if (title && *title) {
         char t[128];
@@ -218,8 +203,7 @@ void scr_box(rx_screen *s, int x, int y, int w, int h, const char *title, uint16
     }
 }
 
-void scr_set_pair(rx_screen *s, int idx, uint8_t fg, uint8_t bg)
-{
+void scr_set_pair(rx_screen* s, int idx, uint8_t fg, uint8_t bg) {
     if (idx < 0 || idx >= 256) {
         return;
     }
@@ -227,13 +211,11 @@ void scr_set_pair(rx_screen *s, int idx, uint8_t fg, uint8_t bg)
     s->pal[idx][1] = bg;
 }
 
-void scr_damage(rx_screen *s, int x, int y, int w, int h)
-{
+void scr_damage(rx_screen* s, int x, int y, int w, int h) {
     mark(s, x, y, w, h);
 }
 
-int scr_blit(rx_screen *s, const term_backend *tb)
-{
+int scr_blit(rx_screen* s, const term_backend* tb) {
     if (s->ndmg == 0) {
         return 0;
     }

@@ -9,8 +9,7 @@
 
 #include "util/util.h"
 
-int rx_mark_to_cp(uint8_t mark)
-{
+int rx_mark_to_cp(uint8_t mark) {
     switch (mark) {
     case 0x00:
         return 0; /* no mark: no conversion */
@@ -33,13 +32,11 @@ int rx_mark_to_cp(uint8_t mark)
     }
 }
 
-int rx_mark_known_no_table(uint8_t mark)
-{
+int rx_mark_known_no_table(uint8_t mark) {
     return mark == 0x64; /* CP852 table not yet shipped */
 }
 
-uint8_t rx_cp_to_mark(int cp)
-{
+uint8_t rx_cp_to_mark(int cp) {
     switch (cp) {
     case RX_CP437:
         return 0x01;

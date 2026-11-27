@@ -15,18 +15,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "lang/lang.h"
 #include "lang/funcs.h"
+#include "lang/lang.h"
 #include "util/util.h"
 
-static int is_func_letter(char c)
-{
+static int is_func_letter(char c) {
     return strchr("AX9#$*.,LYNR!IBCDE", c) != NULL;
 }
 
 /* character class test for template char c against input char ch */
-static int tmpl_class_ok(char c, char ch)
-{
+static int tmpl_class_ok(char c, char ch) {
     switch (c) {
     case 'X':
         return 1;
@@ -55,15 +53,14 @@ static int tmpl_class_ok(char c, char ch)
 
 /** Validate typed input against a PICTURE template (FUNCTION letters in
  *  pic after '@' are honored for case classes). Returns 1 when valid. */
-int rx_picture_input_ok(const char *pic, const char *func, const char *input)
-{
+int rx_picture_input_ok(const char* pic, const char* func, const char* input) {
     if (!pic) {
         return 1;
     }
     int upper = 0;
-    const char *t = pic;
+    const char* t = pic;
     if (t[0] == '@') {
-        for (const char *f = t + 1; *f; f++) {
+        for (const char* f = t + 1; *f; f++) {
             if (*f == '!') {
                 upper = 1;
             }
@@ -79,7 +76,7 @@ int rx_picture_input_ok(const char *pic, const char *func, const char *input)
         }
     }
     if (func) {
-        for (const char *f = func; *f; f++) {
+        for (const char* f = func; *f; f++) {
             if (*f == '!') {
                 upper = 1;
             }
@@ -117,15 +114,14 @@ int rx_picture_input_ok(const char *pic, const char *func, const char *input)
 #define PICSENT '\x01' /* sentinel for FoxPro space-fill emitted by '9' positions */
 
 /** Render a value through a PICTURE template (and FUNCTION codes). */
-int rx_picture_render(rx_ctx *ctx, const rval *v, const char *pic, const char *func, strbuf *out)
-{
+int rx_picture_render(rx_ctx* ctx, const rval* v, const char* pic, const char* func, strbuf* out) {
     char raw[512];
     size_t rn = 0;
     int upper = 0, center = 0, left = 0, nontemplate = 0, date_us = 0, date_eu = 0;
     /* FUNCTION codes may also be embedded as "@X..." in pic */
-    const char *t = pic ? pic : "";
+    const char* t = pic ? pic : "";
     if (t[0] == '@') {
-        for (const char *f = t + 1; *f && is_func_letter(*f); f++) {
+        for (const char* f = t + 1; *f && is_func_letter(*f); f++) {
             switch (*f) {
             case '!':
                 upper = 1;
@@ -155,7 +151,7 @@ int rx_picture_render(rx_ctx *ctx, const rval *v, const char *pic, const char *f
         }
     }
     if (func) {
-        for (const char *f = func; *f; f++) {
+        for (const char* f = func; *f; f++) {
             switch (*f) {
             case '!':
                 upper = 1;
@@ -211,7 +207,7 @@ int rx_picture_render(rx_ctx *ctx, const rval *v, const char *pic, const char *f
         rn = strlen(raw);
         break;
     default: {
-        const char *s;
+        const char* s;
         size_t n;
         if (rv_to_str(v, &s, &n) && n < sizeof(raw)) {
             memcpy(raw, s, n);
@@ -267,7 +263,7 @@ int rx_picture_render(rx_ctx *ctx, const rval *v, const char *pic, const char *f
         char intd[64], fracd[64];
         size_t ni = 0, nf = 0;
         int dotseen = 0;
-        for (char *q = fbuf; *q; q++) {
+        for (char* q = fbuf; *q; q++) {
             if (*q == '.') {
                 dotseen = 1;
                 continue;
@@ -396,11 +392,11 @@ int rx_picture_render(rx_ctx *ctx, const rval *v, const char *pic, const char *f
         out_r[orl] = '\0';
         /* strip leading real spaces (literal/'$' fill); '9' sentinel spaces are
            kept (FoxPro space-pads). Glue a leading '-' to the digits. */
-        char *p = out_r;
+        char* p = out_r;
         while (*p == ' ') {
             p++;
         }
-        for (char *q = p; *q; q++) {
+        for (char* q = p; *q; q++) {
             if (*q == PICSENT) {
                 *q = ' ';
             }
@@ -408,7 +404,7 @@ int rx_picture_render(rx_ctx *ctx, const rval *v, const char *pic, const char *f
         if (left) {
             /* @B: left-justify, pad right to the template width */
             size_t tw = 0;
-            for (const char *q = t; *q; q++) {
+            for (const char* q = t; *q; q++) {
                 if (*q != 'R') {
                     tw++;
                 }
@@ -468,7 +464,7 @@ int rx_picture_render(rx_ctx *ctx, const rval *v, const char *pic, const char *f
     if (center && rl < 40) {
         /* @I centers within the template width */
         size_t tw = 0;
-        for (const char *q = t; *q; q++) {
+        for (const char* q = t; *q; q++) {
             if (*q != 'R') {
                 tw++;
             }

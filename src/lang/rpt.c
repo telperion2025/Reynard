@@ -12,15 +12,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "lang/rpt.h"
 #include "lang/funcs.h"
+#include "lang/rpt.h"
 #include "reynard/dbf.h"
 #include "util/util.h"
 
 /* ---------------- doc ---------------- */
 
-void rpt_doc_free(rpt_doc *d)
-{
+void rpt_doc_free(rpt_doc* d) {
     for (size_t i = 0; i < d->npages; i++) {
         for (size_t j = 0; j < d->pages[i].nops; j++) {
             free(d->pages[i].ops[j].text);
@@ -31,34 +30,33 @@ void rpt_doc_free(rpt_doc *d)
     memset(d, 0, sizeof(*d));
 }
 
-rpt_page *rpt_doc_page(rpt_doc *d)
-{
+rpt_page* rpt_doc_page(rpt_doc* d) {
     if (d->npages == d->cappages) {
         size_t nc = d->cappages ? d->cappages * 2 : 8;
-        rpt_page *np = realloc(d->pages, nc * sizeof(rpt_page));
+        rpt_page* np = realloc(d->pages, nc * sizeof(rpt_page));
         if (!np) {
             RX_FATAL("out of memory");
         }
         d->pages = np;
         d->cappages = nc;
     }
-    rpt_page *p = &d->pages[d->npages++];
+    rpt_page* p = &d->pages[d->npages++];
     memset(p, 0, sizeof(*p));
     return p;
 }
 
-void rpt_page_op_band(rpt_page *p, int kind, int band, int x, int y, int x2, int y2, const char *text)
-{
+void rpt_page_op_band(rpt_page* p, int kind, int band, int x, int y, int x2, int y2,
+                      const char* text) {
     if (p->nops == p->capops) {
         size_t nc = p->capops ? p->capops * 2 : 32;
-        rpt_op *no = realloc(p->ops, nc * sizeof(rpt_op));
+        rpt_op* no = realloc(p->ops, nc * sizeof(rpt_op));
         if (!no) {
             RX_FATAL("out of memory");
         }
         p->ops = no;
         p->capops = nc;
     }
-    rpt_op *o = &p->ops[p->nops++];
+    rpt_op* o = &p->ops[p->nops++];
     o->kind = kind;
     o->band = band;
     o->x = x;
@@ -68,15 +66,13 @@ void rpt_page_op_band(rpt_page *p, int kind, int band, int x, int y, int x2, int
     o->text = text ? rx_strdup(text) : NULL;
 }
 
-void rpt_page_op(rpt_page *p, int kind, int x, int y, int x2, int y2, const char *text)
-{
+void rpt_page_op(rpt_page* p, int kind, int x, int y, int x2, int y2, const char* text) {
     rpt_page_op_band(p, kind, 0, x, y, x2, y2, text);
 }
 
 /* ---------------- clause helpers ---------------- */
 
-const char *rpt_clause_word(rx_stmt *s, const char *key)
-{
+const char* rpt_clause_word(rx_stmt* s, const char* key) {
     for (size_t i = 0; i < s->nclause; i++) {
         if (strcmp(s->clauses[i].key, key) == 0) {
             return s->clauses[i].word;
@@ -85,8 +81,7 @@ const char *rpt_clause_word(rx_stmt *s, const char *key)
     return NULL;
 }
 
-rx_clause *rpt_clause_e(rx_stmt *s, const char *key)
-{
+rx_clause* rpt_clause_e(rx_stmt* s, const char* key) {
     for (size_t i = 0; i < s->nclause; i++) {
         if (strcmp(s->clauses[i].key, key) == 0) {
             return &s->clauses[i];
@@ -95,48 +90,46 @@ rx_clause *rpt_clause_e(rx_stmt *s, const char *key)
     return NULL;
 }
 
-int rpt_has(rx_stmt *s, const char *key)
-{
+int rpt_has(rx_stmt* s, const char* key) {
     return rpt_clause_word(s, key) != NULL || rpt_clause_e(s, key) != NULL;
 }
 
 /* ---------------- engine state ---------------- */
 
 typedef struct {
-    rx_ctx *ctx;
-    const rpt_file *rf;
-    rpt_doc *doc;
-    rpt_page *page;
-    int cur_y;      /* next free row on the page (0-based, includes margins) */
+    rx_ctx* ctx;
+    const rpt_file* rf;
+    rpt_doc* doc;
+    rpt_page* page;
+    int cur_y; /* next free row on the page (0-based, includes margins) */
     int page_no;
     int plain;
-    char *heading;  /* HEADING text */
+    char* heading; /* HEADING text */
     int summary_only;
     uint32_t range_lo, range_hi; /* 0 = unset */
     /* group state */
     const rpt_band *gh, *gf;
-    const char *group_expr; /* raw text */
-    rx_expr *group_e;
-    rval group_key;   /* current group key value */
+    const char* group_expr; /* raw text */
+    rx_expr* group_e;
+    rval group_key; /* current group key value */
     int have_group;
     int per_record_page; /* labels: each record gets its own page */
     /* variables */
-    rpt_var *vars;
+    rpt_var* vars;
     size_t nvars;
-    double *v_sum;
-    double *v_cnt;
+    double* v_sum;
+    double* v_cnt;
     rval *v_min, *v_max;
-    int *v_set;
+    int* v_set;
 } rpt_eng;
 
-static int render_band(rpt_eng *e, const rpt_band *b, int y);
-static void var_reset(rpt_eng *e, int level);
+static int render_band(rpt_eng* e, const rpt_band* b, int y);
+static void var_reset(rpt_eng* e, int level);
 
-static void eng_new_page(rpt_eng *e)
-{
+static void eng_new_page(rpt_eng* e) {
     /* page footer of the old page */
     if (e->page && e->rf->is_label == 0) {
-        const rpt_band *pf = rptf_band(e->rf, RB_PAGEFOOTER);
+        const rpt_band* pf = rptf_band(e->rf, RB_PAGEFOOTER);
         if (pf && !e->plain) {
             /* footer renders at the bottom of the page */
             int fy = e->rf->page_h - e->rf->margin_b - pf->height;
@@ -152,7 +145,7 @@ static void eng_new_page(rpt_eng *e)
     e->cur_y = e->rf->margin_t;
     if (!e->rf->is_label && e->page_no == 1) {
         /* Title band comes first on page 1 */
-        const rpt_band *tb = rptf_band(e->rf, RB_TITLE);
+        const rpt_band* tb = rptf_band(e->rf, RB_TITLE);
         if (tb) {
             e->cur_y = render_band(e, tb, e->cur_y);
         }
@@ -181,7 +174,7 @@ static void eng_new_page(rpt_eng *e)
             rpt_page_op(e->page, RPO_TEXT, e->rf->margin_l, e->cur_y, 0, 0, e->heading);
             e->cur_y++;
         }
-        const rpt_band *ph = rptf_band(e->rf, RB_PAGEHEADER);
+        const rpt_band* ph = rptf_band(e->rf, RB_PAGEHEADER);
         if (ph) {
             e->cur_y = render_band(e, ph, e->cur_y);
         }
@@ -191,8 +184,7 @@ static void eng_new_page(rpt_eng *e)
 /* render a band's objects at y, return next free row */
 static int g_cur_band; /* band being rendered (for op tagging) */
 
-static void render_obj(rpt_eng *e, const rpt_obj *o, int y)
-{
+static void render_obj(rpt_eng* e, const rpt_obj* o, int y) {
     int x = e->rf->margin_l + o->col;
     int yy = y + o->row;
     switch (o->type) {
@@ -213,16 +205,17 @@ static void render_obj(rpt_eng *e, const rpt_obj *o, int y)
         break;
     }
     case RO_LINE:
-        rpt_page_op_band(e->page, RPO_LINE, g_cur_band, x, yy, e->rf->margin_l + o->col2, y + o->row2, NULL);
+        rpt_page_op_band(e->page, RPO_LINE, g_cur_band, x, yy, e->rf->margin_l + o->col2,
+                         y + o->row2, NULL);
         break;
     case RO_BOX:
-        rpt_page_op_band(e->page, RPO_BOX, g_cur_band, x, yy, e->rf->margin_l + o->col2, y + o->row2, NULL);
+        rpt_page_op_band(e->page, RPO_BOX, g_cur_band, x, yy, e->rf->margin_l + o->col2,
+                         y + o->row2, NULL);
         break;
     }
 }
 
-static int render_band(rpt_eng *e, const rpt_band *b, int y)
-{
+static int render_band(rpt_eng* e, const rpt_band* b, int y) {
     int saved = g_cur_band;
     g_cur_band = b->type;
     for (size_t i = 0; i < b->nobjs; i++) {
@@ -232,8 +225,7 @@ static int render_band(rpt_eng *e, const rpt_band *b, int y)
     return y + b->height;
 }
 
-static void eng_ensure(rpt_eng *e, int h)
-{
+static void eng_ensure(rpt_eng* e, int h) {
     if (e->rf->is_label) {
         return; /* labels: no page breaks */
     }
@@ -248,8 +240,7 @@ static void eng_ensure(rpt_eng *e, int h)
 }
 
 /* value compare: numeric when both numeric, else display-string compare */
-static int rpt_rval_cmp(rx_ctx *ctx, const rval *a, const rval *b)
-{
+static int rpt_rval_cmp(rx_ctx* ctx, const rval* a, const rval* b) {
     double da, db;
     if (rv_to_num(a, &da) && rv_to_num(b, &db)) {
         return da < db ? -1 : da > db ? 1 : 0;
@@ -267,10 +258,9 @@ static int rpt_rval_cmp(rx_ctx *ctx, const rval *a, const rval *b)
 
 /* ---------------- variables ---------------- */
 
-static void var_reset(rpt_eng *e, int level)
-{
+static void var_reset(rpt_eng* e, int level) {
     for (size_t i = 0; i < e->nvars; i++) {
-        rpt_var *v = &e->vars[i];
+        rpt_var* v = &e->vars[i];
         /* level 1 = report start resets everything; otherwise only vars whose
            reset point is exactly this level (2=PAGE, 3=GROUP) */
         if (level != 1 && v->reset != level) {
@@ -321,11 +311,10 @@ static void var_reset(rpt_eng *e, int level)
     }
 }
 
-static void var_accum(rpt_eng *e, uint32_t recno)
-{
+static void var_accum(rpt_eng* e, uint32_t recno) {
     (void)recno;
     for (size_t i = 0; i < e->nvars; i++) {
-        rpt_var *v = &e->vars[i];
+        rpt_var* v = &e->vars[i];
         if (v->agg == RV_NONE) {
             continue;
         }
@@ -377,10 +366,9 @@ static void var_accum(rpt_eng *e, uint32_t recno)
 }
 
 /* publish current aggregate values as memvars (call before rendering a band) */
-static void var_publish(rpt_eng *e)
-{
+static void var_publish(rpt_eng* e) {
     for (size_t i = 0; i < e->nvars; i++) {
-        rpt_var *v = &e->vars[i];
+        rpt_var* v = &e->vars[i];
         rval mv;
         rx_rval_undef(&mv);
         switch (v->agg) {
@@ -422,17 +410,16 @@ static void var_publish(rpt_eng *e)
 /* ---------------- iterate callback ---------------- */
 
 typedef struct {
-    rpt_eng *e;
-    const rpt_band *detail;
+    rpt_eng* e;
+    const rpt_band* detail;
     int rc;
 } rpt_iter_ud;
 
-static int rpt_rec_cb(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud)
-{
+static int rpt_rec_cb(rx_ctx* ctx, rx_dbf* dbf, uint32_t recno, void* ud) {
     (void)ctx;
     (void)dbf;
-    rpt_iter_ud *u = ud;
-    rpt_eng *e = u->e;
+    rpt_iter_ud* u = ud;
+    rpt_eng* e = u->e;
     if (e->range_lo && (recno < e->range_lo || (e->range_hi && recno > e->range_hi))) {
         return R_OK; /* RANGE n1,n2 */
     }
@@ -480,8 +467,7 @@ static int rpt_rec_cb(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud)
 
 /* ---------------- main build ---------------- */
 
-int rx_rpt_build(rx_ctx *ctx, const char *name, rx_stmt *s, int is_label, rpt_doc *doc)
-{
+int rx_rpt_build(rx_ctx* ctx, const char* name, rx_stmt* s, int is_label, rpt_doc* doc) {
     char path[600];
     rx_resolve_res(ctx, name, is_label ? "rlb" : "frm", path, sizeof(path));
     rpt_file rf;
@@ -501,7 +487,7 @@ int rx_rpt_build(rx_ctx *ctx, const char *name, rx_stmt *s, int is_label, rpt_do
     e.doc = doc;
     e.plain = rpt_has(s, "PLAIN");
     e.summary_only = rpt_has(s, "SUMMARY");
-    rx_clause *hc = rpt_clause_e(s, "HEADING");
+    rx_clause* hc = rpt_clause_e(s, "HEADING");
     if (hc) {
         rval v;
         rx_rval_undef(&v);
@@ -514,7 +500,7 @@ int rx_rpt_build(rx_ctx *ctx, const char *name, rx_stmt *s, int is_label, rpt_do
         }
         rx_rval_free(&v);
     }
-    rx_clause *r1 = rpt_clause_e(s, "RANGE");
+    rx_clause* r1 = rpt_clause_e(s, "RANGE");
     if (r1) {
         rval v;
         rx_rval_undef(&v);
@@ -524,7 +510,7 @@ int rx_rpt_build(rx_ctx *ctx, const char *name, rx_stmt *s, int is_label, rpt_do
             e.range_lo = (uint32_t)d;
         }
         rx_rval_free(&v);
-        rx_clause *r2 = rpt_clause_e(s, "RANGE2");
+        rx_clause* r2 = rpt_clause_e(s, "RANGE2");
         if (r2) {
             rval v2;
             rx_rval_undef(&v2);
@@ -542,7 +528,7 @@ int rx_rpt_build(rx_ctx *ctx, const char *name, rx_stmt *s, int is_label, rpt_do
         e.group_expr = e.gh->group;
         e.group_e = NULL;
         if (e.group_expr[0]) {
-            rx_expr *ex = NULL;
+            rx_expr* ex = NULL;
             if (rx_parse_expr_str(e.group_expr, &ex, &ctx->err) == R_OK) {
                 rx_code code;
                 memset(&code, 0, sizeof(code));
@@ -574,16 +560,16 @@ int rx_rpt_build(rx_ctx *ctx, const char *name, rx_stmt *s, int is_label, rpt_do
         doc->w = rf.lab_w;
         doc->h = rf.lab_h;
         e.per_record_page = 1;
-        rpt_page *pg = rpt_doc_page(doc);
+        rpt_page* pg = rpt_doc_page(doc);
         e.page = pg;
         e.cur_y = 0;
-        const rpt_band *det = rptf_band(&rf, RB_DETAIL);
+        const rpt_band* det = rptf_band(&rf, RB_DETAIL);
         if (!det) {
             det = rptf_band(&rf, RB_TITLE); /* labels often use one band */
         }
         if (det) {
-            rpt_iter_ud ud = { &e, det, R_OK };
-            rx_dbf *dbf;
+            rpt_iter_ud ud = {&e, det, R_OK};
+            rx_dbf* dbf;
             if (rx_wa_dbf(0, &dbf) == R_OK) {
                 rc = rx_iterate(ctx, s, dbf, 1, rpt_rec_cb, &ud, NULL);
             } else {
@@ -605,10 +591,10 @@ int rx_rpt_build(rx_ctx *ctx, const char *name, rx_stmt *s, int is_label, rpt_do
     /* report: page 1 opens (title band renders inside eng_new_page) */
     eng_new_page(&e);
     var_reset(&e, 1); /* REPORT-level vars (all) */
-    const rpt_band *det = rptf_band(&rf, RB_DETAIL);
+    const rpt_band* det = rptf_band(&rf, RB_DETAIL);
     if (det) {
-        rpt_iter_ud ud = { &e, det, R_OK };
-        rx_dbf *dbf;
+        rpt_iter_ud ud = {&e, det, R_OK};
+        rx_dbf* dbf;
         if (rx_wa_dbf(0, &dbf) == R_OK) {
             rc = rx_iterate(ctx, s, dbf, 1, rpt_rec_cb, &ud, NULL);
         } else {
@@ -622,12 +608,12 @@ int rx_rpt_build(rx_ctx *ctx, const char *name, rx_stmt *s, int is_label, rpt_do
         e.cur_y = render_band(&e, e.gf, e.cur_y);
     }
     var_publish(&e);
-    const rpt_band *sf = rptf_band(&rf, RB_SUMMARY);
+    const rpt_band* sf = rptf_band(&rf, RB_SUMMARY);
     if (sf) {
         eng_ensure(&e, sf->height);
         e.cur_y = render_band(&e, sf, e.cur_y);
     }
-    const rpt_band *pf = rptf_band(&rf, RB_PAGEFOOTER);
+    const rpt_band* pf = rptf_band(&rf, RB_PAGEFOOTER);
     if (pf && !e.plain) {
         eng_ensure(&e, pf->height);
         e.cur_y = render_band(&e, pf, e.cur_y);

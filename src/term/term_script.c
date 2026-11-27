@@ -31,8 +31,8 @@
 #include "util/util.h"
 
 typedef struct script_state {
-    FILE *ev;
-    rcell *cells;
+    FILE* ev;
+    rcell* cells;
     size_t w, h;
     unsigned long n_blits;
     char pending[1024]; /**< remaining chars of a partially consumed text event */
@@ -42,12 +42,11 @@ typedef struct script_state {
 
 static script_state g_state;
 
-static int emit_pending(revent *out)
-{
+static int emit_pending(revent* out) {
     if (g_state.pending_pos >= strlen(g_state.pending)) {
         return 0;
     }
-    const char *arg = g_state.pending + g_state.pending_pos;
+    const char* arg = g_state.pending + g_state.pending_pos;
     uint32_t cp;
     size_t used = utf8_decode(arg, strlen(arg), &cp);
     g_state.pending_pos += used;
@@ -58,9 +57,8 @@ static int emit_pending(revent *out)
     return 1;
 }
 
-static int sc_init(void)
-{
-    const char *path = getenv("RX_EVENTS");
+static int sc_init(void) {
+    const char* path = getenv("RX_EVENTS");
     if (!path || !*path) {
         return R_ERR_IO_NOTFOUND;
     }
@@ -69,12 +67,12 @@ static int sc_init(void)
     if (!g_state.ev) {
         return R_ERR_IO_OPEN;
     }
-    const char *dump = getenv("RX_DUMP");
+    const char* dump = getenv("RX_DUMP");
     if (dump) {
         snprintf(g_state.dump_path, sizeof(g_state.dump_path), "%s", dump);
     }
-    const char *cols = getenv("RX_COLS");
-    const char *rows = getenv("RX_ROWS");
+    const char* cols = getenv("RX_COLS");
+    const char* rows = getenv("RX_ROWS");
     g_state.w = cols && *cols ? (size_t)strtoul(cols, NULL, 10) : 80;
     g_state.h = rows && *rows ? (size_t)strtoul(rows, NULL, 10) : 24;
     if (g_state.w == 0) {
@@ -86,12 +84,11 @@ static int sc_init(void)
     return R_OK;
 }
 
-static void write_dump(void)
-{
+static void write_dump(void) {
     if (!g_state.dump_path[0] || !g_state.cells) {
         return;
     }
-    FILE *f = fopen(g_state.dump_path, "w");
+    FILE* f = fopen(g_state.dump_path, "w");
     if (!f) {
         return;
     }
@@ -100,7 +97,7 @@ static void write_dump(void)
         sb_init(&row);
         for (size_t x = 0; x < g_state.w; x++) {
             sb_putcp(&row, g_state.cells[y * g_state.w + x].ch ? g_state.cells[y * g_state.w + x].ch
-                                                                : (uint32_t)' ');
+                                                               : (uint32_t)' ');
         }
         /* rstrip spaces */
         while (row.len && row.buf[row.len - 1] == ' ') {
@@ -113,8 +110,7 @@ static void write_dump(void)
     fclose(f);
 }
 
-static void sc_shutdown(void)
-{
+static void sc_shutdown(void) {
     write_dump();
     if (g_state.ev) {
         fclose(g_state.ev);
@@ -124,14 +120,13 @@ static void sc_shutdown(void)
     g_state.cells = NULL;
 }
 
-static int sc_blit(rcell *cells, size_t w, size_t h, struct rrect *damage, size_t n_dmg)
-{
+static int sc_blit(rcell* cells, size_t w, size_t h, struct rrect* damage, size_t n_dmg) {
     (void)damage;
     (void)n_dmg;
     if (w == 0 || h == 0) {
         return R_ERR_RANGE;
     }
-    rcell *nc = realloc(g_state.cells, w * h * sizeof(rcell));
+    rcell* nc = realloc(g_state.cells, w * h * sizeof(rcell));
     if (!nc) {
         RX_FATAL("out of memory");
     }
@@ -145,10 +140,9 @@ static int sc_blit(rcell *cells, size_t w, size_t h, struct rrect *damage, size_
 
 /* attr nibbles are FoxPro/CGA palette indices; this maps them to curses
    color numbers (same table as term_ncurses.c) */
-static const uint8_t foxpro16[16] = { 0, 4, 2, 6, 1, 5, 3, 7, 8, 12, 10, 14, 9, 13, 11, 15 };
+static const uint8_t foxpro16[16] = {0, 4, 2, 6, 1, 5, 3, 7, 8, 12, 10, 14, 9, 13, 11, 15};
 
-static int sc_palette(void (*set_pair)(int idx, uint8_t fg, uint8_t bg))
-{
+static int sc_palette(void (*set_pair)(int idx, uint8_t fg, uint8_t bg)) {
     /* attr = fg | bg<<4, so slot i is (fg = i%16, bg = i/16): 16x16 = 256 */
     for (int i = 0; i < 256; i++) {
         set_pair(i, foxpro16[i % 16], foxpro16[(i / 16) % 16]);
@@ -156,11 +150,10 @@ static int sc_palette(void (*set_pair)(int idx, uint8_t fg, uint8_t bg))
     return R_OK;
 }
 
-static int key_from_token(const char *tok, rkey *k)
-{
+static int key_from_token(const char* tok, rkey* k) {
     memset(k, 0, sizeof(*k));
     uint8_t mods = 0;
-    const char *p = tok;
+    const char* p = tok;
     for (;;) {
         if (strncmp(p, "ctrl-", 5) == 0) {
             mods |= RXK_MOD_CTRL;
@@ -176,17 +169,16 @@ static int key_from_token(const char *tok, rkey *k)
         }
     }
     struct {
-        const char *name;
+        const char* name;
         int sym;
     } names[] = {
-        { "enter", RXK_ENTER }, { "esc", RXK_ESC }, { "tab", RXK_TAB },
-        { "backtab", RXK_BACKTAB }, { "bs", RXK_BS }, { "up", RXK_UP },
-        { "down", RXK_DOWN }, { "left", RXK_LEFT }, { "right", RXK_RIGHT },
-        { "home", RXK_HOME }, { "end", RXK_END }, { "pgup", RXK_PGUP },
-        { "pgdn", RXK_PGDN }, { "ins", RXK_INS }, { "del", RXK_DEL },
-        { "f1", RXK_F1 }, { "f2", RXK_F2 }, { "f3", RXK_F3 }, { "f4", RXK_F4 },
-        { "f5", RXK_F5 }, { "f6", RXK_F6 }, { "f7", RXK_F7 }, { "f8", RXK_F8 },
-        { "f9", RXK_F9 }, { "f10", RXK_F10 }, { "f11", RXK_F11 }, { "f12", RXK_F12 },
+        {"enter", RXK_ENTER}, {"esc", RXK_ESC},   {"tab", RXK_TAB},   {"backtab", RXK_BACKTAB},
+        {"bs", RXK_BS},       {"up", RXK_UP},     {"down", RXK_DOWN}, {"left", RXK_LEFT},
+        {"right", RXK_RIGHT}, {"home", RXK_HOME}, {"end", RXK_END},   {"pgup", RXK_PGUP},
+        {"pgdn", RXK_PGDN},   {"ins", RXK_INS},   {"del", RXK_DEL},   {"f1", RXK_F1},
+        {"f2", RXK_F2},       {"f3", RXK_F3},     {"f4", RXK_F4},     {"f5", RXK_F5},
+        {"f6", RXK_F6},       {"f7", RXK_F7},     {"f8", RXK_F8},     {"f9", RXK_F9},
+        {"f10", RXK_F10},     {"f11", RXK_F11},   {"f12", RXK_F12},
     };
     if (strncmp(p, "cp", 2) == 0 && p[2] == ' ') {
         k->cp = (uint32_t)strtoul(p + 3, NULL, 16);
@@ -217,11 +209,10 @@ static int key_from_token(const char *tok, rkey *k)
     return 0;
 }
 
-static int next_event(revent *out)
-{
+static int next_event(revent* out) {
     char line[1024];
     while (fgets(line, sizeof(line), g_state.ev)) {
-        char *s = line;
+        char* s = line;
         while (*s == ' ' || *s == '\t') {
             s++;
         }
@@ -232,8 +223,8 @@ static int next_event(revent *out)
         if (n == 0 || s[0] == '#') {
             continue;
         }
-        char *sp = strchr(s, ' ');
-        char *arg = NULL;
+        char* sp = strchr(s, ' ');
+        char* arg = NULL;
         if (sp) {
             *sp = '\0';
             arg = sp + 1;
@@ -257,7 +248,7 @@ static int next_event(revent *out)
             continue;
         }
         if (strcmp(s, "mouse") == 0 && arg) {
-            char kind[16] = { 0 };
+            char kind[16] = {0};
             int x = 0, y = 0, btn = 1, dc = 0;
             if (sscanf(arg, "%15s %d %d %d %d", kind, &x, &y, &btn, &dc) < 4) {
                 return R_ERR_SYNTAX;
@@ -309,8 +300,7 @@ static int next_event(revent *out)
     return R_OK;
 }
 
-static int sc_poll(revent *out, uint32_t timeout_ms)
-{
+static int sc_poll(revent* out, uint32_t timeout_ms) {
     (void)timeout_ms;
     if (!g_state.ev) {
         out->kind = EV_ERR;
@@ -322,21 +312,17 @@ static int sc_poll(revent *out, uint32_t timeout_ms)
     return next_event(out);
 }
 
-static void sc_bell(void)
-{
+static void sc_bell(void) {
     rx_log(RX_LOG_DEBUG, "bell");
 }
 
-static void sc_cbreak_on(void)
-{
+static void sc_cbreak_on(void) {
 }
 
-static void sc_cbreak_off(void)
-{
+static void sc_cbreak_off(void) {
 }
 
-static void sc_size(int *w, int *h)
-{
+static void sc_size(int* w, int* h) {
     *w = g_state.w ? (int)g_state.w : 80;
     *h = g_state.h ? (int)g_state.h : 24;
 }
@@ -354,12 +340,10 @@ static const term_backend script_backend = {
     .name = "script",
 };
 
-const term_backend *rx_term_script(void)
-{
+const term_backend* rx_term_script(void) {
     return &script_backend;
 }
 
-unsigned long rx_term_script_blit_count(void)
-{
+unsigned long rx_term_script_blit_count(void) {
     return g_state.n_blits;
 }

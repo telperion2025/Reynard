@@ -22,8 +22,7 @@
 
 #define DBT_BLK 512
 
-int rx_memo_dbt_read(rx_dbf *dbf, uint32_t blk, r_str **out)
-{
+int rx_memo_dbt_read(rx_dbf* dbf, uint32_t blk, r_str** out) {
     off_t off = (off_t)blk * DBT_BLK;
     strbuf sb;
     sb_init(&sb);
@@ -54,22 +53,22 @@ int rx_memo_dbt_read(rx_dbf *dbf, uint32_t blk, r_str **out)
             sb.buf[sb.len] = '\0';
         }
     }
-    r_str *s = calloc(1, sizeof(r_str));
+    r_str* s = calloc(1, sizeof(r_str));
     if (!s) {
         sb_free(&sb);
         RX_FATAL("out of memory");
     }
     int rc = R_OK;
     if (dbf->codepage > 0) {
-        char *u8 = NULL;
+        char* u8 = NULL;
         size_t un = 0;
-        rc = cp_to_utf8(dbf->codepage, (const uint8_t *)(sb.buf ? sb.buf : ""), sb.len, &u8, &un);
+        rc = cp_to_utf8(dbf->codepage, (const uint8_t*)(sb.buf ? sb.buf : ""), sb.len, &u8, &un);
         if (rc == R_OK) {
             s->utf8 = u8;
             s->n = un;
         }
     } else {
-        char *u8 = malloc(sb.len + 1);
+        char* u8 = malloc(sb.len + 1);
         if (!u8) {
             sb_free(&sb);
             free(s);
@@ -91,11 +90,10 @@ int rx_memo_dbt_read(rx_dbf *dbf, uint32_t blk, r_str **out)
     return R_OK;
 }
 
-int rx_memo_dbt_write(rx_dbf *dbf, const char *data, size_t n, uint32_t old_blk,
-                      uint32_t *blk_out)
-{
+int rx_memo_dbt_write(rx_dbf* dbf, const char* data, size_t n, uint32_t old_blk,
+                      uint32_t* blk_out) {
     (void)old_blk; /* DBT writer is append-per-write: old block is abandoned */
-    uint8_t *cp = NULL;
+    uint8_t* cp = NULL;
     size_t cn = 0;
     int rc = R_OK;
     if (dbf->codepage > 0) {
@@ -132,7 +130,7 @@ int rx_memo_dbt_write(rx_dbf *dbf, const char *data, size_t n, uint32_t old_blk,
     uint32_t blk = (uint32_t)(blk_off / DBT_BLK);
     size_t total = cn + 1; /* data + 0x1A */
     size_t padded = (total + DBT_BLK - 1) / DBT_BLK * DBT_BLK;
-    uint8_t *block = calloc(1, padded ? padded : DBT_BLK);
+    uint8_t* block = calloc(1, padded ? padded : DBT_BLK);
     if (!block) {
         free(cp);
         RX_FATAL("out of memory");
@@ -146,7 +144,8 @@ int rx_memo_dbt_write(rx_dbf *dbf, const char *data, size_t n, uint32_t old_blk,
     }
     free(block);
     uint32_t next = blk + (uint32_t)(padded / DBT_BLK);
-    uint8_t nh[4] = { (uint8_t)next, (uint8_t)(next >> 8), (uint8_t)(next >> 16), (uint8_t)(next >> 24) };
+    uint8_t nh[4] = {(uint8_t)next, (uint8_t)(next >> 8), (uint8_t)(next >> 16),
+                     (uint8_t)(next >> 24)};
     if (pwrite(dbf->memo_fd, nh, 4, 0) != 4) {
         return R_ERR_IO_WRITE;
     }

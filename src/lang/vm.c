@@ -15,17 +15,16 @@
 #include <strings.h>
 #include <unistd.h>
 
-#include "lang/lang.h"
 #include "lang/funcs.h"
+#include "lang/lang.h"
 #include "reynard/dbf.h"
 #include "util/util.h"
 
 #define VM_STACK 128
 
-void rx_frame_free(rx_ctx *ctx, rx_frame *f);
+void rx_frame_free(rx_ctx* ctx, rx_frame* f);
 
-void rx_ctx_init(rx_ctx *ctx, FILE *out, int test_mode)
-{
+void rx_ctx_init(rx_ctx* ctx, FILE* out, int test_mode) {
     memset(ctx, 0, sizeof(*ctx));
     ctx->out = out;
     ctx->test_mode = test_mode;
@@ -46,16 +45,15 @@ void rx_ctx_init(rx_ctx *ctx, FILE *out, int test_mode)
     ctx->set.exclusive = 1; /* FoxPro default: SET EXCLUSIVE ON */
     ctx->set.reprocess = 0;
     ctx->set.multilocks = 0;
-    ctx->set.unique = 0;    /* SET UNIQUE OFF (M6) */
-    ctx->help_area = -1;    /* M9 9.7: no help DBF open */
+    ctx->set.unique = 0; /* SET UNIQUE OFF (M6) */
+    ctx->help_area = -1; /* M9 9.7: no help DBF open */
     char cwd[260];
     if (getcwd(cwd, sizeof(cwd))) {
         snprintf(ctx->set.defdir, sizeof(ctx->set.defdir), "%s", cwd);
     }
 }
 
-void rx_ctx_free(rx_ctx *ctx)
-{
+void rx_ctx_free(rx_ctx* ctx) {
     if (ctx->filter_on || ctx->filter.ops) {
         rx_code_free(&ctx->filter);
     }
@@ -73,7 +71,7 @@ void rx_ctx_free(rx_ctx *ctx)
     free(ctx->idxexprs);
     free(ctx->filter_text);
     rx_form_free_ctx(ctx); /* M7: pending GETs */
-    rx_help_close(ctx);     /* M9 9.7: help DBF work area */
+    rx_help_close(ctx);    /* M9 9.7: help DBF work area */
     /* M9 9.5/9.6: menu model + packed .rpp sources */
     free(ctx->menus);
     for (size_t i = 0; i < ctx->npacked; i++) {
@@ -94,7 +92,7 @@ void rx_ctx_free(rx_ctx *ctx)
     ctx->nprocs = ctx->capprocs = 0;
     rx_rval_free(&ctx->retval);
     while (ctx->frame) {
-        rx_frame *up = ctx->frame->up;
+        rx_frame* up = ctx->frame->up;
         rx_frame_free(ctx, ctx->frame);
         free(ctx->frame);
         ctx->frame = up;
@@ -103,8 +101,7 @@ void rx_ctx_free(rx_ctx *ctx)
     rx_memvar_clear(ctx);
 }
 
-int rx_out(rx_ctx *ctx, const char *s, size_t n)
-{
+int rx_out(rx_ctx* ctx, const char* s, size_t n) {
     if (!ctx->set.console) {
         return R_OK;
     }
@@ -120,13 +117,11 @@ int rx_out(rx_ctx *ctx, const char *s, size_t n)
     return R_OK;
 }
 
-int rx_outs(rx_ctx *ctx, const char *s)
-{
+int rx_outs(rx_ctx* ctx, const char* s) {
     return rx_out(ctx, s, strlen(s));
 }
 
-int rx_outf(rx_ctx *ctx, const char *fmt, ...)
-{
+int rx_outf(rx_ctx* ctx, const char* fmt, ...) {
     char buf[2048];
     va_list ap;
     va_start(ap, fmt);
@@ -142,9 +137,8 @@ int rx_outf(rx_ctx *ctx, const char *fmt, ...)
 }
 
 /* run one source buffer; returns exit-code contribution (0 or error code) */
-int rx_run_source(rx_ctx *ctx, const char *src, const char *name)
-{
-    rx_tok *toks;
+int rx_run_source(rx_ctx* ctx, const char* src, const char* name) {
+    rx_tok* toks;
     size_t ntok;
     r_err err;
     memset(&err, 0, sizeof(err));
@@ -156,7 +150,7 @@ int rx_run_source(rx_ctx *ctx, const char *src, const char *name)
         rx_raise(ctx, err.code, err.line, err.col, "%s", err.msg);
         return err.code;
     }
-    rx_stmt *stmts;
+    rx_stmt* stmts;
     size_t nstmt;
     if (rx_parse_src(toks, ntok, src, &stmts, &nstmt, &err) != R_OK) {
         rx_raise(ctx, err.code, err.line, err.col, "%s", err.msg);
@@ -182,13 +176,12 @@ int rx_run_source(rx_ctx *ctx, const char *src, const char *name)
     return R_OK;
 }
 
-int rx_eval_str(rx_ctx *ctx, const char *src, rval *out, r_err *err)
-{
-    rx_tok *toks;
+int rx_eval_str(rx_ctx* ctx, const char* src, rval* out, r_err* err) {
+    rx_tok* toks;
     size_t ntok;
     memset(err, 0, sizeof(*err));
     /* M5: macro expansion also applies to typed expressions (&var) */
-    char *expanded = rx_macro_expand(ctx, src, err);
+    char* expanded = rx_macro_expand(ctx, src, err);
     if (!expanded) {
         return err->code;
     }
@@ -196,7 +189,7 @@ int rx_eval_str(rx_ctx *ctx, const char *src, rval *out, r_err *err)
         free(expanded);
         return err->code;
     }
-    rx_stmt *stmts;
+    rx_stmt* stmts;
     size_t nstmt;
     if (rx_parse_src(toks, ntok, expanded, &stmts, &nstmt, err) != R_OK) {
         rx_lex_free(toks, ntok);
@@ -222,35 +215,33 @@ int rx_eval_str(rx_ctx *ctx, const char *src, rval *out, r_err *err)
 /* ============================ function registry ============================ */
 
 typedef struct {
-    const rx_funcdef *defs;
+    const rx_funcdef* defs;
     size_t n;
 } fgroup;
 
 static fgroup groups[6];
 static int groups_ready = 0;
 
-static void groups_init(void)
-{
+static void groups_init(void) {
     if (groups_ready) {
         return;
     }
-    groups[0] = (fgroup){ rx_funcs_str, rx_funcs_str_n };
-    groups[1] = (fgroup){ rx_funcs_num, rx_funcs_num_n };
-    groups[2] = (fgroup){ rx_funcs_date, rx_funcs_date_n };
-    groups[3] = (fgroup){ rx_funcs_db, rx_funcs_db_n };
-    groups[4] = (fgroup){ rx_funcs_sys, rx_funcs_sys_n };
-    groups[5] = (fgroup){ rx_funcs_array, rx_funcs_array_n };
+    groups[0] = (fgroup){rx_funcs_str, rx_funcs_str_n};
+    groups[1] = (fgroup){rx_funcs_num, rx_funcs_num_n};
+    groups[2] = (fgroup){rx_funcs_date, rx_funcs_date_n};
+    groups[3] = (fgroup){rx_funcs_db, rx_funcs_db_n};
+    groups[4] = (fgroup){rx_funcs_sys, rx_funcs_sys_n};
+    groups[5] = (fgroup){rx_funcs_array, rx_funcs_array_n};
     groups_ready = 1;
 }
 
-int rx_func_id(const char *name, r_err *err)
-{
+int rx_func_id(const char* name, r_err* err) {
     groups_init();
     size_t wl = strlen(name);
     int found = -1;
     for (size_t g = 0; g < sizeof(groups) / sizeof(groups[0]); g++) {
         for (size_t i = 0; i < groups[g].n; i++) {
-            const char *kw = groups[g].defs[i].name;
+            const char* kw = groups[g].defs[i].name;
             int m = (wl >= 4 && strncasecmp(name, kw, wl) == 0 && strlen(kw) >= wl) ||
                     rx_strcasecmp(name, kw) == 0;
             if (m) {
@@ -271,8 +262,7 @@ int rx_func_id(const char *name, r_err *err)
     return found;
 }
 
-int rx_func_call(rx_ctx *ctx, int fid, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+int rx_func_call(rx_ctx* ctx, int fid, size_t argc, const rval* argv, rval* out, r_err* err) {
     groups_init();
     size_t g = (size_t)fid / 100000;
     size_t i = (size_t)fid % 100000;
@@ -290,20 +280,17 @@ int rx_func_call(rx_ctx *ctx, int fid, size_t argc, const rval *argv, rval *out,
 
 /* ============================ value helpers ============================ */
 
-static int is_numlike(const rval *v)
-{
+static int is_numlike(const rval* v) {
     return v->t == RX_T_N || v->t == RX_T_I || v->t == RX_T_Y || v->t == RX_T_B;
 }
 
-static double as_num(const rval *v)
-{
+static double as_num(const rval* v) {
     double d = 0;
     rv_to_num(v, &d);
     return d;
 }
 
-static int rval_to_display(rx_ctx *ctx, const rval *v, strbuf *sb)
-{
+static int rval_to_display(rx_ctx* ctx, const rval* v, strbuf* sb) {
     char tmp[400];
     switch (v->t) {
     case RX_T_C:
@@ -320,7 +307,8 @@ static int rval_to_display(rx_ctx *ctx, const rval *v, strbuf *sb)
     case RX_T_Y: {
         snprintf(tmp, sizeof(tmp), "%lld", (long long)(v->u.y / 10000));
         sb_puts(sb, tmp);
-        snprintf(tmp, sizeof(tmp), ".%04lld", (long long)(v->u.y % 10000 < 0 ? -(v->u.y % 10000) : v->u.y % 10000));
+        snprintf(tmp, sizeof(tmp), ".%04lld",
+                 (long long)(v->u.y % 10000 < 0 ? -(v->u.y % 10000) : v->u.y % 10000));
         sb_puts(sb, tmp);
         break;
     }
@@ -369,8 +357,7 @@ static int rval_to_display(rx_ctx *ctx, const rval *v, strbuf *sb)
 }
 
 /* string comparison per SET EXACT (spec §7.6) */
-static int str_eq(rx_ctx *ctx, const r_str *a, const r_str *b, int exact)
-{
+static int str_eq(rx_ctx* ctx, const r_str* a, const r_str* b, int exact) {
     (void)ctx;
     if (exact) {
         return rstr_cmp(a, b) == 0;
@@ -386,8 +373,7 @@ static int str_eq(rx_ctx *ctx, const r_str *a, const r_str *b, int exact)
     return 1;
 }
 
-static int str_rel(const r_str *a, const r_str *b)
-{
+static int str_rel(const r_str* a, const r_str* b) {
     size_t n = a->n < b->n ? a->n : b->n;
     int c = memcmp(a->utf8, b->utf8, n);
     if (c != 0) {
@@ -404,8 +390,7 @@ static int str_rel(const r_str *a, const r_str *b)
 
 /* ============================ the VM ============================ */
 
-static int vm_fail(rx_ctx *ctx, r_err *err, int code, int line, int col, const char *msg)
-{
+static int vm_fail(rx_ctx* ctx, r_err* err, int code, int line, int col, const char* msg) {
     err->code = code;
     err->line = line;
     err->col = col;
@@ -414,9 +399,8 @@ static int vm_fail(rx_ctx *ctx, r_err *err, int code, int line, int col, const c
     return code;
 }
 
-static int load_var(rx_ctx *ctx, const char *name, rval *out, r_err *err, int line, int col)
-{
-    rx_memvar *mv = rx_memvar_find(ctx, name);
+static int load_var(rx_ctx* ctx, const char* name, rval* out, r_err* err, int line, int col) {
+    rx_memvar* mv = rx_memvar_find(ctx, name);
     if (mv && mv->is_array) {
         /* bare array name in an expression: FoxPro yields element 1 (AELEMENT 1) */
         rx_rval_free(out);
@@ -429,13 +413,13 @@ static int load_var(rx_ctx *ctx, const char *name, rval *out, r_err *err, int li
             out->u.c.utf8 = rx_strdup(out->u.c.utf8);
             out->u.c.n = mv->aelem[0].u.c.n;
         } else if (out->t == RX_T_M && out->u.memo.loaded) {
-            r_str *c = malloc(sizeof(r_str));
+            r_str* c = malloc(sizeof(r_str));
             if (!c) {
                 RX_FATAL("out of memory");
             }
             c->n = mv->aelem[0].u.memo.loaded->n;
-            c->utf8 = rx_strdup(mv->aelem[0].u.memo.loaded->utf8 ? mv->aelem[0].u.memo.loaded->utf8
-                                                                : "");
+            c->utf8 =
+                rx_strdup(mv->aelem[0].u.memo.loaded->utf8 ? mv->aelem[0].u.memo.loaded->utf8 : "");
             out->u.memo.loaded = c;
         }
         return R_OK;
@@ -450,7 +434,7 @@ static int load_var(rx_ctx *ctx, const char *name, rval *out, r_err *err, int li
             out->u.memo.blk = mv->val.u.memo.blk;
             out->u.memo.loaded = NULL;
             if (mv->val.u.memo.loaded) {
-                r_str *c = malloc(sizeof(r_str));
+                r_str* c = malloc(sizeof(r_str));
                 if (!c) {
                     RX_FATAL("out of memory");
                 }
@@ -462,7 +446,7 @@ static int load_var(rx_ctx *ctx, const char *name, rval *out, r_err *err, int li
         return R_OK;
     }
     /* fall back to field of current work area */
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     if (rx_wa_dbf(0, &dbf) == R_OK) {
         size_t idx;
         if (rx_dbf_field_index(dbf, name, &idx) == R_OK) {
@@ -472,10 +456,9 @@ static int load_var(rx_ctx *ctx, const char *name, rval *out, r_err *err, int li
     return vm_fail(ctx, err, R_ERR_VAR, line, col, "Variable not found");
 }
 
-static int load_field(rx_ctx *ctx, const char *name, rval *out, r_err *err, int line, int col)
-{
+static int load_field(rx_ctx* ctx, const char* name, rval* out, r_err* err, int line, int col) {
     /* name is ALIAS->FIELD */
-    const char *arrow = strstr(name, "->");
+    const char* arrow = strstr(name, "->");
     if (!arrow) {
         return load_var(ctx, name, out, err, line, col);
     }
@@ -486,11 +469,11 @@ static int load_field(rx_ctx *ctx, const char *name, rval *out, r_err *err, int 
     }
     memcpy(alias, name, al);
     alias[al] = '\0';
-    const char *fld = arrow + 2;
+    const char* fld = arrow + 2;
     int area = -1;
     for (int i = 1; i <= 255; i++) {
         if (rx_wa_used(i)) {
-            const char *a;
+            const char* a;
             rx_wa_alias(i, &a);
             if (strcmp(a, alias) == 0) {
                 area = i;
@@ -501,7 +484,7 @@ static int load_field(rx_ctx *ctx, const char *name, rval *out, r_err *err, int 
     if (area < 0) {
         return vm_fail(ctx, err, R_ERR_FIELD, line, col, "Unknown alias");
     }
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     if (rx_wa_dbf(area, &dbf) != R_OK) {
         return vm_fail(ctx, err, R_ERR_DBF_NOTOPEN, line, col, "No table in use");
     }
@@ -512,16 +495,21 @@ static int load_field(rx_ctx *ctx, const char *name, rval *out, r_err *err, int 
     return rx_dbf_get(dbf, idx, out);
 }
 
-static int bin_arith(rx_ctx *ctx, rval *a, rval *b, int op, rval *out, r_err *err, int line,
-                     int col)
-{
+static int bin_arith(rx_ctx* ctx, rval* a, rval* b, int op, rval* out, r_err* err, int line,
+                     int col) {
     if (is_numlike(a) && is_numlike(b)) {
         double x = as_num(a), y = as_num(b);
         double r;
         switch (op) {
-        case OP_PLUS: r = x + y; break;
-        case OP_MINUS: r = x - y; break;
-        case OP_MUL: r = x * y; break;
+        case OP_PLUS:
+            r = x + y;
+            break;
+        case OP_MINUS:
+            r = x - y;
+            break;
+        case OP_MUL:
+            r = x * y;
+            break;
         case OP_DIV:
             if (y == 0) {
                 return vm_fail(ctx, err, R_ERR_DIVZERO, line, col, "Division by zero");
@@ -534,8 +522,12 @@ static int bin_arith(rx_ctx *ctx, rval *a, rval *b, int op, rval *out, r_err *er
             }
             r = fmod(x, y);
             break;
-        case OP_POW: r = pow(x, y); break;
-        default: r = 0; break;
+        case OP_POW:
+            r = pow(x, y);
+            break;
+        default:
+            r = 0;
+            break;
         }
         out->t = RX_T_N;
         out->u.n.d = r;
@@ -626,10 +618,8 @@ static int bin_arith(rx_ctx *ctx, rval *a, rval *b, int op, rval *out, r_err *er
     return vm_fail(ctx, err, R_ERR_TYPE, line, col, "Operator/operand type mismatch");
 }
 
-
 /* memo values behave as their loaded character text in string contexts */
-static const rval *as_str_view(const rval *v, rval *tmp)
-{
+static const rval* as_str_view(const rval* v, rval* tmp) {
     if (v->t == RX_T_M) {
         if (v->u.memo.loaded) {
             tmp->t = RX_T_C;
@@ -638,14 +628,14 @@ static const rval *as_str_view(const rval *v, rval *tmp)
         }
         tmp->t = RX_T_C;
         tmp->u.c.n = 0;
-        tmp->u.c.utf8 = (char *)"";
+        tmp->u.c.utf8 = (char*)"";
         return tmp;
     }
     return v;
 }
 
-static int bin_cmp(rx_ctx *ctx, rval *a, rval *b, int op, rval *out, r_err *err, int line, int col)
-{
+static int bin_cmp(rx_ctx* ctx, rval* a, rval* b, int op, rval* out, r_err* err, int line,
+                   int col) {
     int res = 0;
     int ok = 1;
     rval ta, tb;
@@ -653,17 +643,31 @@ static int bin_cmp(rx_ctx *ctx, rval *a, rval *b, int op, rval *out, r_err *err,
         double x = as_num(a), y = as_num(b);
         switch (op) {
         case OP_EQ:
-        case OP_EEQ: res = x == y; break;
-        case OP_NE: res = x != y; break;
-        case OP_LT: res = x < y; break;
-        case OP_LE: res = x <= y; break;
-        case OP_GT: res = x > y; break;
-        case OP_GE: res = x >= y; break;
-        default: ok = 0; break;
+        case OP_EEQ:
+            res = x == y;
+            break;
+        case OP_NE:
+            res = x != y;
+            break;
+        case OP_LT:
+            res = x < y;
+            break;
+        case OP_LE:
+            res = x <= y;
+            break;
+        case OP_GT:
+            res = x > y;
+            break;
+        case OP_GE:
+            res = x >= y;
+            break;
+        default:
+            ok = 0;
+            break;
         }
     } else if (as_str_view(a, &ta)->t == RX_T_C && as_str_view(b, &tb)->t == RX_T_C) {
-        a = (rval *)as_str_view(a, &ta);
-        b = (rval *)as_str_view(b, &tb);
+        a = (rval*)as_str_view(a, &ta);
+        b = (rval*)as_str_view(b, &tb);
         switch (op) {
         case OP_EQ:
             res = str_eq(ctx, &a->u.c, &b->u.c, ctx->set.exact);
@@ -711,25 +715,53 @@ static int bin_cmp(rx_ctx *ctx, rval *a, rval *b, int op, rval *out, r_err *err,
         long j2 = rx_julian(b->u.d.y, b->u.d.m, b->u.d.d);
         switch (op) {
         case OP_EQ:
-        case OP_EEQ: res = j1 == j2; break;
-        case OP_NE: res = j1 != j2; break;
-        case OP_LT: res = j1 < j2; break;
-        case OP_LE: res = j1 <= j2; break;
-        case OP_GT: res = j1 > j2; break;
-        case OP_GE: res = j1 >= j2; break;
-        default: ok = 0; break;
+        case OP_EEQ:
+            res = j1 == j2;
+            break;
+        case OP_NE:
+            res = j1 != j2;
+            break;
+        case OP_LT:
+            res = j1 < j2;
+            break;
+        case OP_LE:
+            res = j1 <= j2;
+            break;
+        case OP_GT:
+            res = j1 > j2;
+            break;
+        case OP_GE:
+            res = j1 >= j2;
+            break;
+        default:
+            ok = 0;
+            break;
         }
     } else if (a->t == RX_T_L && b->t == RX_T_L) {
         int x = a->u.l == L_T, y = b->u.l == L_T;
         switch (op) {
         case OP_EQ:
-        case OP_EEQ: res = x == y; break;
-        case OP_NE: res = x != y; break;
-        case OP_LT: res = x < y; break;
-        case OP_LE: res = x <= y; break;
-        case OP_GT: res = x > y; break;
-        case OP_GE: res = x >= y; break;
-        default: ok = 0; break;
+        case OP_EEQ:
+            res = x == y;
+            break;
+        case OP_NE:
+            res = x != y;
+            break;
+        case OP_LT:
+            res = x < y;
+            break;
+        case OP_LE:
+            res = x <= y;
+            break;
+        case OP_GT:
+            res = x > y;
+            break;
+        case OP_GE:
+            res = x >= y;
+            break;
+        default:
+            ok = 0;
+            break;
         }
     } else {
         ok = 0;
@@ -742,8 +774,7 @@ static int bin_cmp(rx_ctx *ctx, rval *a, rval *b, int op, rval *out, r_err *err,
     return R_OK;
 }
 
-int rx_vm_run(rx_ctx *ctx, const rx_code *code, rval *out, r_err *err)
-{
+int rx_vm_run(rx_ctx* ctx, const rx_code* code, rval* out, r_err* err) {
     rval stack[VM_STACK];
     int sp = 0;
     for (int i = 0; i < VM_STACK; i++) {
@@ -793,7 +824,7 @@ int rx_vm_run(rx_ctx *ctx, const rx_code *code, rval *out, r_err *err)
                 rc = vm_fail(ctx, err, R_ERR_STACK, 0, 0, "Stack overflow");
                 goto done;
             }
-            const char *s = code->strs[arg];
+            const char* s = code->strs[arg];
             stack[sp].t = RX_T_D;
             memset(&stack[sp].u.d, 0, sizeof(r_date));
             if (s[0] == '^') {
@@ -826,7 +857,7 @@ int rx_vm_run(rx_ctx *ctx, const rx_code *code, rval *out, r_err *err)
                 rc = vm_fail(ctx, err, R_ERR_STACK, 0, 0, "Stack overflow");
                 goto done;
             }
-            rx_memvar *mv = rx_memvar_find(ctx, code->strs[arg]);
+            rx_memvar* mv = rx_memvar_find(ctx, code->strs[arg]);
             if (mv && mv->is_array) {
                 stack[sp].t = RX_T_C;
                 stack[sp].u.c.n = strlen(mv->name);
@@ -842,7 +873,7 @@ int rx_vm_run(rx_ctx *ctx, const rx_code *code, rval *out, r_err *err)
                     stack[sp].t = RX_T_C;
                     char up[64];
                     snprintf(up, sizeof(up), "%s", code->strs[arg]);
-                    for (char *c = up; *c; c++) {
+                    for (char* c = up; *c; c++) {
                         *c = (char)toupper((unsigned char)*c);
                     }
                     stack[sp].u.c.n = strlen(up);
@@ -924,13 +955,26 @@ int rx_vm_run(rx_ctx *ctx, const rx_code *code, rval *out, r_err *err)
             }
             int opp = OP_NONE;
             switch (op) {
-            case BOP_ADD: opp = OP_PLUS; break;
-            case BOP_SUB: opp = OP_MINUS; break;
-            case BOP_MUL: opp = OP_MUL; break;
-            case BOP_DIV: opp = OP_DIV; break;
-            case BOP_MOD: opp = OP_MOD; break;
-            case BOP_POW: opp = OP_POW; break;
-            default: break;
+            case BOP_ADD:
+                opp = OP_PLUS;
+                break;
+            case BOP_SUB:
+                opp = OP_MINUS;
+                break;
+            case BOP_MUL:
+                opp = OP_MUL;
+                break;
+            case BOP_DIV:
+                opp = OP_DIV;
+                break;
+            case BOP_MOD:
+                opp = OP_MOD;
+                break;
+            case BOP_POW:
+                opp = OP_POW;
+                break;
+            default:
+                break;
             }
             rval res;
             rx_rval_undef(&res);
@@ -958,14 +1002,30 @@ int rx_vm_run(rx_ctx *ctx, const rx_code *code, rval *out, r_err *err)
             }
             int opp;
             switch (op) {
-            case BOP_EQ: opp = OP_EQ; break;
-            case BOP_EEQ: opp = OP_EEQ; break;
-            case BOP_NE: opp = OP_NE; break;
-            case BOP_LT: opp = OP_LT; break;
-            case BOP_LE: opp = OP_LE; break;
-            case BOP_GT: opp = OP_GT; break;
-            case BOP_GE: opp = OP_GE; break;
-            default: opp = OP_IN; break;
+            case BOP_EQ:
+                opp = OP_EQ;
+                break;
+            case BOP_EEQ:
+                opp = OP_EEQ;
+                break;
+            case BOP_NE:
+                opp = OP_NE;
+                break;
+            case BOP_LT:
+                opp = OP_LT;
+                break;
+            case BOP_LE:
+                opp = OP_LE;
+                break;
+            case BOP_GT:
+                opp = OP_GT;
+                break;
+            case BOP_GE:
+                opp = OP_GE;
+                break;
+            default:
+                opp = OP_IN;
+                break;
             }
             rval res;
             rx_rval_undef(&res);
@@ -985,7 +1045,7 @@ int rx_vm_run(rx_ctx *ctx, const rx_code *code, rval *out, r_err *err)
                 rc = vm_fail(ctx, err, R_ERR_STACK, 0, 0, "Stack underflow");
                 goto done;
             }
-            const char *fname = stack[sp - (int)argc - 1].u.c.utf8;
+            const char* fname = stack[sp - (int)argc - 1].u.c.utf8;
             r_err ferr;
             memset(&ferr, 0, sizeof(ferr));
             int fid = rx_func_id(fname ? fname : "", &ferr);
@@ -1021,7 +1081,7 @@ int rx_vm_run(rx_ctx *ctx, const rx_code *code, rval *out, r_err *err)
                 rc = vm_fail(ctx, err, R_ERR_STACK, 0, 0, "Stack underflow");
                 goto done;
             }
-            const char *name = stack[sp - (int)argc - 1].u.c.utf8;
+            const char* name = stack[sp - (int)argc - 1].u.c.utf8;
             double di = 1, dj = 1;
             if (argc >= 1) {
                 if (!is_numlike(&stack[sp - argc])) {
@@ -1077,8 +1137,7 @@ done:
     return rc;
 }
 
-int rx_eval(rx_ctx *ctx, const rx_expr *e, rval *out, r_err *err)
-{
+int rx_eval(rx_ctx* ctx, const rx_expr* e, rval* out, r_err* err) {
     rx_code code;
     int rc = rx_compile_expr(e, &code, err);
     if (rc != R_OK) {
@@ -1095,24 +1154,22 @@ int rx_eval(rx_ctx *ctx, const rx_expr *e, rval *out, r_err *err)
 
 /* ============================ M5: structured execution ============================ */
 
-static int exec_list(rx_ctx *ctx, rx_stmt **list, size_t n);
+static int exec_list(rx_ctx* ctx, rx_stmt** list, size_t n);
 
-static int truthy(const rval *v)
-{
+static int truthy(const rval* v) {
     return v->t == RX_T_L && v->u.l == L_T;
 }
 
 /* register a PROCEDURE/FUNCTION definition (ST_PROC); re-registering the
    same name replaces the body (the rx_exec pre-pass + execution both hit it) */
-static void register_proc(rx_ctx *ctx, rx_stmt *s)
-{
+static void register_proc(rx_ctx* ctx, rx_stmt* s) {
     char up[64];
     snprintf(up, sizeof(up), "%.63s", s->target);
-    for (char *c = up; *c; c++) {
+    for (char* c = up; *c; c++) {
         *c = (char)toupper((unsigned char)*c);
     }
     int has_body = s->nkids > 0 && s->kids[0] && s->kids[0]->kids != NULL;
-    rx_proc *pr = NULL;
+    rx_proc* pr = NULL;
     for (size_t i = 0; i < ctx->nprocs; i++) {
         if (strcmp(ctx->procs[i].name, up) == 0) {
             if (!has_body) {
@@ -1131,7 +1188,7 @@ static void register_proc(rx_ctx *ctx, rx_stmt *s)
     if (!pr) {
         if (ctx->nprocs == ctx->capprocs) {
             size_t nc = ctx->capprocs ? ctx->capprocs * 2 : 8;
-            rx_proc *np = realloc(ctx->procs, nc * sizeof(rx_proc));
+            rx_proc* np = realloc(ctx->procs, nc * sizeof(rx_proc));
             if (!np) {
                 RX_FATAL("out of memory");
             }
@@ -1145,7 +1202,7 @@ static void register_proc(rx_ctx *ctx, rx_stmt *s)
     pr->nparams = s->nstrs > 16 ? 16 : s->nstrs;
     for (size_t i = 0; i < pr->nparams; i++) {
         snprintf(pr->params[i], sizeof(pr->params[i]), "%s", s->strs[i]);
-        for (char *c = pr->params[i]; *c; c++) {
+        for (char* c = pr->params[i]; *c; c++) {
             *c = (char)toupper((unsigned char)*c);
         }
     }
@@ -1164,8 +1221,7 @@ static void register_proc(rx_ctx *ctx, rx_stmt *s)
 
 /* M9 9.6: register every top-level PROCEDURE/FUNCTION without executing
    (SET PROCEDURE TO loads packed sources this way) */
-void rx_register_procs(rx_ctx *ctx, rx_stmt *stmts, size_t n)
-{
+void rx_register_procs(rx_ctx* ctx, rx_stmt* stmts, size_t n) {
     for (size_t i = 0; i < n; i++) {
         if (stmts[i].kind == ST_PROC) {
             register_proc(ctx, &stmts[i]);
@@ -1174,15 +1230,13 @@ void rx_register_procs(rx_ctx *ctx, rx_stmt *stmts, size_t n)
 }
 
 /* M9 9.6: lex+parse without executing (BUILD PROJECT compiles to RXP blobs) */
-int rx_compile_source(const char *src, const char *name, rx_stmt **out, size_t *nout,
-                      r_err *err)
-{
-    rx_tok *toks;
+int rx_compile_source(const char* src, const char* name, rx_stmt** out, size_t* nout, r_err* err) {
+    rx_tok* toks;
     size_t ntok;
     if (rx_lex(src, name, &toks, &ntok, err) != R_OK) {
         return err->code;
     }
-    rx_stmt *stmts = NULL;
+    rx_stmt* stmts = NULL;
     size_t nstmt = 0;
     if (rx_parse_src(toks, ntok, src, &stmts, &nstmt, err) != R_OK) {
         rx_lex_free(toks, ntok);
@@ -1195,18 +1249,17 @@ int rx_compile_source(const char *src, const char *name, rx_stmt **out, size_t *
 }
 
 /* M9 9.6: packed source lookup by stem (uppercased) inside the running .rpp */
-const char *rx_packed_source(rx_ctx *ctx, const char *stem)
-{
+const char* rx_packed_source(rx_ctx* ctx, const char* stem) {
     if (!stem) {
         return NULL;
     }
     char up[300];
     snprintf(up, sizeof(up), "%s", stem);
-    char *dot = strrchr(up, '.');
+    char* dot = strrchr(up, '.');
     if (dot) {
         *dot = '\0';
     }
-    for (char *c = up; *c; c++) {
+    for (char* c = up; *c; c++) {
         *c = (char)toupper((unsigned char)*c);
     }
     for (size_t i = 0; i < ctx->npacked; i++) {
@@ -1218,14 +1271,13 @@ const char *rx_packed_source(rx_ctx *ctx, const char *stem)
 }
 
 /* M9 9.7: ON KEY LABEL command lookup (key name matched case-insensitively) */
-const char *rx_on_key_cmd(rx_ctx *ctx, const char *key)
-{
+const char* rx_on_key_cmd(rx_ctx* ctx, const char* key) {
     if (!key) {
         return NULL;
     }
     char up[16];
     snprintf(up, sizeof(up), "%s", key);
-    for (char *c = up; *c; c++) {
+    for (char* c = up; *c; c++) {
         *c = (char)toupper((unsigned char)*c);
     }
     for (size_t i = 0; i < ctx->non_key; i++) {
@@ -1236,14 +1288,13 @@ const char *rx_on_key_cmd(rx_ctx *ctx, const char *key)
     return NULL;
 }
 
-static rx_proc *find_proc(rx_ctx *ctx, const char *name)
-{
+static rx_proc* find_proc(rx_ctx* ctx, const char* name) {
     char up[64];
     snprintf(up, sizeof(up), "%s", name);
-    for (char *c = up; *c; c++) {
+    for (char* c = up; *c; c++) {
         *c = (char)toupper((unsigned char)*c);
     }
-    rx_proc *found = NULL;
+    rx_proc* found = NULL;
     size_t wl = strlen(up);
     for (size_t i = 0; i < ctx->nprocs; i++) {
         int m = (wl >= 4 && strncasecmp(up, ctx->procs[i].name, wl) == 0 &&
@@ -1259,8 +1310,7 @@ static rx_proc *find_proc(rx_ctx *ctx, const char *name)
     return found;
 }
 
-void rx_frame_free(rx_ctx *ctx, rx_frame *f)
-{
+void rx_frame_free(rx_ctx* ctx, rx_frame* f) {
     (void)ctx;
     for (size_t i = 0; i < f->nvars; i++) {
         rx_rval_free(&f->vars[i].val);
@@ -1276,10 +1326,9 @@ void rx_frame_free(rx_ctx *ctx, rx_frame *f)
     f->nvars = f->capvars = 0;
 }
 
-int rx_call_proc(rx_ctx *ctx, const char *name, size_t argc, const rval *argv, rval *out,
-                 r_err *err)
-{
-    rx_proc *pr = find_proc(ctx, name);
+int rx_call_proc(rx_ctx* ctx, const char* name, size_t argc, const rval* argv, rval* out,
+                 r_err* err) {
+    rx_proc* pr = find_proc(ctx, name);
     if (!pr) {
         err->code = R_ERR_UNDEF_FUNC;
         snprintf(err->msg, sizeof(err->msg), "Undefined procedure %s", name);
@@ -1291,7 +1340,7 @@ int rx_call_proc(rx_ctx *ctx, const char *name, size_t argc, const rval *argv, r
         return err->code;
     }
     int depth = 0;
-    for (rx_frame *f = ctx->frame; f; f = f->up) {
+    for (rx_frame* f = ctx->frame; f; f = f->up) {
         depth++;
     }
     if (depth >= 64) {
@@ -1305,10 +1354,10 @@ int rx_call_proc(rx_ctx *ctx, const char *name, size_t argc, const rval *argv, r
     ctx->frame = &fr;
     for (size_t i = 0; i < pr->nparams; i++) {
         /* create in frame and set value */
-        rx_memvar *mv = NULL;
+        rx_memvar* mv = NULL;
         if (fr.nvars == fr.capvars) {
             size_t nc = fr.capvars ? fr.capvars * 2 : 8;
-            rx_memvar *nv = realloc(fr.vars, nc * sizeof(rx_memvar));
+            rx_memvar* nv = realloc(fr.vars, nc * sizeof(rx_memvar));
             if (!nv) {
                 RX_FATAL("out of memory");
             }
@@ -1346,16 +1395,16 @@ int rx_call_proc(rx_ctx *ctx, const char *name, size_t argc, const rval *argv, r
 
 /* ---- M5 command handlers that live in vm.c ---- */
 
-int rx_cmd_do(rx_ctx *ctx, rx_stmt *s)
-{
+int rx_cmd_do(rx_ctx* ctx, rx_stmt* s) {
     /* FoxPro: DO foo runs procedure foo, or loads and runs foo.prg when no
        procedure of that name is defined (file fallback, M7 screen gate).
        M9 9.6: inside a .rpp, packed sources win over the file system. */
     if (!find_proc(ctx, s->target)) {
-        const char *packed = rx_packed_source(ctx, s->target);
+        const char* packed = rx_packed_source(ctx, s->target);
         if (packed) {
             char nm[320];
-            snprintf(nm, sizeof(nm), "%.250s!%.60s", ctx->rpp_path[0] ? ctx->rpp_path : "app.rpp", s->target);
+            snprintf(nm, sizeof(nm), "%.250s!%.60s", ctx->rpp_path[0] ? ctx->rpp_path : "app.rpp",
+                     s->target);
             int rc = rx_run_source(ctx, packed, nm);
             if (rc != R_OK) {
                 return rx_raise(ctx, rc, s->line, s->col, "Cannot run packed %s", s->target);
@@ -1374,7 +1423,7 @@ int rx_cmd_do(rx_ctx *ctx, rx_stmt *s)
         }
         return R_OK;
     }
-    rval *args = NULL;
+    rval* args = NULL;
     size_t na = s->nexpr;
     if (na) {
         args = calloc(na, sizeof(rval));
@@ -1409,8 +1458,7 @@ int rx_cmd_do(rx_ctx *ctx, rx_stmt *s)
     return R_OK;
 }
 
-int rx_cmd_return(rx_ctx *ctx, rx_stmt *s)
-{
+int rx_cmd_return(rx_ctx* ctx, rx_stmt* s) {
     rx_rval_free(&ctx->retval);
     rx_rval_undef(&ctx->retval);
     if (s->nexpr > 0) {
@@ -1423,8 +1471,7 @@ int rx_cmd_return(rx_ctx *ctx, rx_stmt *s)
     return R_OK;
 }
 
-int rx_cmd_parameters(rx_ctx *ctx, rx_stmt *s, int lpar)
-{
+int rx_cmd_parameters(rx_ctx* ctx, rx_stmt* s, int lpar) {
     (void)lpar; /* by-reference binding lands with the full M5 parameter model */
     /* positional binding already happened in rx_call_proc; a PARAMETERS
        list inside a body just ensures the names exist in the frame */
@@ -1436,10 +1483,9 @@ int rx_cmd_parameters(rx_ctx *ctx, rx_stmt *s, int lpar)
     return R_OK;
 }
 
-int rx_cmd_private_public(rx_ctx *ctx, rx_stmt *s, int pub)
-{
+int rx_cmd_private_public(rx_ctx* ctx, rx_stmt* s, int pub) {
     int has_all = 0, is_like = 0;
-    const char *pat = NULL;
+    const char* pat = NULL;
     for (size_t i = 0; i < s->nclause; i++) {
         if (strcmp(s->clauses[i].key, "ALL") == 0) {
             has_all = 1;
@@ -1455,7 +1501,7 @@ int rx_cmd_private_public(rx_ctx *ctx, rx_stmt *s, int pub)
     if (!has_all) {
         for (size_t i = 0; i < s->nstrs; i++) {
             if (pub) {
-                rx_memvar_set_public(ctx, s->strs[i], &(rval){ 0 });
+                rx_memvar_set_public(ctx, s->strs[i], &(rval){0});
             } else {
                 rx_memvar_private(ctx, s->strs[i]);
             }
@@ -1484,7 +1530,7 @@ int rx_cmd_private_public(rx_ctx *ctx, rx_stmt *s, int pub)
         }
         if (match) {
             if (pub) {
-                rx_memvar_set_public(ctx, names[i], &(rval){ 0 });
+                rx_memvar_set_public(ctx, names[i], &(rval){0});
             } else {
                 rx_memvar_private(ctx, names[i]);
             }
@@ -1493,10 +1539,9 @@ int rx_cmd_private_public(rx_ctx *ctx, rx_stmt *s, int pub)
     return R_OK;
 }
 
-int rx_cmd_release(rx_ctx *ctx, rx_stmt *s)
-{
+int rx_cmd_release(rx_ctx* ctx, rx_stmt* s) {
     int has_all = 0, is_like = 0;
-    const char *pat = NULL;
+    const char* pat = NULL;
     for (size_t i = 0; i < s->nclause; i++) {
         if (strcmp(s->clauses[i].key, "ALL") == 0) {
             has_all = 1;
@@ -1538,8 +1583,7 @@ int rx_cmd_release(rx_ctx *ctx, rx_stmt *s)
     return R_OK;
 }
 
-int rx_cmd_on(rx_ctx *ctx, rx_stmt *s)
-{
+int rx_cmd_on(rx_ctx* ctx, rx_stmt* s) {
     for (size_t i = 0; i < s->nclause; i++) {
         if (strcmp(s->clauses[i].key, "ERROR") == 0) {
             if (s->nstrs > 0) {
@@ -1554,7 +1598,7 @@ int rx_cmd_on(rx_ctx *ctx, rx_stmt *s)
         if (strcmp(s->clauses[i].key, "KEYLABEL") == 0 && s->clauses[i].word[0]) {
             char up[16];
             snprintf(up, sizeof(up), "%.15s", s->clauses[i].word);
-            for (char *c = up; *c; c++) {
+            for (char* c = up; *c; c++) {
                 *c = (char)toupper((unsigned char)*c);
             }
             char cmdbuf[256];
@@ -1562,7 +1606,8 @@ int rx_cmd_on(rx_ctx *ctx, rx_stmt *s)
             int from_str = 0;
             for (size_t j = 0; j < s->nclause; j++) {
                 if (strcmp(s->clauses[j].key, "CMD") == 0) {
-                    snprintf(cmdbuf, sizeof(cmdbuf), "%.*s", (int)sizeof(cmdbuf) - 1, s->clauses[j].word);
+                    snprintf(cmdbuf, sizeof(cmdbuf), "%.*s", (int)sizeof(cmdbuf) - 1,
+                             s->clauses[j].word);
                     from_str = 0;
                 }
             }
@@ -1585,15 +1630,15 @@ int rx_cmd_on(rx_ctx *ctx, rx_stmt *s)
                 ctx->non_key++;
             }
             snprintf(ctx->on_key_name[k], sizeof(ctx->on_key_name[k]), "%s", up);
-            snprintf(ctx->on_key_cmd[k], sizeof(ctx->on_key_cmd[k]), "%.*s", (int)sizeof(ctx->on_key_cmd[k]) - 1, cmdbuf);
+            snprintf(ctx->on_key_cmd[k], sizeof(ctx->on_key_cmd[k]), "%.*s",
+                     (int)sizeof(ctx->on_key_cmd[k]) - 1, cmdbuf);
         }
     }
     return R_OK;
 }
 
-int rx_cmd_wait(rx_ctx *ctx, rx_stmt *s)
-{
-    const char *msg = s->nstrs > 0 ? s->strs[0] : NULL;
+int rx_cmd_wait(rx_ctx* ctx, rx_stmt* s) {
+    const char* msg = s->nstrs > 0 ? s->strs[0] : NULL;
     if (s->nexpr > 0) {
         rval v;
         rx_rval_undef(&v);
@@ -1627,8 +1672,7 @@ int rx_cmd_wait(rx_ctx *ctx, rx_stmt *s)
     return R_OK;
 }
 
-int rx_cmd_input(rx_ctx *ctx, rx_stmt *s, int eval)
-{
+int rx_cmd_input(rx_ctx* ctx, rx_stmt* s, int eval) {
     if (s->nstrs > 0) {
         rx_out(ctx, s->strs[0], strlen(s->strs[0]));
     } else if (s->nexpr > 0) {
@@ -1661,15 +1705,15 @@ int rx_cmd_input(rx_ctx *ctx, rx_stmt *s, int eval)
         rx_rval_undef(&v);
         r_err err;
         memset(&err, 0, sizeof(err));
-        char *expanded = rx_macro_expand(ctx, line, &err);
+        char* expanded = rx_macro_expand(ctx, line, &err);
         int rc;
         if (!expanded) {
             return rx_raise(ctx, err.code, s->line, s->col, "%s", err.msg);
         }
-        rx_tok *toks;
+        rx_tok* toks;
         size_t ntok;
         if (rx_lex(expanded, "<input>", &toks, &ntok, &err) == R_OK) {
-            rx_stmt *st;
+            rx_stmt* st;
             size_t ns;
             if (rx_parse(toks, ntok, &st, &ns, &err) == R_OK && ns == 1 && st[0].kind == ST_EXPR) {
                 rc = rx_eval(ctx, st[0].exprs[0], &v, &err);
@@ -1703,10 +1747,9 @@ int rx_cmd_input(rx_ctx *ctx, rx_stmt *s, int eval)
     return rc;
 }
 
-int rx_cmd_dimension(rx_ctx *ctx, rx_stmt *s)
-{
+int rx_cmd_dimension(rx_ctx* ctx, rx_stmt* s) {
     for (size_t k = 0; k < s->nkids; k++) {
-        rx_stmt *kid = s->kids[k];
+        rx_stmt* kid = s->kids[k];
         size_t d1 = 1, d2 = 0;
         if (kid->nexpr >= 1) {
             rval v;
@@ -1739,8 +1782,7 @@ int rx_cmd_dimension(rx_ctx *ctx, rx_stmt *s)
 
 /* ---- macro expansion (&var, §7.2, depth <= 16) ---- */
 
-static char *expand_rec(rx_ctx *ctx, const char *src, int depth, r_err *err)
-{
+static char* expand_rec(rx_ctx* ctx, const char* src, int depth, r_err* err) {
     if (depth > 16) {
         err->code = R_ERR_MACRO_DEPTH;
         snprintf(err->msg, sizeof(err->msg), "Macro expansion depth limit (16)");
@@ -1791,7 +1833,7 @@ static char *expand_rec(rx_ctx *ctx, const char *src, int depth, r_err *err)
             }
             memcpy(name, src + i + 1, nl);
             name[nl] = '\0';
-            rx_memvar *mv = rx_memvar_lookup(ctx, name);
+            rx_memvar* mv = rx_memvar_lookup(ctx, name);
             if (!mv || mv->is_array || mv->val.t != RX_T_C || !mv->val.u.c.utf8) {
                 err->code = R_ERR_VAR;
                 snprintf(err->msg, sizeof(err->msg), "Variable not found: %s", name);
@@ -1811,7 +1853,7 @@ static char *expand_rec(rx_ctx *ctx, const char *src, int depth, r_err *err)
         out.len = 0;
     }
     if (substituted) {
-        char *again = expand_rec(ctx, out.buf, depth + 1, err);
+        char* again = expand_rec(ctx, out.buf, depth + 1, err);
         if (!again) {
             sb_free(&out);
             return NULL;
@@ -1822,19 +1864,17 @@ static char *expand_rec(rx_ctx *ctx, const char *src, int depth, r_err *err)
     return out.buf;
 }
 
-char *rx_macro_expand(rx_ctx *ctx, const char *src, r_err *err)
-{
+char* rx_macro_expand(rx_ctx* ctx, const char* src, r_err* err) {
     return expand_rec(ctx, src, 0, err);
 }
 
 /* ---- .prg file runner with .RXP cache (rxp.c) ---- */
 
-int rx_run_file(rx_ctx *ctx, const char *path);
+int rx_run_file(rx_ctx* ctx, const char* path);
 
 /* ============================ statement execution ============================ */
 
-static int exec_one(rx_ctx *ctx, rx_stmt *s)
-{
+static int exec_one(rx_ctx* ctx, rx_stmt* s) {
     int rc = R_OK;
     switch (s->kind) {
     case ST_EMPTY:
@@ -2227,11 +2267,10 @@ static int exec_one(rx_ctx *ctx, rx_stmt *s)
 /* M5 runtime macro expansion (§7.2): a statement whose raw source span
    contains '&' is re-expanded, re-lexed and re-parsed at execution time, so
    &var sees the memvar state at that moment (FoxPro semantics). */
-static int exec_expanded(rx_ctx *ctx, rx_stmt *s)
-{
+static int exec_expanded(rx_ctx* ctx, rx_stmt* s) {
     r_err err;
     memset(&err, 0, sizeof(err));
-    char *ex = rx_macro_expand(ctx, s->raw, &err);
+    char* ex = rx_macro_expand(ctx, s->raw, &err);
     if (!ex) {
         ctx->err.code = err.code;
         snprintf(ctx->err.msg, sizeof(ctx->err.msg), "%s", err.msg);
@@ -2239,15 +2278,15 @@ static int exec_expanded(rx_ctx *ctx, rx_stmt *s)
         ctx->err.col = s->col;
         return err.code;
     }
-    rx_tok *toks;
+    rx_tok* toks;
     size_t ntok;
     int rc = rx_lex(ex, ctx->prog, &toks, &ntok, &err);
     if (rc == R_OK) {
-        rx_stmt *st;
+        rx_stmt* st;
         size_t ns;
         rc = rx_parse_src(toks, ntok, ex, &st, &ns, &err);
         if (rc == R_OK) {
-            rx_stmt **list = malloc((ns ? ns : 1) * sizeof(rx_stmt *));
+            rx_stmt** list = malloc((ns ? ns : 1) * sizeof(rx_stmt*));
             if (!list) {
                 RX_FATAL("out of memory");
             }
@@ -2282,15 +2321,14 @@ static int exec_expanded(rx_ctx *ctx, rx_stmt *s)
     return rc;
 }
 
-static int exec_list(rx_ctx *ctx, rx_stmt **list, size_t n)
-{
+static int exec_list(rx_ctx* ctx, rx_stmt** list, size_t n) {
     size_t retries = 0;
     for (size_t i = 0; i < n; i++) {
         if (ctx->abort || ctx->returning || ctx->loop_ctl == RX_CTL_EXIT ||
             ctx->loop_ctl == RX_CTL_LOOP) {
             break;
         }
-        rx_stmt *s = list[i];
+        rx_stmt* s = list[i];
         int rc;
         if (s->raw && s->kind != ST_TEXT && strchr(s->raw, '&')) {
             rc = exec_expanded(ctx, s);
@@ -2344,8 +2382,7 @@ static int exec_list(rx_ctx *ctx, rx_stmt **list, size_t n)
     return R_OK;
 }
 
-int rx_exec(rx_ctx *ctx, rx_stmt *stmts, size_t n)
-{
+int rx_exec(rx_ctx* ctx, rx_stmt* stmts, size_t n) {
     /* FoxPro compiles the whole file first: every top-level PROCEDURE/FUNCTION
        is callable from any statement, regardless of textual order */
     for (size_t i = 0; i < n; i++) {
@@ -2353,7 +2390,7 @@ int rx_exec(rx_ctx *ctx, rx_stmt *stmts, size_t n)
             register_proc(ctx, &stmts[i]);
         }
     }
-    rx_stmt **list = malloc((n ? n : 1) * sizeof(rx_stmt *));
+    rx_stmt** list = malloc((n ? n : 1) * sizeof(rx_stmt*));
     if (!list) {
         RX_FATAL("out of memory");
     }
@@ -2369,13 +2406,11 @@ int rx_exec(rx_ctx *ctx, rx_stmt *stmts, size_t n)
 }
 
 /* public wrapper used by SCAN to run a body per record */
-int rx_exec_block(rx_ctx *ctx, rx_stmt **list, size_t n)
-{
+int rx_exec_block(rx_ctx* ctx, rx_stmt** list, size_t n) {
     return exec_list(ctx, list, n);
 }
 
 /* used by cmds_env.c to render values */
-int rx_vm_display(rx_ctx *ctx, const rval *v, strbuf *sb)
-{
+int rx_vm_display(rx_ctx* ctx, const rval* v, strbuf* sb) {
     return rval_to_display(ctx, v, sb);
 }

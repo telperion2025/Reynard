@@ -23,22 +23,19 @@
 #include "data/data.h"
 #include "util/util.h"
 
-static void wr16le(uint8_t *p, uint16_t v)
-{
+static void wr16le(uint8_t* p, uint16_t v) {
     p[0] = (uint8_t)(v & 0xFF);
     p[1] = (uint8_t)(v >> 8);
 }
 
-static void wr32le(uint8_t *p, uint32_t v)
-{
+static void wr32le(uint8_t* p, uint32_t v) {
     p[0] = (uint8_t)(v & 0xFF);
     p[1] = (uint8_t)((v >> 8) & 0xFF);
     p[2] = (uint8_t)((v >> 16) & 0xFF);
     p[3] = (uint8_t)((v >> 24) & 0xFF);
 }
 
-static int valid_field(const rx_fielddef *f)
-{
+static int valid_field(const rx_fielddef* f) {
     size_t n = strnlen(f->name, 10);
     if (n == 0) {
         return 0;
@@ -74,8 +71,7 @@ static int valid_field(const rx_fielddef *f)
     }
 }
 
-static uint8_t forced_len(uint8_t type, uint8_t len)
-{
+static uint8_t forced_len(uint8_t type, uint8_t len) {
     switch (type) {
     case RFT_D:
         return 8;
@@ -96,8 +92,7 @@ static uint8_t forced_len(uint8_t type, uint8_t len)
     }
 }
 
-static int has_memo_field(const rx_fielddef *fields, size_t n)
-{
+static int has_memo_field(const rx_fielddef* fields, size_t n) {
     for (size_t i = 0; i < n; i++) {
         uint8_t t = fields[i].type;
         if (t == RFT_M || t == RFT_G || t == RFT_B || t == RFT_P) {
@@ -107,11 +102,10 @@ static int has_memo_field(const rx_fielddef *fields, size_t n)
     return 0;
 }
 
-static uint8_t normalize_version(uint8_t version, int memo)
-{
+static uint8_t normalize_version(uint8_t version, int memo) {
     if (!memo) {
         return version == 0x30 || version == 0x31 || version == 0x32 || version == 0x04 ? version
-                                                                                       : 0x03;
+                                                                                        : 0x03;
     }
     switch (version) {
     case 0x03:
@@ -127,9 +121,8 @@ static uint8_t normalize_version(uint8_t version, int memo)
     }
 }
 
-int rx_dbf_create_full(const char *path, const rx_fielddef *fields, size_t n, uint8_t version,
-                       uint8_t cp_mark, int yy, int mm, int dd, rx_dbf **out)
-{
+int rx_dbf_create_full(const char* path, const rx_fielddef* fields, size_t n, uint8_t version,
+                       uint8_t cp_mark, int yy, int mm, int dd, rx_dbf** out) {
     if (!path || !fields || !out || n == 0 || n > 255) {
         return R_ERR_RANGE;
     }
@@ -182,7 +175,7 @@ int rx_dbf_create_full(const char *path, const rx_fielddef *fields, size_t n, ui
             return R_ERR_IO_WRITE;
         }
     }
-    uint8_t term[2] = { 0x0D, 0x1A };
+    uint8_t term[2] = {0x0D, 0x1A};
     if (write(fd, term, sizeof(term)) != (ssize_t)sizeof(term)) {
         close(fd);
         return R_ERR_IO_WRITE;
@@ -191,8 +184,7 @@ int rx_dbf_create_full(const char *path, const rx_fielddef *fields, size_t n, ui
     return rx_dbf_open(path, RD_EXCLUSIVE, out);
 }
 
-int rx_dbf_create(const char *path, const rx_fielddef *fields, size_t n, rx_dbf **out)
-{
+int rx_dbf_create(const char* path, const rx_fielddef* fields, size_t n, rx_dbf** out) {
     uint8_t version = has_memo_field(fields, n) ? 0xF5 : 0x03;
     int yy = 2000, mm = 1, dd = 1;
     if (!rx_data_test_mode()) {

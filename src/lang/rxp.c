@@ -31,51 +31,43 @@
 
 /* ============================ writer ============================ */
 
-static void w8(strbuf *b, uint8_t v)
-{
+static void w8(strbuf* b, uint8_t v) {
     sb_putc(b, (char)v);
 }
 
-static void w16(strbuf *b, uint16_t v)
-{
+static void w16(strbuf* b, uint16_t v) {
     w8(b, (uint8_t)(v & 0xff));
     w8(b, (uint8_t)(v >> 8));
 }
 
-static void w32(strbuf *b, uint32_t v)
-{
+static void w32(strbuf* b, uint32_t v) {
     w16(b, (uint16_t)(v & 0xffff));
     w16(b, (uint16_t)(v >> 16));
 }
 
-static void w64(strbuf *b, uint64_t v)
-{
+static void w64(strbuf* b, uint64_t v) {
     w32(b, (uint32_t)(v & 0xffffffffu));
     w32(b, (uint32_t)(v >> 32));
 }
 
-static void wi32(strbuf *b, int32_t v)
-{
+static void wi32(strbuf* b, int32_t v) {
     w32(b, (uint32_t)v);
 }
 
-static void wd(strbuf *b, double d)
-{
+static void wd(strbuf* b, double d) {
     uint64_t u;
     memcpy(&u, &d, 8);
     w64(b, u);
 }
 
-static void wbytes(strbuf *b, const void *p, size_t n)
-{
+static void wbytes(strbuf* b, const void* p, size_t n) {
     w64(b, (uint64_t)n);
     if (n && p) {
         sb_put(b, p, n);
     }
 }
 
-static void wstr(strbuf *b, const char *s)
-{
+static void wstr(strbuf* b, const char* s) {
     if (!s) {
         w64(b, UINT64_MAX);
         return;
@@ -87,8 +79,7 @@ static void wstr(strbuf *b, const char *s)
     }
 }
 
-static void w_rval(strbuf *b, const rval *v)
-{
+static void w_rval(strbuf* b, const rval* v) {
     w32(b, (uint32_t)v->t);
     switch (v->t) {
     case RX_T_U:
@@ -133,10 +124,9 @@ static void w_rval(strbuf *b, const rval *v)
     }
 }
 
-static void w_expr(strbuf *b, const rx_expr *e);
+static void w_expr(strbuf* b, const rx_expr* e);
 
-static void w_stmt(strbuf *b, const rx_stmt *s)
-{
+static void w_stmt(strbuf* b, const rx_stmt* s) {
     w32(b, (uint32_t)s->kind);
     wi32(b, s->line);
     wi32(b, s->col);
@@ -160,7 +150,7 @@ static void w_stmt(strbuf *b, const rx_stmt *s)
     wstr(b, s->raw);
     w64(b, (uint64_t)s->nbcols);
     for (size_t i = 0; i < s->nbcols; i++) {
-        const rx_bcol *c = &s->bcols[i];
+        const rx_bcol* c = &s->bcols[i];
         wstr(b, c->name);
         w_expr(b, c->e);
         wstr(b, c->header);
@@ -179,8 +169,7 @@ static void w_stmt(strbuf *b, const rx_stmt *s)
     }
 }
 
-static void w_expr(strbuf *b, const rx_expr *e)
-{
+static void w_expr(strbuf* b, const rx_expr* e) {
     if (!e) {
         w8(b, 0);
         return;
@@ -208,8 +197,7 @@ typedef struct {
     int bad;
 } rd;
 
-static uint8_t r8(rd *r)
-{
+static uint8_t r8(rd* r) {
     if (r->bad || r->end - r->p < 1) {
         r->bad = 1;
         return 0;
@@ -217,34 +205,29 @@ static uint8_t r8(rd *r)
     return *r->p++;
 }
 
-static uint16_t r16(rd *r)
-{
+static uint16_t r16(rd* r) {
     uint16_t lo = r8(r), hi = r8(r);
     return (uint16_t)(lo | (hi << 8));
 }
 
-static uint32_t r32(rd *r)
-{
+static uint32_t r32(rd* r) {
     uint32_t lo = r16(r), hi = r16(r);
     return lo | (hi << 16);
 }
 
-static uint64_t r64(rd *r)
-{
+static uint64_t r64(rd* r) {
     uint64_t lo = r32(r), hi = r32(r);
     return lo | (hi << 32);
 }
 
-static double rdbl(rd *r)
-{
+static double rdbl(rd* r) {
     uint64_t u = r64(r);
     double d;
     memcpy(&d, &u, 8);
     return d;
 }
 
-static void rbytes(rd *r, void *dst, size_t n)
-{
+static void rbytes(rd* r, void* dst, size_t n) {
     if (r->bad) {
         return;
     }
@@ -258,8 +241,7 @@ static void rbytes(rd *r, void *dst, size_t n)
     r->p += n;
 }
 
-static char *rstr(rd *r)
-{
+static char* rstr(rd* r) {
     uint64_t n = r64(r);
     if (r->bad) {
         return NULL;
@@ -271,7 +253,7 @@ static char *rstr(rd *r)
         r->bad = 1;
         return NULL;
     }
-    char *s = malloc((size_t)n + 1);
+    char* s = malloc((size_t)n + 1);
     if (!s) {
         RX_FATAL("out of memory");
     }
@@ -280,8 +262,7 @@ static char *rstr(rd *r)
     return s;
 }
 
-static int r_rval(rd *r, rval *v)
-{
+static int r_rval(rd* r, rval* v) {
     rx_rval_undef(v);
     v->t = (rx_type)r32(r);
     switch (v->t) {
@@ -355,15 +336,14 @@ static int r_rval(rd *r, rval *v)
     return r->bad ? R_ERR_DBF_BADRXP : R_OK;
 }
 
-static int r_expr(rd *r, rx_expr **out);
+static int r_expr(rd* r, rx_expr** out);
 
-static int r_stmt(rd *r, rx_stmt *s)
-{
+static int r_stmt(rd* r, rx_stmt* s) {
     memset(s, 0, sizeof(*s));
     s->kind = (st_kind)r32(r);
     s->line = (int32_t)r32(r);
     s->col = (int32_t)r32(r);
-    char *t = rstr(r);
+    char* t = rstr(r);
     if (r->bad) {
         free(t);
         return R_ERR_DBF_BADRXP;
@@ -378,7 +358,7 @@ static int r_stmt(rd *r, rx_stmt *s)
     }
     s->nstrs = (size_t)n;
     if (n) {
-        s->strs = calloc(n, sizeof(char *));
+        s->strs = calloc(n, sizeof(char*));
         if (!s->strs) {
             RX_FATAL("out of memory");
         }
@@ -397,8 +377,8 @@ static int r_stmt(rd *r, rx_stmt *s)
             RX_FATAL("out of memory");
         }
         for (size_t i = 0; i < s->nclause; i++) {
-            char *k = rstr(r);
-            char *w = rstr(r);
+            char* k = rstr(r);
+            char* w = rstr(r);
             if (k) {
                 snprintf(s->clauses[i].key, sizeof(s->clauses[i].key), "%s", k);
                 free(k);
@@ -418,7 +398,7 @@ static int r_stmt(rd *r, rx_stmt *s)
     }
     s->nexpr = (size_t)n;
     if (n) {
-        s->exprs = calloc(n, sizeof(rx_expr *));
+        s->exprs = calloc(n, sizeof(rx_expr*));
         if (!s->exprs) {
             RX_FATAL("out of memory");
         }
@@ -442,8 +422,8 @@ static int r_stmt(rd *r, rx_stmt *s)
             RX_FATAL("out of memory");
         }
         for (size_t i = 0; i < s->nbcols; i++) {
-            rx_bcol *c = &s->bcols[i];
-            char *a = rstr(r);
+            rx_bcol* c = &s->bcols[i];
+            char* a = rstr(r);
             if (a) {
                 snprintf(c->name, sizeof(c->name), "%s", a);
                 free(a);
@@ -478,7 +458,7 @@ static int r_stmt(rd *r, rx_stmt *s)
     }
     s->nkids = (size_t)n;
     if (n) {
-        s->kids = calloc(n, sizeof(rx_stmt *));
+        s->kids = calloc(n, sizeof(rx_stmt*));
         if (!s->kids) {
             RX_FATAL("out of memory");
         }
@@ -495,13 +475,12 @@ static int r_stmt(rd *r, rx_stmt *s)
     return r->bad ? R_ERR_DBF_BADRXP : R_OK;
 }
 
-static int r_expr(rd *r, rx_expr **out)
-{
+static int r_expr(rd* r, rx_expr** out) {
     *out = NULL;
     if (r8(r) == 0) {
         return r->bad ? R_ERR_DBF_BADRXP : R_OK;
     }
-    rx_expr *e = calloc(1, sizeof(rx_expr));
+    rx_expr* e = calloc(1, sizeof(rx_expr));
     if (!e) {
         RX_FATAL("out of memory");
     }
@@ -510,7 +489,7 @@ static int r_expr(rd *r, rx_expr **out)
     e->col = (int32_t)r32(r);
     e->op = (int32_t)r32(r);
     e->fid = (int32_t)r32(r);
-    char *nm = rstr(r);
+    char* nm = rstr(r);
     if (r->bad) {
         free(nm);
         free(e);
@@ -535,7 +514,7 @@ static int r_expr(rd *r, rx_expr **out)
     }
     e->nargs = (size_t)n;
     if (n) {
-        e->args = calloc(n, sizeof(rx_expr *));
+        e->args = calloc(n, sizeof(rx_expr*));
         if (!e->args) {
             RX_FATAL("out of memory");
         }
@@ -552,13 +531,12 @@ static int r_expr(rd *r, rx_expr **out)
 
 /* ============================ cache file I/O ============================ */
 
-static int rxp_save(const char *path, const uint8_t hash[32], const rx_stmt *stmts, size_t n)
-{
+static int rxp_save(const char* path, const uint8_t hash[32], const rx_stmt* stmts, size_t n) {
     strbuf b;
     sb_init(&b);
     sb_put(&b, RXP_MAGIC, 4);
     w32(&b, RXP_VERSION);
-    sb_put(&b, (const char *)hash, 32);
+    sb_put(&b, (const char*)hash, 32);
     w64(&b, (uint64_t)n);
     for (size_t i = 0; i < n; i++) {
         w_stmt(&b, &stmts[i]);
@@ -569,7 +547,7 @@ static int rxp_save(const char *path, const uint8_t hash[32], const rx_stmt *stm
     }
     char tmp[700];
     snprintf(tmp, sizeof(tmp), "%s.tmp", path);
-    FILE *f = fopen(tmp, "wb");
+    FILE* f = fopen(tmp, "wb");
     if (!f) {
         sb_free(&b);
         return R_ERR_IO_OPEN;
@@ -594,9 +572,7 @@ static int rxp_save(const char *path, const uint8_t hash[32], const rx_stmt *stm
 }
 
 /* M9 9.6: in-memory variants used to pack compiled blobs into .RPP files */
-int rx_rxp_pack(const uint8_t hash[32], const rx_stmt *stmts, size_t n, char **out,
-                size_t *outn)
-{
+int rx_rxp_pack(const uint8_t hash[32], const rx_stmt* stmts, size_t n, char** out, size_t* outn) {
     if (!hash || !out || !outn) {
         return R_ERR_RANGE;
     }
@@ -604,7 +580,7 @@ int rx_rxp_pack(const uint8_t hash[32], const rx_stmt *stmts, size_t n, char **o
     sb_init(&b);
     sb_put(&b, RXP_MAGIC, 4);
     w32(&b, RXP_VERSION);
-    sb_put(&b, (const char *)hash, 32);
+    sb_put(&b, (const char*)hash, 32);
     w64(&b, (uint64_t)n);
     for (size_t i = 0; i < n; i++) {
         w_stmt(&b, &stmts[i]);
@@ -618,13 +594,11 @@ int rx_rxp_pack(const uint8_t hash[32], const rx_stmt *stmts, size_t n, char **o
     return R_OK;
 }
 
-int rx_rxp_unpack(const char *buf, size_t n, const uint8_t hash[32], rx_stmt **out,
-                  size_t *nout)
-{
+int rx_rxp_unpack(const char* buf, size_t n, const uint8_t hash[32], rx_stmt** out, size_t* nout) {
     if (!buf || !hash || !out || !nout) {
         return R_ERR_RANGE;
     }
-    rd r = { (const uint8_t *)buf, (const uint8_t *)buf + n, 0 };
+    rd r = {(const uint8_t*)buf, (const uint8_t*)buf + n, 0};
     if (n < 4 + 4 + 32 || memcmp(buf, RXP_MAGIC, 4) != 0 || r32(&r) != RXP_VERSION ||
         memcmp(r.p, hash, 32) != 0) {
         return R_ERR_DBF_BADRXP;
@@ -634,7 +608,7 @@ int rx_rxp_unpack(const char *buf, size_t n, const uint8_t hash[32], rx_stmt **o
     if (r.bad || ns > (1u << 20)) {
         return R_ERR_DBF_BADRXP;
     }
-    rx_stmt *stmts = calloc(ns ? ns : 1, sizeof(rx_stmt));
+    rx_stmt* stmts = calloc(ns ? ns : 1, sizeof(rx_stmt));
     if (!stmts) {
         RX_FATAL("out of memory");
     }
@@ -659,9 +633,8 @@ int rx_rxp_unpack(const char *buf, size_t n, const uint8_t hash[32], rx_stmt **o
     return R_OK;
 }
 
-static int rxp_load(const char *path, const uint8_t hash[32], rx_stmt **out, size_t *nout)
-{
-    FILE *f = fopen(path, "rb");
+static int rxp_load(const char* path, const uint8_t hash[32], rx_stmt** out, size_t* nout) {
+    FILE* f = fopen(path, "rb");
     if (!f) {
         return R_ERR_IO_NOTFOUND;
     }
@@ -683,8 +656,7 @@ static int rxp_load(const char *path, const uint8_t hash[32], rx_stmt **out, siz
 
 /* ============================ paths ============================ */
 
-static void cache_path_for(const char *path, char *out, size_t outsz)
-{
+static void cache_path_for(const char* path, char* out, size_t outsz) {
     size_t l = strlen(path);
     if (l >= 4 && rx_strcasecmp(path + l - 4, ".prg") == 0) {
         snprintf(out, outsz, "%.*s.rxp", (int)(l - 4), path);
@@ -693,14 +665,13 @@ static void cache_path_for(const char *path, char *out, size_t outsz)
     }
 }
 
-static void fallback_cache_path(const uint8_t hash[32], char *out, size_t outsz)
-{
-    const char *xdg = getenv("XDG_CACHE_HOME");
+static void fallback_cache_path(const uint8_t hash[32], char* out, size_t outsz) {
+    const char* xdg = getenv("XDG_CACHE_HOME");
     char base[512];
     if (xdg && *xdg) {
         snprintf(base, sizeof(base), "%s/reynard/rxp", xdg);
     } else {
-        const char *home = getenv("HOME");
+        const char* home = getenv("HOME");
         if (home && *home) {
             snprintf(base, sizeof(base), "%s/.cache/reynard/rxp", home);
         } else {
@@ -718,11 +689,10 @@ static void fallback_cache_path(const uint8_t hash[32], char *out, size_t outsz)
     snprintf(out, outsz, "%s/%s.rxp", base, hex);
 }
 
-static int ensure_dir(const char *path)
-{
+static int ensure_dir(const char* path) {
     char tmp[600];
     snprintf(tmp, sizeof(tmp), "%s", path);
-    for (char *p = tmp + 1; *p; p++) {
+    for (char* p = tmp + 1; *p; p++) {
         if (*p == '/') {
             *p = '\0';
             mkdir(tmp, 0777);
@@ -732,9 +702,8 @@ static int ensure_dir(const char *path)
     return mkdir(tmp, 0777) == 0 || errno == EEXIST ? R_OK : R_ERR_IO_OPEN;
 }
 
-static char *read_file(const char *path, size_t *outn)
-{
-    FILE *f = fopen(path, "rb");
+static char* read_file(const char* path, size_t* outn) {
+    FILE* f = fopen(path, "rb");
     if (!f) {
         return NULL;
     }
@@ -756,10 +725,9 @@ static char *read_file(const char *path, size_t *outn)
 
 /* ============================ rx_run_file ============================ */
 
-int rx_run_file(rx_ctx *ctx, const char *path)
-{
+int rx_run_file(rx_ctx* ctx, const char* path) {
     size_t n;
-    char *src = read_file(path, &n);
+    char* src = read_file(path, &n);
     if (!src) {
         snprintf(ctx->prog, sizeof(ctx->prog), "%s", path);
         return rx_raise(ctx, R_ERR_IO_NOTFOUND, 0, 0, "Cannot open %s", path);
@@ -772,7 +740,7 @@ int rx_run_file(rx_ctx *ctx, const char *path)
     fallback_cache_path(hash, fb, sizeof(fb));
 
     snprintf(ctx->prog, sizeof(ctx->prog), "%s", path);
-    rx_stmt *stmts = NULL;
+    rx_stmt* stmts = NULL;
     size_t nstmt = 0;
     int rc;
     if (rxp_load(cache, hash, &stmts, &nstmt) == R_OK ||
@@ -798,7 +766,7 @@ int rx_run_file(rx_ctx *ctx, const char *path)
     r_err err;
     memset(&err, 0, sizeof(err));
     ctx->src = src;
-    rx_tok *toks;
+    rx_tok* toks;
     size_t ntok;
     if (rx_lex(src, path, &toks, &ntok, &err) != R_OK) {
         rx_raise(ctx, err.code, err.line, err.col, "%s", err.msg);
@@ -814,7 +782,7 @@ int rx_run_file(rx_ctx *ctx, const char *path)
     if (rxp_save(cache, hash, stmts, nstmt) != R_OK && fb[0]) {
         char dir[600];
         snprintf(dir, sizeof(dir), "%s", fb);
-        char *sl = strrchr(dir, '/');
+        char* sl = strrchr(dir, '/');
         if (sl) {
             *sl = '\0';
             if (ensure_dir(dir) == R_OK) {

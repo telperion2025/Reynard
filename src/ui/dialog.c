@@ -17,7 +17,7 @@
 
 typedef struct rx_dlg {
     rx_win w;
-    char **lines;
+    char** lines;
     size_t nlines, cap;
     int scroll;
     int has_ed;
@@ -26,12 +26,11 @@ typedef struct rx_dlg {
     int ddx, ddy;
 } rx_dlg;
 
-void dlg_add_line(rx_win *w, const char *line)
-{
-    rx_dlg *d = w->ud;
+void dlg_add_line(rx_win* w, const char* line) {
+    rx_dlg* d = w->ud;
     if (d->nlines == d->cap) {
         size_t nc = d->cap ? d->cap * 2 : 32;
-        char **nl = realloc(d->lines, nc * sizeof(char *));
+        char** nl = realloc(d->lines, nc * sizeof(char*));
         if (!nl) {
             RX_FATAL("out of memory");
         }
@@ -41,21 +40,18 @@ void dlg_add_line(rx_win *w, const char *line)
     d->lines[d->nlines++] = rx_strdup(line);
 }
 
-void dlg_set_editor(rx_win *w)
-{
-    rx_dlg *d = w->ud;
+void dlg_set_editor(rx_win* w) {
+    rx_dlg* d = w->ud;
     d->has_ed = 1;
     gs_init(&d->ed, 0);
 }
 
-static void dlg_add(rx_dlg *d, const char *line)
-{
+static void dlg_add(rx_dlg* d, const char* line) {
     dlg_add_line(&d->w, line);
 }
 
-static void dlg_render(struct rx_ui *ui, rx_win *w)
-{
-    rx_dlg *d = w->ud;
+static void dlg_render(struct rx_ui* ui, rx_win* w) {
+    rx_dlg* d = w->ud;
     win_box(ui, w, RXA_DLG_BORDER, RXA_DLG_TITLE);
     int ix = w->x + 1, iy = w->y + 1;
     int iw = w->w - 2, ih = w->h - 2;
@@ -76,22 +72,20 @@ static void dlg_render(struct rx_ui *ui, rx_win *w)
     }
 }
 
-static void dlg_close(struct rx_ui *ui, rx_dlg *d)
-{
+static void dlg_close(struct rx_ui* ui, rx_dlg* d) {
     (void)ui;
     d->w.want_close = 1;
 }
 
-static int dlg_key(struct rx_ui *ui, rx_win *w, const rkey *k)
-{
-    rx_dlg *d = w->ud;
+static int dlg_key(struct rx_ui* ui, rx_win* w, const rkey* k) {
+    rx_dlg* d = w->ud;
     switch (k->sym) {
     case RXK_ESC:
         dlg_close(ui, d);
         return 1;
     case RXK_ENTER:
         if (d->has_ed) {
-            char *line = rx_strdup(d->ed.buf ? d->ed.buf : "");
+            char* line = rx_strdup(d->ed.buf ? d->ed.buf : "");
             if (line[0]) {
                 rval v;
                 r_err err;
@@ -193,9 +187,8 @@ static int dlg_key(struct rx_ui *ui, rx_win *w, const rkey *k)
     }
 }
 
-static int dlg_mouse(struct rx_ui *ui, rx_win *w, const rmouse *m)
-{
-    rx_dlg *d = w->ud;
+static int dlg_mouse(struct rx_ui* ui, rx_win* w, const rmouse* m) {
+    rx_dlg* d = w->ud;
     int zone = win_border_zone(w, m->x, m->y);
     switch (m->kind) {
     case RM_PRESS:
@@ -231,9 +224,8 @@ static int dlg_mouse(struct rx_ui *ui, rx_win *w, const rmouse *m)
     }
 }
 
-static void dlg_free(rx_win *w)
-{
-    rx_dlg *d = w->ud;
+static void dlg_free(rx_win* w) {
+    rx_dlg* d = w->ud;
     if (d->has_ed) {
         gs_free(&d->ed);
     }
@@ -244,9 +236,8 @@ static void dlg_free(rx_win *w)
     free(d);
 }
 
-rx_win *dlg_new(struct rx_ui *ui, const char *title, int w, int h)
-{
-    rx_dlg *d = calloc(1, sizeof(*d));
+rx_win* dlg_new(struct rx_ui* ui, const char* title, int w, int h) {
+    rx_dlg* d = calloc(1, sizeof(*d));
     if (!d) {
         RX_FATAL("out of memory");
     }
@@ -271,20 +262,18 @@ rx_win *dlg_new(struct rx_ui *ui, const char *title, int w, int h)
     return &d->w;
 }
 
-static rx_dlg *dlg_lines(struct rx_ui *ui, const char *title, int ww, int hh,
-                        const char *const *lines, size_t n)
-{
-    rx_win *w = dlg_new(ui, title, ww, hh);
-    rx_dlg *d = w->ud;
+static rx_dlg* dlg_lines(struct rx_ui* ui, const char* title, int ww, int hh,
+                         const char* const* lines, size_t n) {
+    rx_win* w = dlg_new(ui, title, ww, hh);
+    rx_dlg* d = w->ud;
     for (size_t i = 0; i < n; i++) {
         dlg_add(d, lines[i]);
     }
     return d;
 }
 
-void dlg_about(struct rx_ui *ui)
-{
-    static const char *const lines[] = {
+void dlg_about(struct rx_ui* ui) {
+    static const char* const lines[] = {
         "Reynard 0.1.0 — the clever fox of terminals",
         "A FoxPro 2.6a reimplementation for Unix terminals.",
         "",
@@ -296,9 +285,8 @@ void dlg_about(struct rx_ui *ui)
     dlg_lines(ui, "About Reynard", 52, 9, lines, sizeof(lines) / sizeof(lines[0]));
 }
 
-void dlg_macros(struct rx_ui *ui)
-{
-    static const char *const lines[] = {
+void dlg_macros(struct rx_ui* ui) {
+    static const char* const lines[] = {
         "Macros",
         "",
         "No macros are defined.",
@@ -309,27 +297,25 @@ void dlg_macros(struct rx_ui *ui)
     dlg_lines(ui, "Macros", 48, 8, lines, sizeof(lines) / sizeof(lines[0]));
 }
 
-static int namecmp(const void *a, const void *b)
-{
-    return strcmp(*(const char *const *)a, *(const char *const *)b);
+static int namecmp(const void* a, const void* b) {
+    return strcmp(*(const char* const*)a, *(const char* const*)b);
 }
 
-void dlg_filer(struct rx_ui *ui)
-{
-    rx_win *w = dlg_new(ui, "Filer", 56, 16);
-    rx_dlg *d = w->ud;
-    DIR *dir = opendir(".");
+void dlg_filer(struct rx_ui* ui) {
+    rx_win* w = dlg_new(ui, "Filer", 56, 16);
+    rx_dlg* d = w->ud;
+    DIR* dir = opendir(".");
     if (dir) {
-        char **names = NULL;
+        char** names = NULL;
         size_t nn = 0, cap = 0;
-        struct dirent *e;
+        struct dirent* e;
         while ((e = readdir(dir))) {
             if (e->d_name[0] == '.') {
                 continue;
             }
             if (nn == cap) {
                 cap = cap ? cap * 2 : 64;
-                names = realloc(names, cap * sizeof(char *));
+                names = realloc(names, cap * sizeof(char*));
                 if (!names) {
                     RX_FATAL("out of memory");
                 }
@@ -337,7 +323,7 @@ void dlg_filer(struct rx_ui *ui)
             names[nn++] = rx_strdup(e->d_name);
         }
         closedir(dir);
-        qsort(names, nn, sizeof(char *), namecmp);
+        qsort(names, nn, sizeof(char*), namecmp);
         for (size_t i = 0; i < nn; i++) {
             struct stat st;
             char line[300];
@@ -358,10 +344,9 @@ void dlg_filer(struct rx_ui *ui)
     dlg_add(d, "Up/Down scroll — Esc closes.");
 }
 
-void dlg_calc(struct rx_ui *ui)
-{
-    rx_win *w = dlg_new(ui, "Calculator", 44, 12);
-    rx_dlg *d = w->ud;
+void dlg_calc(struct rx_ui* ui) {
+    rx_win* w = dlg_new(ui, "Calculator", 44, 12);
+    rx_dlg* d = w->ud;
     dlg_set_editor(w);
     dlg_add(d, "Enter an expression, Enter evaluates:");
     dlg_add(d, "");
@@ -370,9 +355,8 @@ void dlg_calc(struct rx_ui *ui)
     dlg_add(d, "Esc closes.");
 }
 
-static int days_in_month(int y, int m)
-{
-    static const int dm[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+static int days_in_month(int y, int m) {
+    static const int dm[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
     if (m == 2) {
         int leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
         return leap ? 29 : 28;
@@ -380,8 +364,7 @@ static int days_in_month(int y, int m)
     return dm[m - 1];
 }
 
-void dlg_calendar(struct rx_ui *ui)
-{
+void dlg_calendar(struct rx_ui* ui) {
     r_err err;
     memset(&err, 0, sizeof(err));
     int fid = rx_func_id("DATE", &err);
@@ -398,11 +381,11 @@ void dlg_calendar(struct rx_ui *ui)
     if (v.t != RX_T_U) {
         rx_rval_free(&v);
     }
-    static const char *const mnames[] = { "",     "January", "February", "March",   "April",
-                                           "May",  "June",    "July",     "August",  "September",
-                                           "October", "November", "December" };
-    rx_win *w = dlg_new(ui, "Calendar/Diary", 34, 13);
-    rx_dlg *d = w->ud;
+    static const char* const mnames[] = {"",        "January",  "February", "March",  "April",
+                                         "May",     "June",     "July",     "August", "September",
+                                         "October", "November", "December"};
+    rx_win* w = dlg_new(ui, "Calendar/Diary", 34, 13);
+    rx_dlg* d = w->ud;
     char line[80];
     snprintf(line, sizeof(line), "%s %d", m > 0 && m <= 12 ? mnames[m] : "?", y);
     dlg_add(d, line);
@@ -438,10 +421,9 @@ void dlg_calendar(struct rx_ui *ui)
     dlg_add(d, "Esc closes.");
 }
 
-void dlg_ascii(struct rx_ui *ui)
-{
-    rx_win *w = dlg_new(ui, "ASCII Chart", 56, 21); /* grid rows are 52 cells wide */
-    rx_dlg *d = w->ud;
+void dlg_ascii(struct rx_ui* ui) {
+    rx_win* w = dlg_new(ui, "ASCII Chart", 56, 21); /* grid rows are 52 cells wide */
+    rx_dlg* d = w->ud;
     char head[80];
     snprintf(head, sizeof(head), "    ");
     for (int c = 0; c < 16; c++) {
@@ -455,7 +437,7 @@ void dlg_ascii(struct rx_ui *ui)
         snprintf(row, sizeof(row), "%02X  ", r * 16);
         for (int c = 0; c < 16; c++) {
             uint8_t b = (uint8_t)(r * 16 + c);
-            char *utf = NULL;
+            char* utf = NULL;
             size_t un = 0;
             char cell[8];
             if (b < 32 || b == 127) {

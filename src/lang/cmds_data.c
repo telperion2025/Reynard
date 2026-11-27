@@ -14,14 +14,13 @@
 #include <strings.h>
 #include <unistd.h>
 
+#include "lang/funcs.h"
 #include "lang/lang.h"
 #include "reynard/dbf.h"
-#include "lang/funcs.h"
 #include "util/util.h"
 
 /* resolve a table name per SET DEFAULT / SET PATH (spec §10.3) */
-static int resolve_table(rx_ctx *ctx, const char *name, char *out, size_t outsz)
-{
+static int resolve_table(rx_ctx* ctx, const char* name, char* out, size_t outsz) {
     char cand[600];
     /* 1: as given (relative to cwd) */
     snprintf(cand, sizeof(cand), "%s", name);
@@ -47,8 +46,8 @@ static int resolve_table(rx_ctx *ctx, const char *name, char *out, size_t outsz)
     if (ctx->set.path[0]) {
         char pathcopy[1024];
         snprintf(pathcopy, sizeof(pathcopy), "%s", ctx->set.path);
-        char *save = NULL;
-        for (char *dir = strtok_r(pathcopy, ",;", &save); dir; dir = strtok_r(NULL, ",;", &save)) {
+        char* save = NULL;
+        for (char* dir = strtok_r(pathcopy, ",;", &save); dir; dir = strtok_r(NULL, ",;", &save)) {
             snprintf(cand, sizeof(cand), "%s/%s.dbf", dir, name);
             if (access(cand, F_OK) == 0) {
                 snprintf(out, outsz, "%s", cand);
@@ -59,10 +58,9 @@ static int resolve_table(rx_ctx *ctx, const char *name, char *out, size_t outsz)
     return R_ERR_IO_NOTFOUND;
 }
 
-int rx_cmd_use(rx_ctx *ctx, rx_stmt *s)
-{
+int rx_cmd_use(rx_ctx* ctx, rx_stmt* s) {
     int area = 0; /* 0 = current */
-    const char *alias = NULL;
+    const char* alias = NULL;
     for (size_t i = 0; i < s->nclause; i++) {
         if (strcmp(s->clauses[i].key, "IN") == 0) {
             if (s->clauses[i].e) {
@@ -76,12 +74,12 @@ int rx_cmd_use(rx_ctx *ctx, rx_stmt *s)
                 if (rv_to_num(&v, &d)) {
                     area = (int)d;
                 } else {
-                    const char *a;
+                    const char* a;
                     size_t n;
                     if (rv_to_str(&v, &a, &n)) {
                         for (int k = 1; k <= 255; k++) {
                             if (rx_wa_used(k)) {
-                                const char *ka;
+                                const char* ka;
                                 rx_wa_alias(k, &ka);
                                 if (strlen(ka) == n && memcmp(ka, a, n) == 0) {
                                     area = k;
@@ -97,9 +95,9 @@ int rx_cmd_use(rx_ctx *ctx, rx_stmt *s)
                 /* store word temporarily in alias handling below */
             }
             if (s->clauses[i].word[0]) {
-                const char *w = s->clauses[i].word;
+                const char* w = s->clauses[i].word;
                 int numeric = w[0] >= '0' && w[0] <= '9';
-                for (const char *q = w; *q; q++) {
+                for (const char* q = w; *q; q++) {
                     if (*q < '0' || *q > '9') {
                         numeric = 0;
                         break;
@@ -108,26 +106,26 @@ int rx_cmd_use(rx_ctx *ctx, rx_stmt *s)
                 if (numeric) {
                     area = atoi(w);
                 } else {
-                int found = 0;
-                for (int k = 1; k <= 255; k++) {
-                    if (rx_wa_used(k)) {
-                        const char *ka;
-                        rx_wa_alias(k, &ka);
-                        if (rx_strcasecmp(ka, w) == 0) {
-                            area = k;
-                            found = 1;
-                            break;
-                        }
-                    }
-                }
-                if (!found) {
+                    int found = 0;
                     for (int k = 1; k <= 255; k++) {
-                        if (!rx_wa_used(k)) {
-                            area = k;
-                            break;
+                        if (rx_wa_used(k)) {
+                            const char* ka;
+                            rx_wa_alias(k, &ka);
+                            if (rx_strcasecmp(ka, w) == 0) {
+                                area = k;
+                                found = 1;
+                                break;
+                            }
                         }
                     }
-                }
+                    if (!found) {
+                        for (int k = 1; k <= 255; k++) {
+                            if (!rx_wa_used(k)) {
+                                area = k;
+                                break;
+                            }
+                        }
+                    }
                 }
             }
         } else if (strcmp(s->clauses[i].key, "ALIAS") == 0) {
@@ -144,7 +142,7 @@ int rx_cmd_use(rx_ctx *ctx, rx_stmt *s)
     if (rc != R_OK) {
         return rc;
     }
-    const char *nm;
+    const char* nm;
     size_t nn;
     if (!rv_to_str(&v, &nm, &nn)) {
         rx_rval_free(&v);
@@ -188,7 +186,7 @@ int rx_cmd_use(rx_ctx *ctx, rx_stmt *s)
         return rc2;
     }
     /* M6 §8.4: USE ... INDEX f1 [, f2] [ORDER n|TAG t [OF cdx]] */
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     if (rx_wa_dbf(area, &dbf) == R_OK) {
         rx_index_registry_purge(ctx, path);
         int nidx = 0;
@@ -209,7 +207,7 @@ int rx_cmd_use(rx_ctx *ctx, rx_stmt *s)
             }
         }
         int has_order = 0;
-        const char *ofpath = NULL;
+        const char* ofpath = NULL;
         char ofbuf[600];
         for (size_t i = 0; i < s->nclause; i++) {
             if (strcmp(s->clauses[i].key, "OF") == 0) {
@@ -223,10 +221,10 @@ int rx_cmd_use(rx_ctx *ctx, rx_stmt *s)
         for (size_t i = 0; i < s->nclause; i++) {
             if (strcmp(s->clauses[i].key, "ORDER") == 0) {
                 has_order = 1;
-                rx_clause *oc = &s->clauses[i];
-                const char *w = oc->word;
+                rx_clause* oc = &s->clauses[i];
+                const char* w = oc->word;
                 int numeric = w[0] != '\0';
-                for (const char *q = w; *q; q++) {
+                for (const char* q = w; *q; q++) {
                     if (*q < '0' || *q > '9') {
                         numeric = 0;
                         break;
@@ -283,8 +281,7 @@ int rx_cmd_use(rx_ctx *ctx, rx_stmt *s)
     return R_OK;
 }
 
-int rx_cmd_close(rx_ctx *ctx, rx_stmt *s)
-{
+int rx_cmd_close(rx_ctx* ctx, rx_stmt* s) {
     int all = 0;
     for (size_t i = 0; i < s->nstrs; i++) {
         if (rx_strcasecmp(s->strs[i], "ALL") == 0 || rx_strcasecmp(s->strs[i], "DATABASES") == 0 ||
@@ -294,9 +291,9 @@ int rx_cmd_close(rx_ctx *ctx, rx_stmt *s)
     }
     if (all) {
         for (int i = 1; i <= 255; i++) {
-            rx_dbf *d;
+            rx_dbf* d;
             if (rx_wa_used(i) && rx_wa_dbf(i, &d) == R_OK) {
-                const char *p;
+                const char* p;
                 if (rx_dbf_path(d, &p) == R_OK) {
                     rx_index_registry_purge(ctx, p); /* M6: drop key-expr cache */
                 }
@@ -305,9 +302,9 @@ int rx_cmd_close(rx_ctx *ctx, rx_stmt *s)
         }
         return R_OK;
     }
-    rx_dbf *d;
+    rx_dbf* d;
     if (rx_wa_dbf(0, &d) == R_OK) {
-        const char *p;
+        const char* p;
         if (rx_dbf_path(d, &p) == R_OK) {
             rx_index_registry_purge(ctx, p);
         }
@@ -315,13 +312,12 @@ int rx_cmd_close(rx_ctx *ctx, rx_stmt *s)
     return rx_wa_close(0);
 }
 
-int rx_cmd_select(rx_ctx *ctx, rx_stmt *s)
-{
+int rx_cmd_select(rx_ctx* ctx, rx_stmt* s) {
     if (s->nstrs > 0) {
         /* bare word: alias or numeric area */
-        const char *w = s->strs[0];
+        const char* w = s->strs[0];
         int numeric = w[0] >= '0' && w[0] <= '9';
-        for (const char *q = w; *q; q++) {
+        for (const char* q = w; *q; q++) {
             if (*q < '0' || *q > '9') {
                 numeric = 0;
                 break;
@@ -334,7 +330,7 @@ int rx_cmd_select(rx_ctx *ctx, rx_stmt *s)
             area = 0;
             for (int i = 1; i <= 255; i++) {
                 if (rx_wa_used(i)) {
-                    const char *ka;
+                    const char* ka;
                     rx_wa_alias(i, &ka);
                     if (rx_strcasecmp(ka, w) == 0) {
                         area = i;
@@ -368,12 +364,12 @@ int rx_cmd_select(rx_ctx *ctx, rx_stmt *s)
         rx_wa_select(area == 0 ? rx_wa_current() : area);
         return R_OK;
     }
-    const char *a;
+    const char* a;
     size_t n;
     if (rv_to_str(&v, &a, &n)) {
         for (int i = 1; i <= 255; i++) {
             if (rx_wa_used(i)) {
-                const char *ka;
+                const char* ka;
                 rx_wa_alias(i, &ka);
                 if (strlen(ka) == n && memcmp(ka, a, n) == 0) {
                     rx_rval_free(&v);
@@ -391,8 +387,7 @@ int rx_cmd_select(rx_ctx *ctx, rx_stmt *s)
 
 /* scope evaluation (spec \u00a78.7): clauses SCOPE/FOR/WHILE; the positional
    half of the range lives in data/scope.c, filter evaluation here (VM). */
-static int eval_scope(rx_ctx *ctx, rx_stmt *s, int default_kind, rx_scope *sc)
-{
+static int eval_scope(rx_ctx* ctx, rx_stmt* s, int default_kind, rx_scope* sc) {
     memset(sc, 0, sizeof(*sc));
     sc->kind = default_kind;
     sc->n = 1;
@@ -434,13 +429,11 @@ static int eval_scope(rx_ctx *ctx, rx_stmt *s, int default_kind, rx_scope *sc)
 
 /* shared scope iteration with SET DELETED, SET FILTER, FOR and WHILE */
 
-
 /* internal sentinel: callback asks iterate() to stop scanning without error
    (SCAN body hit EXIT/RETURN) */
 #define RX_ITER_STOP 0x7ffffff1
 
-static int eval_predicate(rx_ctx *ctx, const rx_code *code, int *pass)
-{
+static int eval_predicate(rx_ctx* ctx, const rx_code* code, int* pass) {
     rval v;
     rx_rval_undef(&v);
     int rc = rx_vm_run(ctx, code, &v, &ctx->err);
@@ -457,8 +450,7 @@ static int eval_predicate(rx_ctx *ctx, const rx_code *code, int *pass)
     return R_OK;
 }
 
-static int compile_clause(rx_ctx *ctx, rx_stmt *s, const char *key, rx_code *code, int *has)
-{
+static int compile_clause(rx_ctx* ctx, rx_stmt* s, const char* key, rx_code* code, int* has) {
     *has = 0;
     memset(code, 0, sizeof(*code));
     for (size_t i = 0; i < s->nclause; i++) {
@@ -473,9 +465,8 @@ static int compile_clause(rx_ctx *ctx, rx_stmt *s, const char *key, rx_code *cod
 /* iterate the scope, honoring SET DELETED / SET FILTER / FOR / WHILE; the
    record pointer ends per FoxPro rules (RECORD n restores, WHILE stops on
    the first false record, ALL/REST/NEXT run to the scope end) */
-static int iterate(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, int default_kind, rx_rec_cb cb, void *ud,
-                   int *count, int keep_pos)
-{
+static int iterate(rx_ctx* ctx, rx_stmt* s, rx_dbf* dbf, int default_kind, rx_rec_cb cb, void* ud,
+                   int* count, int keep_pos) {
     rx_scope sc;
     int rc = eval_scope(ctx, s, default_kind, &sc);
     if (rc != R_OK) {
@@ -513,7 +504,7 @@ static int iterate(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, int default_kind, rx_re
        build the record-number sequence up front (ordered positions for
        ALL/REST/NEXT, physical RECORD n), then walk it. */
     int ordered = rx_index_order_active(dbf);
-    uint32_t *seq = NULL;
+    uint32_t* seq = NULL;
     size_t nseq = 0;
     int64_t endpos = -1; /* ordered: position one past the scope end */
     if (ordered) {
@@ -692,24 +683,23 @@ static int iterate(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, int default_kind, rx_re
 }
 
 typedef struct {
-    rx_ctx *ctx;
-    const size_t *flds;  /**< selected field indices */
-    size_t nf;           /**< number of selected fields */
-    rx_fielddef *fds;    /**< cached def of each selected field (M10) */
-    size_t *foffs;       /**< byte offset of every field in a record (M10) */
-    size_t *widths;
+    rx_ctx* ctx;
+    const size_t* flds; /**< selected field indices */
+    size_t nf;          /**< number of selected fields */
+    rx_fielddef* fds;   /**< cached def of each selected field (M10) */
+    size_t* foffs;      /**< byte offset of every field in a record (M10) */
+    size_t* widths;
     int recw;
     int off;
-    FILE *sink;          /**< LIST/DISPLAY TO FILE: write the listing here (M10) */
-    strbuf sb;           /**< reused across records (M10 perf gate) */
+    FILE* sink; /**< LIST/DISPLAY TO FILE: write the listing here (M10) */
+    strbuf sb;  /**< reused across records (M10 perf gate) */
 } list_ud;
 
 /* Format a DBF numeric field exactly like rx_parse_num()+rx_format_num(d,dec,1)
    ("%.*f") when no rounding is involved (plain decimal, <= 15 significant
    digits, fractional digits <= dec); returns 0 when the exact strtod/snprintf
    path must be used instead. Hot on the LIST 100k gate (spec 11.3, M10). */
-static int fast_num(const uint8_t *raw, size_t len, int dec, char *out, size_t outsz)
-{
+static int fast_num(const uint8_t* raw, size_t len, int dec, char* out, size_t outsz) {
     size_t i = 0;
     while (i < len && (raw[i] == ' ' || raw[i] == '\t')) {
         i++;
@@ -785,10 +775,8 @@ static int fast_num(const uint8_t *raw, size_t len, int dec, char *out, size_t o
 }
 
 /* append n spaces in bulk (padding is hot on the LIST perf path, M10) */
-static void sb_spaces(strbuf *sb, size_t n)
-{
-    static const char sp[64] =
-        "                                                                ";
+static void sb_spaces(strbuf* sb, size_t n) {
+    static const char sp[64] = "                                                                ";
     while (n > 0) {
         size_t c = n > sizeof(sp) ? sizeof(sp) : n;
         sb_put(sb, sp, c);
@@ -799,13 +787,12 @@ static void sb_spaces(strbuf *sb, size_t n)
 /* Emit one field of one record into sb, padded to width w. raw points at the
    field bytes inside the current record buffer when available (M10 fast
    path, no per-field pread/strdup); NULL forces the generic rval path. */
-static void list_emit_field(rx_ctx *ctx, rx_dbf *dbf, size_t f, const rx_fielddef *fd, size_t w,
-                            const uint8_t *raw, strbuf *sb)
-{
+static void list_emit_field(rx_ctx* ctx, rx_dbf* dbf, size_t f, const rx_fielddef* fd, size_t w,
+                            const uint8_t* raw, strbuf* sb) {
     switch (fd->type) {
     case RFT_C:
         if (raw) { /* caller guarantees codepage <= 0 when raw is set */
-            sb_put(sb, (const char *)raw, fd->len);
+            sb_put(sb, (const char*)raw, fd->len);
             if ((size_t)fd->len < w) {
                 sb_spaces(sb, w - fd->len);
             }
@@ -818,7 +805,7 @@ static void list_emit_field(rx_ctx *ctx, rx_dbf *dbf, size_t f, const rx_fieldde
             char num[64];
             if (!fast_num(raw, fd->len, fd->dec, num, sizeof(num))) {
                 int blank;
-                double d = rx_parse_num((const char *)raw, fd->len, &blank);
+                double d = rx_parse_num((const char*)raw, fd->len, &blank);
                 rx_format_num(num, sizeof(num), d, fd->dec, 1);
             }
             size_t nl = strlen(num);
@@ -843,7 +830,8 @@ static void list_emit_field(rx_ctx *ctx, rx_dbf *dbf, size_t f, const rx_fieldde
                 sb_puts(sb, ctx->set.century ? "  /  /    " : "  /  /  ");
                 return;
             }
-            int y = (raw[0] - '0') * 1000 + (raw[1] - '0') * 100 + (raw[2] - '0') * 10 + (raw[3] - '0');
+            int y =
+                (raw[0] - '0') * 1000 + (raw[1] - '0') * 100 + (raw[2] - '0') * 10 + (raw[3] - '0');
             int m = (raw[4] - '0') * 10 + (raw[5] - '0');
             int dd = (raw[6] - '0') * 10 + (raw[7] - '0');
             if (y < 1 || m < 1 || m > 12 || dd < 1 || dd > 31) {
@@ -859,7 +847,7 @@ static void list_emit_field(rx_ctx *ctx, rx_dbf *dbf, size_t f, const rx_fieldde
             }
             if (alldig) {
                 /* MM/DD/YY(YY) is a pure digit copy of YYYYMMDD (M10 fast path) */
-                char *p = d;
+                char* p = d;
                 *p++ = (char)raw[4];
                 *p++ = (char)raw[5];
                 *p++ = '/';
@@ -886,9 +874,9 @@ static void list_emit_field(rx_ctx *ctx, rx_dbf *dbf, size_t f, const rx_fieldde
     case RFT_L:
         if (raw) {
             char c = (char)raw[0];
-            char o = (c == 'Y' || c == 'y' || c == 'T' || c == 't')     ? 'T'
-                     : (c == 'N' || c == 'n' || c == 'F' || c == 'f')   ? 'F'
-                                                                       : '?';
+            char o = (c == 'Y' || c == 'y' || c == 'T' || c == 't')   ? 'T'
+                     : (c == 'N' || c == 'n' || c == 'F' || c == 'f') ? 'F'
+                                                                      : '?';
             sb_putc(sb, o);
             if (w > 1) {
                 sb_spaces(sb, w - 1);
@@ -921,7 +909,7 @@ static void list_emit_field(rx_ctx *ctx, rx_dbf *dbf, size_t f, const rx_fieldde
         return;
     }
     if (fd->type == RFT_C) {
-        const char *str = v.t == RX_T_C ? (v.u.c.utf8 ? v.u.c.utf8 : "") : "";
+        const char* str = v.t == RX_T_C ? (v.u.c.utf8 ? v.u.c.utf8 : "") : "";
         size_t n = v.t == RX_T_C ? v.u.c.n : 0;
         sb_put(sb, str, n);
         if (n < w) {
@@ -979,9 +967,8 @@ static void list_emit_field(rx_ctx *ctx, rx_dbf *dbf, size_t f, const rx_fieldde
 }
 
 /* flush the accumulated listing buffer (M10: batched writes, not per-record) */
-static void flush_list(list_ud *u)
-{
-    strbuf *sb = &u->sb;
+static void flush_list(list_ud* u) {
+    strbuf* sb = &u->sb;
     if (sb->buf && sb->len) {
         if (u->sink) {
             fwrite(sb->buf, 1, sb->len, u->sink);
@@ -993,8 +980,7 @@ static void flush_list(list_ud *u)
 }
 
 /* right-aligned decimal into out; returns length (no snprintf on hot path) */
-static size_t fmt_u32(char *out, uint32_t v)
-{
+static size_t fmt_u32(char* out, uint32_t v) {
     char t[10];
     size_t n = 0;
     do {
@@ -1007,10 +993,9 @@ static size_t fmt_u32(char *out, uint32_t v)
     return n;
 }
 
-static void print_record_line(list_ud *u, rx_dbf *dbf, uint32_t recno, int deleted)
-{
-    rx_ctx *ctx = u->ctx;
-    strbuf *sb = &u->sb;
+static void print_record_line(list_ud* u, rx_dbf* dbf, uint32_t recno, int deleted) {
+    rx_ctx* ctx = u->ctx;
+    strbuf* sb = &u->sb;
     char tmp[16];
     if (!u->off) {
         int rw = u->recw;
@@ -1025,7 +1010,7 @@ static void print_record_line(list_ud *u, rx_dbf *dbf, uint32_t recno, int delet
         sb_put(sb, tmp, n);
     }
     size_t reclen = 0;
-    const uint8_t *rb = rx_dbf_cur_recbuf(dbf, &reclen);
+    const uint8_t* rb = rx_dbf_cur_recbuf(dbf, &reclen);
     int cp = 0;
     rx_dbf_codepage(dbf, &cp);
     if (cp > 0) {
@@ -1033,7 +1018,7 @@ static void print_record_line(list_ud *u, rx_dbf *dbf, uint32_t recno, int delet
     }
     for (size_t k = 0; k < u->nf; k++) {
         size_t f = u->flds[k];
-        const uint8_t *raw = NULL;
+        const uint8_t* raw = NULL;
         if (rb) {
             size_t off = u->foffs[f];
             if (off + u->fds[k].len <= reclen) {
@@ -1049,9 +1034,8 @@ static void print_record_line(list_ud *u, rx_dbf *dbf, uint32_t recno, int delet
     }
 }
 
-static int cb_list(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud)
-{
-    list_ud *u = ud;
+static int cb_list(rx_ctx* ctx, rx_dbf* dbf, uint32_t recno, void* ud) {
+    list_ud* u = ud;
     int del;
     rx_dbf_deleted(dbf, &del);
     (void)ctx;
@@ -1060,11 +1044,10 @@ static int cb_list(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud)
 }
 
 /* resolve the FIELDS clause into an index array; default = all fields */
-static int select_fields(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, size_t **flds_out, size_t *nf_out)
-{
+static int select_fields(rx_ctx* ctx, rx_stmt* s, rx_dbf* dbf, size_t** flds_out, size_t* nf_out) {
     size_t nf;
     rx_dbf_field_count(dbf, &nf);
-    size_t *flds = malloc((nf ? nf : 1) * sizeof(size_t));
+    size_t* flds = malloc((nf ? nf : 1) * sizeof(size_t));
     if (!flds) {
         RX_FATAL("out of memory");
     }
@@ -1093,9 +1076,8 @@ static int select_fields(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, size_t **flds_out
     return R_OK;
 }
 
-int rx_cmd_list(rx_ctx *ctx, rx_stmt *s, int display)
-{
-    rx_dbf *dbf;
+int rx_cmd_list(rx_ctx* ctx, rx_stmt* s, int display) {
+    rx_dbf* dbf;
     int rc = rx_wa_dbf(0, &dbf);
     if (rc != R_OK) {
         return rx_raise(ctx, R_ERR_DBF_NOTOPEN, s->line, s->col, "No table in use");
@@ -1105,7 +1087,7 @@ int rx_cmd_list(rx_ctx *ctx, rx_stmt *s, int display)
     uint32_t nrec;
     rx_dbf_recount(dbf, &nrec);
 
-    size_t *flds;
+    size_t* flds;
     size_t nsel;
     rc = select_fields(ctx, s, dbf, &flds, &nsel);
     if (rc != R_OK) {
@@ -1118,7 +1100,7 @@ int rx_cmd_list(rx_ctx *ctx, rx_stmt *s, int display)
         }
     }
     /* M10 7.1: LIST/DISPLAY ... TO FILE f redirect the listing to f */
-    FILE *sink = NULL;
+    FILE* sink = NULL;
     for (size_t i = 0; i < s->nclause; i++) {
         if (strcmp(s->clauses[i].key, "TOFILE") == 0 && s->clauses[i].word[0]) {
             sink = fopen(s->clauses[i].word, "w");
@@ -1133,9 +1115,9 @@ int rx_cmd_list(rx_ctx *ctx, rx_stmt *s, int display)
 
     /* M10 perf: cache field defs/widths and per-field record offsets once, so
        the per-record loop never calls rx_dbf_field_def or re-walks the defs */
-    size_t *widths = calloc(nsel, sizeof(size_t));
-    rx_fielddef *selfds = malloc((nsel ? nsel : 1) * sizeof(rx_fielddef));
-    size_t *foffs = malloc((nf ? nf : 1) * sizeof(size_t));
+    size_t* widths = calloc(nsel, sizeof(size_t));
+    rx_fielddef* selfds = malloc((nsel ? nsel : 1) * sizeof(rx_fielddef));
+    size_t* foffs = malloc((nf ? nf : 1) * sizeof(size_t));
     if (!widths || !selfds || !foffs) {
         free(widths);
         free(selfds);
@@ -1250,9 +1232,8 @@ int rx_cmd_list(rx_ctx *ctx, rx_stmt *s, int display)
 
 /* M4: navigation helpers that reposition related parent work areas
    (SET RELATION) after every record-pointer move */
-int rx_nav_goto(rx_ctx *ctx, uint32_t recno)
-{
-    rx_dbf *dbf;
+int rx_nav_goto(rx_ctx* ctx, uint32_t recno) {
+    rx_dbf* dbf;
     int rc = rx_wa_dbf(0, &dbf);
     if (rc != R_OK) {
         return rc;
@@ -1265,9 +1246,8 @@ int rx_nav_goto(rx_ctx *ctx, uint32_t recno)
     return R_OK;
 }
 
-int rx_nav_skip(rx_ctx *ctx, int32_t delta)
-{
-    rx_dbf *dbf;
+int rx_nav_skip(rx_ctx* ctx, int32_t delta) {
+    rx_dbf* dbf;
     int rc = rx_wa_dbf(0, &dbf);
     if (rc != R_OK) {
         return rc;
@@ -1283,9 +1263,8 @@ int rx_nav_skip(rx_ctx *ctx, int32_t delta)
     return R_OK;
 }
 
-int rx_cmd_go(rx_ctx *ctx, rx_stmt *s)
-{
-    rx_dbf *dbf;
+int rx_cmd_go(rx_ctx* ctx, rx_stmt* s) {
+    rx_dbf* dbf;
     int rc = rx_wa_dbf(0, &dbf);
     if (rc != R_OK) {
         return rx_raise(ctx, R_ERR_DBF_NOTOPEN, s->line, s->col, "No table in use");
@@ -1331,9 +1310,8 @@ int rx_cmd_go(rx_ctx *ctx, rx_stmt *s)
     return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "GO requires TOP, BOTTOM or a record");
 }
 
-int rx_cmd_skip(rx_ctx *ctx, rx_stmt *s)
-{
-    rx_dbf *dbf;
+int rx_cmd_skip(rx_ctx* ctx, rx_stmt* s) {
+    rx_dbf* dbf;
     int rc = rx_wa_dbf(0, &dbf);
     if (rc != R_OK) {
         return rx_raise(ctx, R_ERR_DBF_NOTOPEN, s->line, s->col, "No table in use");
@@ -1357,8 +1335,7 @@ int rx_cmd_skip(rx_ctx *ctx, rx_stmt *s)
 /* ============================ M2 write commands ============================ */
 
 /* map a data-layer code to a user-facing raise */
-static int data_raise(rx_ctx *ctx, rx_stmt *s, int rc, const char *what)
-{
+static int data_raise(rx_ctx* ctx, rx_stmt* s, int rc, const char* what) {
     switch (rc) {
     case R_ERR_IO_NOTFOUND:
         return rx_raise(ctx, rc, s->line, s->col, "File %s not found", what);
@@ -1380,8 +1357,7 @@ static int data_raise(rx_ctx *ctx, rx_stmt *s, int rc, const char *what)
     }
 }
 
-static int cur_table(rx_ctx *ctx, rx_stmt *s, rx_dbf **out)
-{
+static int cur_table(rx_ctx* ctx, rx_stmt* s, rx_dbf** out) {
     int rc = rx_wa_dbf(0, out);
     if (rc != R_OK) {
         return rx_raise(ctx, R_ERR_DBF_NOTOPEN, s->line, s->col, "No table in use");
@@ -1389,11 +1365,9 @@ static int cur_table(rx_ctx *ctx, rx_stmt *s, rx_dbf **out)
     return R_OK;
 }
 
-
 /* FoxPro rule: DELETE/RECALL/REPLACE default to NEXT 1, but when FOR or
    WHILE is present without an explicit scope the default becomes ALL. */
-static int default_scope_m2(rx_stmt *s, int dflt)
-{
+static int default_scope_m2(rx_stmt* s, int dflt) {
     int has_scope = 0, has_fw = 0;
     for (size_t i = 0; i < s->nclause; i++) {
         if (strcmp(s->clauses[i].key, "SCOPE") == 0) {
@@ -1411,17 +1385,15 @@ static int default_scope_m2(rx_stmt *s, int dflt)
 
 /* ---- DELETE / RECALL ---- */
 
-static int cb_delete(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud)
-{
+static int cb_delete(rx_ctx* ctx, rx_dbf* dbf, uint32_t recno, void* ud) {
     (void)ctx;
     (void)recno;
-    int recall = *(int *)ud;
+    int recall = *(int*)ud;
     return rx_dbf_set_deleted(dbf, recall ? 0 : 1);
 }
 
-int rx_cmd_delete(rx_ctx *ctx, rx_stmt *s, int recall)
-{
-    rx_dbf *dbf;
+int rx_cmd_delete(rx_ctx* ctx, rx_stmt* s, int recall) {
+    rx_dbf* dbf;
     int rc = cur_table(ctx, s, &dbf);
     if (rc != R_OK) {
         return rc;
@@ -1439,9 +1411,8 @@ int rx_cmd_delete(rx_ctx *ctx, rx_stmt *s, int recall)
 
 /* ---- PACK / ZAP ---- */
 
-int rx_cmd_pack(rx_ctx *ctx, rx_stmt *s)
-{
-    rx_dbf *dbf;
+int rx_cmd_pack(rx_ctx* ctx, rx_stmt* s) {
+    rx_dbf* dbf;
     int rc = cur_table(ctx, s, &dbf);
     if (rc != R_OK) {
         return rc;
@@ -1459,9 +1430,8 @@ int rx_cmd_pack(rx_ctx *ctx, rx_stmt *s)
     return R_OK;
 }
 
-int rx_cmd_zap(rx_ctx *ctx, rx_stmt *s)
-{
-    rx_dbf *dbf;
+int rx_cmd_zap(rx_ctx* ctx, rx_stmt* s) {
+    rx_dbf* dbf;
     int rc = cur_table(ctx, s, &dbf);
     if (rc != R_OK) {
         return rc;
@@ -1487,19 +1457,18 @@ int rx_cmd_zap(rx_ctx *ctx, rx_stmt *s)
 /* ---- REPLACE ---- */
 
 typedef struct {
-    rx_ctx *ctx;
-    rx_stmt *s;
-    rx_dbf *main_dbf;
+    rx_ctx* ctx;
+    rx_stmt* s;
+    rx_dbf* main_dbf;
     int exclusive;
     int nrec_done;
     int alias_area; /**< nonzero when an alias->field target was written (M6) */
 } repl_ud;
 
-static int find_area_by_alias(const char *alias)
-{
+static int find_area_by_alias(const char* alias) {
     for (int i = 1; i <= 255; i++) {
         if (rx_wa_used(i)) {
-            const char *a;
+            const char* a;
             rx_wa_alias(i, &a);
             if (rx_strcasecmp(a, alias) == 0) {
                 return i;
@@ -1509,9 +1478,8 @@ static int find_area_by_alias(const char *alias)
     return 0;
 }
 
-static int cb_replace(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud)
-{
-    repl_ud *u = ud;
+static int cb_replace(rx_ctx* ctx, rx_dbf* dbf, uint32_t recno, void* ud) {
+    repl_ud* u = ud;
     int rc;
     if (!u->exclusive) {
         if (rx_dbf_is_readonly(dbf)) {
@@ -1523,14 +1491,14 @@ static int cb_replace(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud)
         }
     }
     for (size_t i = 0; i < u->s->nclause; i++) {
-        rx_clause *c = &u->s->clauses[i];
+        rx_clause* c = &u->s->clauses[i];
         if (strcmp(c->key, "REPL") != 0) {
             continue;
         }
         char fname[140];
         snprintf(fname, sizeof(fname), "%.139s", c->word);
-        rx_dbf *target = dbf;
-        char *arrow = strstr(fname, "->");
+        rx_dbf* target = dbf;
+        char* arrow = strstr(fname, "->");
         if (arrow) {
             *arrow = '\0';
             int area = find_area_by_alias(fname);
@@ -1582,7 +1550,7 @@ static int cb_replace(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud)
         /* index maintenance for the alias target at its current record */
         int saved = rx_wa_current();
         rx_wa_select(u->alias_area);
-        rx_dbf *tdbf;
+        rx_dbf* tdbf;
         if (rx_wa_dbf(u->alias_area, &tdbf) == R_OK) {
             uint32_t tr;
             rx_dbf_recno(tdbf, &tr);
@@ -1597,15 +1565,14 @@ static int cb_replace(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud)
     return R_OK;
 }
 
-int rx_cmd_replace(rx_ctx *ctx, rx_stmt *s)
-{
-    rx_dbf *dbf;
+int rx_cmd_replace(rx_ctx* ctx, rx_stmt* s) {
+    rx_dbf* dbf;
     int rc = cur_table(ctx, s, &dbf);
     if (rc != R_OK) {
         return rc;
     }
     int exclusive = rx_dbf_is_exclusive(dbf);
-    repl_ud ud = { ctx, s, dbf, exclusive, 0, 0 };
+    repl_ud ud = {ctx, s, dbf, exclusive, 0, 0};
     rc = iterate(ctx, s, dbf, default_scope_m2(s, 3), cb_replace, &ud, NULL, 1);
     if (rc != R_OK) {
         return data_raise(ctx, s, rc, "REPLACE");
@@ -1619,9 +1586,8 @@ int rx_cmd_replace(rx_ctx *ctx, rx_stmt *s)
 
 /* ---- LOCATE / CONTINUE ---- */
 
-int rx_cmd_locate(rx_ctx *ctx, rx_stmt *s, int cont)
-{
-    rx_dbf *dbf;
+int rx_cmd_locate(rx_ctx* ctx, rx_stmt* s, int cont) {
+    rx_dbf* dbf;
     int rc = cur_table(ctx, s, &dbf);
     if (rc != R_OK) {
         return rc;
@@ -1634,7 +1600,7 @@ int rx_cmd_locate(rx_ctx *ctx, rx_stmt *s, int cont)
     memset(&while_code, 0, sizeof(while_code));
     uint32_t start, end;
     if (!cont) {
-        rx_expr *for_e = NULL;
+        rx_expr* for_e = NULL;
         for (size_t i = 0; i < s->nclause; i++) {
             if (strcmp(s->clauses[i].key, "FOR") == 0) {
                 for_e = s->clauses[i].e;
@@ -1688,7 +1654,7 @@ int rx_cmd_locate(rx_ctx *ctx, rx_stmt *s, int cont)
     uint32_t found_rec = 0;
     /* M6 §8.4: with a controlling order, LOCATE/CONTINUE scan in tag order */
     int ordered = rx_index_order_active(dbf);
-    uint32_t *oseq = NULL;
+    uint32_t* oseq = NULL;
     size_t onseq = 0;
     if (ordered) {
         int fi, ti;
@@ -1823,12 +1789,11 @@ int rx_cmd_locate(rx_ctx *ctx, rx_stmt *s, int cont)
 /* ---- SCAN ... ENDSCAN (spec §7.1, M5) ---- */
 
 typedef struct {
-    rx_stmt *body; /* container stmt: kids/nkids hold the real body */
+    rx_stmt* body; /* container stmt: kids/nkids hold the real body */
 } scan_ud;
 
-static int scan_cb(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud)
-{
-    scan_ud *u = ud;
+static int scan_cb(rx_ctx* ctx, rx_dbf* dbf, uint32_t recno, void* ud) {
+    scan_ud* u = ud;
     (void)dbf;
     (void)recno;
     int rc = rx_exec_block(ctx, u->body->kids, u->body->nkids);
@@ -1848,9 +1813,8 @@ static int scan_cb(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud)
     return R_OK;
 }
 
-int rx_cmd_scan(rx_ctx *ctx, rx_stmt *s)
-{
-    rx_dbf *dbf;
+int rx_cmd_scan(rx_ctx* ctx, rx_stmt* s) {
+    rx_dbf* dbf;
     int rc = cur_table(ctx, s, &dbf);
     if (rc != R_OK) {
         return rc;
@@ -1858,7 +1822,7 @@ int rx_cmd_scan(rx_ctx *ctx, rx_stmt *s)
     if (s->nkids < 1 || !s->kids[0]) {
         return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "SCAN without body");
     }
-    scan_ud ud = { s->kids[0] };
+    scan_ud ud = {s->kids[0]};
     rc = iterate(ctx, s, dbf, 1 /* ALL */, scan_cb, &ud, NULL, 0);
     if (ctx->loop_ctl == RX_CTL_EXIT) {
         ctx->loop_ctl = RX_CTL_NONE; /* EXIT leaves the SCAN, not the program */
@@ -1868,9 +1832,8 @@ int rx_cmd_scan(rx_ctx *ctx, rx_stmt *s)
 
 /* ---- APPEND ---- */
 
-static int resolve_read_path(rx_ctx *ctx, const char *name, const char *ext, char *out,
-                             size_t outsz)
-{
+static int resolve_read_path(rx_ctx* ctx, const char* name, const char* ext, char* out,
+                             size_t outsz) {
     char cand[600];
     snprintf(cand, sizeof(cand), "%s", name);
     if (access(cand, F_OK) == 0) {
@@ -1901,8 +1864,8 @@ static int resolve_read_path(rx_ctx *ctx, const char *name, const char *ext, cha
     if (ctx->set.path[0]) {
         char pathcopy[1024];
         snprintf(pathcopy, sizeof(pathcopy), "%s", ctx->set.path);
-        char *save = NULL;
-        for (char *dir = strtok_r(pathcopy, ",;", &save); dir; dir = strtok_r(NULL, ",;", &save)) {
+        char* save = NULL;
+        for (char* dir = strtok_r(pathcopy, ",;", &save); dir; dir = strtok_r(NULL, ",;", &save)) {
             snprintf(cand, sizeof(cand), "%s/%s", dir, name);
             if (access(cand, F_OK) == 0) {
                 snprintf(out, outsz, "%s", cand);
@@ -1920,9 +1883,8 @@ static int resolve_read_path(rx_ctx *ctx, const char *name, const char *ext, cha
     return R_ERR_IO_NOTFOUND;
 }
 
-static int append_from_text(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, const char *path, int is_sdf,
-                            char delim, int quote)
-{
+static int append_from_text(rx_ctx* ctx, rx_stmt* s, rx_dbf* dbf, const char* path, int is_sdf,
+                            char delim, int quote) {
     int fd = open(path, O_RDONLY);
     if (fd < 0) {
         return rx_raise(ctx, R_ERR_IO_NOTFOUND, s->line, s->col, "File %s not found", path);
@@ -1949,7 +1911,7 @@ static int append_from_text(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, const char *pa
     }
     size_t nf;
     rx_dbf_field_count(dbf, &nf);
-    size_t *flds = malloc(nf * sizeof(size_t));
+    size_t* flds = malloc(nf * sizeof(size_t));
     if (!flds) {
         sb_free(&sb);
         RX_FATAL("out of memory");
@@ -1959,7 +1921,7 @@ static int append_from_text(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, const char *pa
     }
     uint16_t rsz = 0;
     rx_dbf_recsize(dbf, &rsz);
-    uint8_t *rec = malloc(rsz);
+    uint8_t* rec = malloc(rsz);
     if (!rec) {
         free(flds);
         sb_free(&sb);
@@ -1967,7 +1929,7 @@ static int append_from_text(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, const char *pa
     }
     int n = 0;
     size_t pos = 0, n_all = sb.len;
-    char *data = sb.buf ? sb.buf : (char *)"";
+    char* data = sb.buf ? sb.buf : (char*)"";
     while (pos < n_all) {
         size_t eol = pos;
         while (eol < n_all && data[eol] != '\n') {
@@ -2024,9 +1986,8 @@ static int append_from_text(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, const char *pa
     return R_OK;
 }
 
-static int append_from_dbf(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, const char *path)
-{
-    rx_dbf *src = NULL;
+static int append_from_dbf(rx_ctx* ctx, rx_stmt* s, rx_dbf* dbf, const char* path) {
+    rx_dbf* src = NULL;
     int rc = rx_dbf_open(path, RD_READONLY, &src);
     if (rc != R_OK) {
         return data_raise(ctx, s, rc, path);
@@ -2104,9 +2065,8 @@ static int append_from_dbf(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, const char *pat
     return R_OK;
 }
 
-int rx_cmd_append(rx_ctx *ctx, rx_stmt *s)
-{
-    rx_dbf *dbf;
+int rx_cmd_append(rx_ctx* ctx, rx_stmt* s) {
+    rx_dbf* dbf;
     int rc = cur_table(ctx, s, &dbf);
     if (rc != R_OK) {
         return rc;
@@ -2114,8 +2074,7 @@ int rx_cmd_append(rx_ctx *ctx, rx_stmt *s)
     if (s->nstrs == 0) {
         /* bare APPEND: interactive opens the append-mode Browse grid (M4) */
         if (!ctx->browse_fn) {
-            return rx_raise(ctx, R_ERR_NOUI, s->line, s->col,
-                            "APPEND requires the interactive UI");
+            return rx_raise(ctx, R_ERR_NOUI, s->line, s->col, "APPEND requires the interactive UI");
         }
         rx_stmt bs;
         memset(&bs, 0, sizeof(bs));
@@ -2152,8 +2111,7 @@ int rx_cmd_append(rx_ctx *ctx, rx_stmt *s)
     if (rx_strcasecmp(s->strs[0], "APPEND") == 0) {
         /* bare APPEND (parser echoed the keyword): append-mode Browse (M4) */
         if (!ctx->browse_fn) {
-            return rx_raise(ctx, R_ERR_NOUI, s->line, s->col,
-                            "APPEND requires the interactive UI");
+            return rx_raise(ctx, R_ERR_NOUI, s->line, s->col, "APPEND requires the interactive UI");
         }
         rx_stmt bs;
         memset(&bs, 0, sizeof(bs));
@@ -2166,8 +2124,8 @@ int rx_cmd_append(rx_ctx *ctx, rx_stmt *s)
         return brc;
     }
     /* APPEND FROM */
-    const char *type = NULL;
-    const char *with = NULL;
+    const char* type = NULL;
+    const char* with = NULL;
     for (size_t i = 0; i < s->nclause; i++) {
         if (strcmp(s->clauses[i].key, "TYPE") == 0) {
             type = s->clauses[i].word;
@@ -2177,7 +2135,7 @@ int rx_cmd_append(rx_ctx *ctx, rx_stmt *s)
     }
     char path[600];
     int is_sdf = 0;
-    const char *ext = NULL;
+    const char* ext = NULL;
     char delim = ',';
     int quote = 1;
     if (type && rx_strcasecmp(type, "SDF") == 0) {
@@ -2188,7 +2146,8 @@ int rx_cmd_append(rx_ctx *ctx, rx_stmt *s)
     } else if (!type) {
         ext = "dbf"; /* APPEND FROM with no TYPE reads a DBF */
     } else {
-        return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "APPEND FROM type must be SDF, DELIMITED or a table");
+        return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col,
+                        "APPEND FROM type must be SDF, DELIMITED or a table");
     }
     if (with) {
         if (rx_strcasecmp(with, "BLANK") == 0) {
@@ -2215,12 +2174,12 @@ int rx_cmd_append(rx_ctx *ctx, rx_stmt *s)
 /* ---- COPY TO / COPY STRUCTURE ---- */
 
 typedef struct {
-    rx_ctx *ctx;
-    rx_stmt *s;
-    rx_dbf *src;
-    int fd;        /* text file, -1 when DBF mode */
-    rx_dbf *dst;   /* DBF mode target */
-    const size_t *flds;
+    rx_ctx* ctx;
+    rx_stmt* s;
+    rx_dbf* src;
+    int fd;      /* text file, -1 when DBF mode */
+    rx_dbf* dst; /* DBF mode target */
+    const size_t* flds;
     size_t nf;
     int is_sdf;
     char delim;
@@ -2228,20 +2187,19 @@ typedef struct {
     int n;
 } copy_ud;
 
-static int cb_copy(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud)
-{
+static int cb_copy(rx_ctx* ctx, rx_dbf* dbf, uint32_t recno, void* ud) {
     (void)recno;
-    copy_ud *u = ud;
+    copy_ud* u = ud;
     if (u->fd >= 0) {
         uint16_t rsz = 0;
         rx_dbf_recsize(dbf, &rsz);
-        char *line = malloc((size_t)rsz + 16);
+        char* line = malloc((size_t)rsz + 16);
         if (!line) {
             RX_FATAL("out of memory");
         }
         size_t ln = 0;
         int rc;
-        const uint8_t *raw = rx_dbf_recbuf(dbf);
+        const uint8_t* raw = rx_dbf_recbuf(dbf);
         if (u->is_sdf) {
             rc = rx_sdf_write_line(dbf, u->flds, u->nf, raw, line, (size_t)rsz + 16, &ln);
         } else {
@@ -2301,15 +2259,14 @@ static int cb_copy(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud)
     return R_OK;
 }
 
-int rx_cmd_copy(rx_ctx *ctx, rx_stmt *s)
-{
-    rx_dbf *dbf;
+int rx_cmd_copy(rx_ctx* ctx, rx_stmt* s) {
+    rx_dbf* dbf;
     int rc = cur_table(ctx, s, &dbf);
     if (rc != R_OK) {
         return rc;
     }
     int structure = 0, extended = 0;
-    const char *target_str = NULL;
+    const char* target_str = NULL;
     for (size_t i = 0; i < s->nstrs; i++) {
         if (rx_strcasecmp(s->strs[i], "STRUCTURE") == 0) {
             structure = 1;
@@ -2319,8 +2276,8 @@ int rx_cmd_copy(rx_ctx *ctx, rx_stmt *s)
             target_str = s->strs[i]; /* first non-keyword word is the path */
         }
     }
-    const char *type = NULL;
-    const char *with = NULL;
+    const char* type = NULL;
+    const char* with = NULL;
     for (size_t i = 0; i < s->nclause; i++) {
         if (strcmp(s->clauses[i].key, "TYPE") == 0) {
             type = s->clauses[i].word;
@@ -2340,7 +2297,8 @@ int rx_cmd_copy(rx_ctx *ctx, rx_stmt *s)
     } else if (type && rx_strcasecmp(type, "DELIMITED") == 0) {
         is_delim = 1;
     } else if (type) {
-        return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "COPY TO type must be SDF or DELIMITED");
+        return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col,
+                        "COPY TO type must be SDF or DELIMITED");
     }
     if (with) {
         if (rx_strcasecmp(with, "BLANK") == 0) {
@@ -2362,7 +2320,7 @@ int rx_cmd_copy(rx_ctx *ctx, rx_stmt *s)
         return rx_raise(ctx, R_ERR_IO_PERM, s->line, s->col, "File %s already exists", target);
     }
 
-    size_t *flds;
+    size_t* flds;
     size_t nsel;
     rc = select_fields(ctx, s, dbf, &flds, &nsel);
     if (rc != R_OK) {
@@ -2372,13 +2330,13 @@ int rx_cmd_copy(rx_ctx *ctx, rx_stmt *s)
     if (structure) {
         /* COPY STRUCTURE TO: create the target with the selected layout
            (EXTENDED: the standard FIELD_NAME/FIELD_TYPE/FIELD_LEN/FIELD_DEC) */
-        rx_fielddef *defs;
+        rx_fielddef* defs;
         size_t ndef;
         rx_fielddef ext[4] = {
-            { "FIELD_NAME", RFT_C, 10, 0, 0 },
-            { "FIELD_TYPE", RFT_C, 1, 0, 0 },
-            { "FIELD_LEN", RFT_N, 3, 0, 0 },
-            { "FIELD_DEC", RFT_N, 3, 0, 0 },
+            {"FIELD_NAME", RFT_C, 10, 0, 0},
+            {"FIELD_TYPE", RFT_C, 1, 0, 0},
+            {"FIELD_LEN", RFT_N, 3, 0, 0},
+            {"FIELD_DEC", RFT_N, 3, 0, 0},
         };
         if (extended) {
             defs = ext;
@@ -2397,7 +2355,7 @@ int rx_cmd_copy(rx_ctx *ctx, rx_stmt *s)
         uint8_t version;
         int y, m, d;
         rx_dbf_lupdate(dbf, &y, &m, &d);
-        rx_dbf *nd = NULL;
+        rx_dbf* nd = NULL;
         /* preserve the source version/mark so round trips stay identical */
         uint8_t ver = 0x03, mark = 0x01;
         rx_dbf_version_mark(dbf, &ver, &mark);
@@ -2430,7 +2388,7 @@ int rx_cmd_copy(rx_ctx *ctx, rx_stmt *s)
                 if (rc != R_OK) {
                     break;
                 }
-                char ty[2] = { (char)sf.type, '\0' };
+                char ty[2] = {(char)sf.type, '\0'};
                 rval_set_str(&v, rx_strdup(ty), 1);
                 rc = rx_dbf_put(nd, 1, &v);
                 rx_rval_free(&v);
@@ -2475,7 +2433,7 @@ int rx_cmd_copy(rx_ctx *ctx, rx_stmt *s)
             free(flds);
             return rx_raise(ctx, R_ERR_IO_OPEN, s->line, s->col, "Cannot create %s", target);
         }
-        copy_ud ud = { ctx, s, dbf, fd, NULL, flds, nsel, is_sdf, delim, quote, 0 };
+        copy_ud ud = {ctx, s, dbf, fd, NULL, flds, nsel, is_sdf, delim, quote, 0};
         rc = iterate(ctx, s, dbf, 1 /* ALL */, cb_copy, &ud, NULL, 0);
         close(fd);
         free(flds);
@@ -2489,7 +2447,7 @@ int rx_cmd_copy(rx_ctx *ctx, rx_stmt *s)
     }
 
     /* COPY TO <dbf>: create the target and copy matching records */
-    rx_fielddef *defs = malloc(nsel * sizeof(rx_fielddef));
+    rx_fielddef* defs = malloc(nsel * sizeof(rx_fielddef));
     if (!defs) {
         free(flds);
         RX_FATAL("out of memory");
@@ -2501,14 +2459,14 @@ int rx_cmd_copy(rx_ctx *ctx, rx_stmt *s)
     rx_dbf_version_mark(dbf, &ver, &mark);
     int y, m, d;
     rx_dbf_lupdate(dbf, &y, &m, &d);
-    rx_dbf *nd = NULL;
+    rx_dbf* nd = NULL;
     rc = rx_dbf_create_full(target, defs, nsel, ver, mark, y, m, d, &nd);
     free(defs);
     if (rc != R_OK) {
         free(flds);
         return data_raise(ctx, s, rc, target);
     }
-    copy_ud ud = { ctx, s, dbf, -1, nd, flds, nsel, 0, ',', 1, 0 };
+    copy_ud ud = {ctx, s, dbf, -1, nd, flds, nsel, 0, ',', 1, 0};
     rc = iterate(ctx, s, dbf, 1 /* ALL */, cb_copy, &ud, NULL, 0);
     rx_dbf_close(nd);
     free(flds);
@@ -2523,8 +2481,7 @@ int rx_cmd_copy(rx_ctx *ctx, rx_stmt *s)
 
 /* ---- CREATE ---- */
 
-int rx_cmd_create(rx_ctx *ctx, rx_stmt *s)
-{
+int rx_cmd_create(rx_ctx* ctx, rx_stmt* s) {
     if (s->nstrs == 0) {
         return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "CREATE requires a table name");
     }
@@ -2544,7 +2501,7 @@ int rx_cmd_create(rx_ctx *ctx, rx_stmt *s)
             return rx_raise(ctx, R_ERR_IO_NOTFOUND, s->line, s->col, "File %s not found",
                             s->strs[1]);
         }
-        rx_dbf *sd = NULL;
+        rx_dbf* sd = NULL;
         rc = rx_dbf_open(spath, RD_READONLY, &sd);
         if (rc != R_OK) {
             return data_raise(ctx, s, rc, spath);
@@ -2563,7 +2520,7 @@ int rx_cmd_create(rx_ctx *ctx, rx_stmt *s)
         }
         uint32_t nrec;
         rx_dbf_recount(sd, &nrec);
-        rx_fielddef *defs = calloc(nrec ? nrec : 1, sizeof(rx_fielddef));
+        rx_fielddef* defs = calloc(nrec ? nrec : 1, sizeof(rx_fielddef));
         if (!defs) {
             rx_dbf_close(sd);
             RX_FATAL("out of memory");
@@ -2591,20 +2548,20 @@ int rx_cmd_create(rx_ctx *ctx, rx_stmt *s)
                 rc2 = rx_dbf_get(sd, idec, &vd);
             }
             if (rc2 == R_OK) {
-                const char *s;
+                const char* s;
                 size_t sn;
                 if (rv_to_str(&vn, &s, &sn)) {
                     while (sn > 0 && s[sn - 1] == ' ') {
                         sn--;
                     }
                     if (sn > 0 && sn < 11) {
-                        rx_fielddef *f = &defs[nd++];
+                        rx_fielddef* f = &defs[nd++];
                         memset(f, 0, sizeof(*f));
                         memcpy(f->name, s, sn);
                         f->name[sn] = '\0';
                         rx_strtoupper(f->name);
                         double td;
-                        const char *ts;
+                        const char* ts;
                         size_t tn;
                         if (rv_to_str(&vt, &ts, &tn) && tn >= 1) {
                             f->type = (uint8_t)ts[0];
@@ -2632,7 +2589,7 @@ int rx_cmd_create(rx_ctx *ctx, rx_stmt *s)
             free(defs);
             return rx_raise(ctx, R_ERR_DBF_FIELDS, s->line, s->col, "Structure file has no fields");
         }
-        rx_dbf *nd2 = NULL;
+        rx_dbf* nd2 = NULL;
         rc = rx_dbf_create(target, defs, nd, &nd2);
         free(defs);
         if (rc != R_OK) {
@@ -2648,12 +2605,11 @@ int rx_cmd_create(rx_ctx *ctx, rx_stmt *s)
 
 /* ---- FLUSH / TYPE / UNLOCK ---- */
 
-int rx_cmd_flush(rx_ctx *ctx, rx_stmt *s)
-{
+int rx_cmd_flush(rx_ctx* ctx, rx_stmt* s) {
     (void)s;
     for (int a = 1; a <= 255; a++) {
         if (rx_wa_used(a)) {
-            rx_dbf *d;
+            rx_dbf* d;
             if (rx_wa_dbf(a, &d) == R_OK) {
                 int rc = rx_flush(d);
                 if (rc != R_OK) {
@@ -2669,8 +2625,7 @@ int rx_cmd_flush(rx_ctx *ctx, rx_stmt *s)
     return R_OK;
 }
 
-int rx_cmd_type(rx_ctx *ctx, rx_stmt *s)
-{
+int rx_cmd_type(rx_ctx* ctx, rx_stmt* s) {
     if (s->nstrs == 0) {
         return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "TYPE requires a file name");
     }
@@ -2695,9 +2650,8 @@ int rx_cmd_type(rx_ctx *ctx, rx_stmt *s)
     return R_OK;
 }
 
-int rx_cmd_unlock(rx_ctx *ctx, rx_stmt *s)
-{
-    rx_dbf *dbf;
+int rx_cmd_unlock(rx_ctx* ctx, rx_stmt* s) {
+    rx_dbf* dbf;
     int rc = cur_table(ctx, s, &dbf);
     if (rc != R_OK) {
         return rc;
@@ -2711,7 +2665,7 @@ int rx_cmd_unlock(rx_ctx *ctx, rx_stmt *s)
     if (all) {
         for (int a = 1; a <= 255; a++) {
             if (rx_wa_used(a)) {
-                rx_dbf *d;
+                rx_dbf* d;
                 if (rx_wa_dbf(a, &d) == R_OK) {
                     rx_unlock(d, 0);
                 }
@@ -2724,13 +2678,11 @@ int rx_cmd_unlock(rx_ctx *ctx, rx_stmt *s)
 }
 
 /* ---- M7 exports (cmds_aggr.c shares scope iteration) ---- */
-int rx_iterate(rx_ctx *ctx, rx_stmt *s, rx_dbf *dbf, int default_kind, rx_rec_cb cb, void *ud,
-               int *count)
-{
+int rx_iterate(rx_ctx* ctx, rx_stmt* s, rx_dbf* dbf, int default_kind, rx_rec_cb cb, void* ud,
+               int* count) {
     return iterate(ctx, s, dbf, default_kind, cb, ud, count, 0);
 }
 
-int rx_default_scope(rx_stmt *s, int dflt)
-{
+int rx_default_scope(rx_stmt* s, int dflt) {
     return default_scope_m2(s, dflt);
 }

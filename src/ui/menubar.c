@@ -12,8 +12,7 @@
 #include <ctype.h>
 #include <string.h>
 
-static int title_x(const struct rx_ui *ui, int idx)
-{
+static int title_x(const struct rx_ui* ui, int idx) {
     int x = 1;
     for (int i = 0; i < idx && i < (int)g_menus_n; i++) {
         x += (int)strlen(g_menus[i].title) + 2;
@@ -22,8 +21,7 @@ static int title_x(const struct rx_ui *ui, int idx)
     return x;
 }
 
-int menubar_title_at(const struct rx_ui *ui, int x)
-{
+int menubar_title_at(const struct rx_ui* ui, int x) {
     for (int i = 0; i < (int)g_menus_n; i++) {
         int tx = title_x(ui, i);
         int len = (int)strlen(g_menus[i].title);
@@ -34,10 +32,9 @@ int menubar_title_at(const struct rx_ui *ui, int x)
     return -1;
 }
 
-void menubar_pulldown_geom(const struct rx_ui *ui, int *x, int *y, int *w, int *h)
-{
+void menubar_pulldown_geom(const struct rx_ui* ui, int* x, int* y, int* w, int* h) {
     int m = ui->menu_open;
-    const menu_def *md = &g_menus[m];
+    const menu_def* md = &g_menus[m];
     int pw = 12;
     for (size_t i = 0; i < md->nitems; i++) {
         if (!md->items[i].sep && md->items[i].label) {
@@ -63,16 +60,15 @@ void menubar_pulldown_geom(const struct rx_ui *ui, int *x, int *y, int *w, int *
     }
 }
 
-static void render_pulldown(struct rx_ui *ui)
-{
+static void render_pulldown(struct rx_ui* ui) {
     int m = ui->menu_open;
-    const menu_def *md = &g_menus[m];
+    const menu_def* md = &g_menus[m];
     int x, y, w, h;
     menubar_pulldown_geom(ui, &x, &y, &w, &h);
     scr_box(&ui->scr, x, y, w, h, NULL, RXA_PULL);
     scr_fill(&ui->scr, x + 1, y + 1, w - 2, h - 2, ' ', RXA_PULL); /* opaque over windows */
     for (size_t i = 0; i < md->nitems && (int)i + 1 < h - 1; i++) {
-        const menu_item *it = &md->items[i];
+        const menu_item* it = &md->items[i];
         int row = y + 1 + (int)i;
         if (it->sep) {
             scr_hline(&ui->scr, x + 1, row, w - 2, 0x2500, RXA_PULL);
@@ -80,18 +76,16 @@ static void render_pulldown(struct rx_ui *ui)
         }
         int disabled = it->disabled && it->disabled(ui->ctx);
         int checked = it->checked && it->checked(ui->ctx);
-        uint16_t attr = (int)i == ui->menu_sel ? RXA_PULL_SEL
-                        : disabled              ? RXA_PULL_DIS
-                                                : RXA_PULL;
+        uint16_t attr = (int)i == ui->menu_sel ? RXA_PULL_SEL : disabled ? RXA_PULL_DIS : RXA_PULL;
         scr_fill(&ui->scr, x + 1, row, w - 2, 1, ' ', attr);
         if (checked) {
             scr_put(&ui->scr, x + 1, row, 0x221A, attr); /* √ */
         }
         if (it->label) {
-            const char *lp = it->label;
+            const char* lp = it->label;
             int cx = x + 2;
             int hot_done = 0;
-            for (const char *p = lp; *p && cx < x + w - 1; p++) {
+            for (const char* p = lp; *p && cx < x + w - 1; p++) {
                 uint16_t a = attr;
                 if (it->hotkey && !hot_done && toupper((unsigned char)*p) == it->hotkey) {
                     a = (int)i == ui->menu_sel ? attr : RXA_PULL_HOT;
@@ -104,17 +98,16 @@ static void render_pulldown(struct rx_ui *ui)
     }
 }
 
-void menubar_render(struct rx_ui *ui)
-{
+void menubar_render(struct rx_ui* ui) {
     scr_fill(&ui->scr, 0, 0, ui->scr.w, 1, ' ', RXA_MENU);
     for (int i = 0; i < (int)g_menus_n; i++) {
         int tx = title_x(ui, i);
-        const char *t = g_menus[i].title;
-        uint16_t attr = i == ui->menu_open ? RXA_MENU_OPEN
+        const char* t = g_menus[i].title;
+        uint16_t attr = i == ui->menu_open        ? RXA_MENU_OPEN
                         : (ui->menu_kb && i == 0) ? RXA_MENU_OPEN
                                                   : RXA_MENU;
         int cx = tx;
-        for (const char *p = t; *p && cx < ui->scr.w; p++, cx++) {
+        for (const char* p = t; *p && cx < ui->scr.w; p++, cx++) {
             uint16_t a = attr;
             if (toupper((unsigned char)*p) == g_menus[i].hotkey) {
                 a = i == ui->menu_open ? attr : RXA_MENU_HOT;
@@ -127,8 +120,7 @@ void menubar_render(struct rx_ui *ui)
     }
 }
 
-void menubar_close(struct rx_ui *ui)
-{
+void menubar_close(struct rx_ui* ui) {
     if (ui->menu_open >= 0 || ui->menu_kb) {
         ui->menu_open = -1;
         ui->menu_kb = 0;
@@ -137,8 +129,7 @@ void menubar_close(struct rx_ui *ui)
     }
 }
 
-static void open_menu(struct rx_ui *ui, int idx)
-{
+static void open_menu(struct rx_ui* ui, int idx) {
     if (idx < 0 || idx >= (int)g_menus_n) {
         return;
     }
@@ -146,7 +137,7 @@ static void open_menu(struct rx_ui *ui, int idx)
     ui->menu_kb = 1;
     ui->menu_sel = 0;
     /* first selectable item */
-    const menu_def *md = &g_menus[idx];
+    const menu_def* md = &g_menus[idx];
     while (ui->menu_sel < (int)md->nitems &&
            (md->items[ui->menu_sel].sep ||
             (md->items[ui->menu_sel].disabled && md->items[ui->menu_sel].disabled(ui->ctx)))) {
@@ -158,12 +149,11 @@ static void open_menu(struct rx_ui *ui, int idx)
     ui->dirty = 1;
 }
 
-static void run_item(struct rx_ui *ui, int idx)
-{
+static void run_item(struct rx_ui* ui, int idx) {
     if (idx < 0 || idx >= (int)g_menus[ui->menu_open].nitems) {
         return;
     }
-    const menu_item *it = &g_menus[ui->menu_open].items[idx];
+    const menu_item* it = &g_menus[ui->menu_open].items[idx];
     if (it->sep) {
         return;
     }
@@ -179,9 +169,8 @@ static void run_item(struct rx_ui *ui, int idx)
     ui->dirty = 1;
 }
 
-static int item_at_hotkey(struct rx_ui *ui, int c)
-{
-    const menu_def *md = &g_menus[ui->menu_open];
+static int item_at_hotkey(struct rx_ui* ui, int c) {
+    const menu_def* md = &g_menus[ui->menu_open];
     for (size_t i = 0; i < md->nitems; i++) {
         if (!md->items[i].sep && md->items[i].hotkey == toupper(c)) {
             return (int)i;
@@ -190,8 +179,7 @@ static int item_at_hotkey(struct rx_ui *ui, int c)
     return -1;
 }
 
-int menubar_key(struct rx_ui *ui, const rkey *k)
-{
+int menubar_key(struct rx_ui* ui, const rkey* k) {
     if (ui->menu_open < 0 && !ui->menu_kb) {
         /* activation keys */
         if (k->sym == RXK_F10) {
@@ -225,7 +213,7 @@ int menubar_key(struct rx_ui *ui, const rkey *k)
         return 1;
     case RXK_UP:
     case RXK_DOWN: {
-        const menu_def *md = &g_menus[ui->menu_open];
+        const menu_def* md = &g_menus[ui->menu_open];
         int step = k->sym == RXK_DOWN ? 1 : -1;
         int sel = ui->menu_sel;
         for (int n = 0; n < (int)md->nitems; n++) {
@@ -243,7 +231,7 @@ int menubar_key(struct rx_ui *ui, const rkey *k)
         open_menu(ui, ui->menu_open);
         return 1;
     case RXK_END: {
-        const menu_def *md = &g_menus[ui->menu_open];
+        const menu_def* md = &g_menus[ui->menu_open];
         ui->menu_sel = (int)md->nitems - 1;
         ui->dirty = 1;
         return 1;
@@ -277,8 +265,7 @@ int menubar_key(struct rx_ui *ui, const rkey *k)
     }
 }
 
-int menubar_mouse(struct rx_ui *ui, const rmouse *m)
-{
+int menubar_mouse(struct rx_ui* ui, const rmouse* m) {
     if (m->kind == RM_PRESS && m->button == 1) {
         if (m->y == 0) {
             int idx = menubar_title_at(ui, m->x);

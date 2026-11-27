@@ -12,8 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static int call0(rx_ctx *ctx, const char *name, rval *out)
-{
+static int call0(rx_ctx* ctx, const char* name, rval* out) {
     r_err err;
     memset(&err, 0, sizeof(err));
     int fid = rx_func_id(name, &err);
@@ -29,8 +28,7 @@ static int call0(rx_ctx *ctx, const char *name, rval *out)
     return 0;
 }
 
-static void call_str(rx_ctx *ctx, const char *name, char *buf, size_t bufsz)
-{
+static void call_str(rx_ctx* ctx, const char* name, char* buf, size_t bufsz) {
     rval v;
     if (call0(ctx, name, &v) != 0 || v.t != RX_T_C) {
         if (v.t != RX_T_U) {
@@ -43,8 +41,7 @@ static void call_str(rx_ctx *ctx, const char *name, char *buf, size_t bufsz)
     rx_rval_free(&v);
 }
 
-static long call_num(rx_ctx *ctx, const char *name, int *ok)
-{
+static long call_num(rx_ctx* ctx, const char* name, int* ok) {
     rval v;
     *ok = call0(ctx, name, &v) == 0 && (v.t == RX_T_N || v.t == RX_T_I);
     long r = 0;
@@ -57,8 +54,7 @@ static long call_num(rx_ctx *ctx, const char *name, int *ok)
     return r;
 }
 
-static int call_logic(rx_ctx *ctx, const char *name, int *ok)
-{
+static int call_logic(rx_ctx* ctx, const char* name, int* ok) {
     rval v;
     *ok = call0(ctx, name, &v) == 0 && v.t == RX_T_L;
     int r = *ok && v.u.l == L_T;
@@ -68,9 +64,8 @@ static int call_logic(rx_ctx *ctx, const char *name, int *ok)
     return r;
 }
 
-void statusbar_render(struct rx_ui *ui)
-{
-    rx_screen *s = &ui->scr;
+void statusbar_render(struct rx_ui* ui) {
+    rx_screen* s = &ui->scr;
     int row = s->h - 1;
     scr_fill(s, 0, row, s->w, 1, ' ', RXA_STATUS);
 

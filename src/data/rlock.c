@@ -23,8 +23,7 @@
 
 #define RX_LOCK_BASE 100000000L
 
-static int track_lock(rx_dbf *dbf, uint32_t recno)
-{
+static int track_lock(rx_dbf* dbf, uint32_t recno) {
     for (size_t i = 0; i < dbf->nlocks; i++) {
         if (dbf->locks[i] == recno) {
             return R_OK;
@@ -32,7 +31,7 @@ static int track_lock(rx_dbf *dbf, uint32_t recno)
     }
     if (dbf->nlocks == dbf->caplocks) {
         size_t nc = dbf->caplocks ? dbf->caplocks * 2 : 8;
-        uint32_t *nl = realloc(dbf->locks, nc * sizeof(uint32_t));
+        uint32_t* nl = realloc(dbf->locks, nc * sizeof(uint32_t));
         if (!nl) {
             RX_FATAL("out of memory");
         }
@@ -43,8 +42,7 @@ static int track_lock(rx_dbf *dbf, uint32_t recno)
     return R_OK;
 }
 
-static void untrack_lock(rx_dbf *dbf, uint32_t recno)
-{
+static void untrack_lock(rx_dbf* dbf, uint32_t recno) {
     for (size_t i = 0; i < dbf->nlocks; i++) {
         if (dbf->locks[i] == recno) {
             dbf->locks[i] = dbf->locks[dbf->nlocks - 1];
@@ -54,8 +52,7 @@ static void untrack_lock(rx_dbf *dbf, uint32_t recno)
     }
 }
 
-static int lock_range(rx_dbf *dbf, off_t off, int type)
-{
+static int lock_range(rx_dbf* dbf, off_t off, int type) {
     struct flock fl;
     memset(&fl, 0, sizeof(fl));
     fl.l_type = (short)type;
@@ -76,13 +73,12 @@ static int lock_range(rx_dbf *dbf, off_t off, int type)
         if (retries-- <= 0) {
             return R_ERR_LOCK_CONFLICT;
         }
-        struct timespec ts = { 0, 10 * 1000 * 1000 }; /* 10 ms */
+        struct timespec ts = {0, 10 * 1000 * 1000}; /* 10 ms */
         nanosleep(&ts, NULL);
     }
 }
 
-static void unlock_range(rx_dbf *dbf, off_t off)
-{
+static void unlock_range(rx_dbf* dbf, off_t off) {
     struct flock fl;
     memset(&fl, 0, sizeof(fl));
     fl.l_type = F_UNLCK;
@@ -92,8 +88,7 @@ static void unlock_range(rx_dbf *dbf, off_t off)
     fcntl(dbf->fd, F_SETLK, &fl); /* best effort */
 }
 
-int rx_rlock(rx_dbf *dbf, uint32_t recno)
-{
+int rx_rlock(rx_dbf* dbf, uint32_t recno) {
     if (!dbf) {
         return R_ERR_RANGE;
     }
@@ -110,8 +105,7 @@ int rx_rlock(rx_dbf *dbf, uint32_t recno)
     return track_lock(dbf, recno);
 }
 
-int rx_flock(rx_dbf *dbf)
-{
+int rx_flock(rx_dbf* dbf) {
     if (!dbf) {
         return R_ERR_RANGE;
     }
@@ -129,8 +123,7 @@ int rx_flock(rx_dbf *dbf)
     return rc;
 }
 
-int rx_funlock(rx_dbf *dbf)
-{
+int rx_funlock(rx_dbf* dbf) {
     if (!dbf) {
         return R_ERR_RANGE;
     }
@@ -141,8 +134,7 @@ int rx_funlock(rx_dbf *dbf)
     return R_OK;
 }
 
-void rx_unlock(rx_dbf *dbf, uint32_t recno)
-{
+void rx_unlock(rx_dbf* dbf, uint32_t recno) {
     if (!dbf) {
         return;
     }
@@ -158,8 +150,7 @@ void rx_unlock(rx_dbf *dbf, uint32_t recno)
     untrack_lock(dbf, recno);
 }
 
-int rx_rlock_query(const rx_dbf *dbf, uint32_t recno)
-{
+int rx_rlock_query(const rx_dbf* dbf, uint32_t recno) {
     if (!dbf) {
         return 0;
     }

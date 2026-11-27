@@ -42,8 +42,7 @@
 
 #define NTX_PAGE 1024
 
-static int ntx_read_page(int fd, uint32_t page, uint8_t out[NTX_PAGE])
-{
+static int ntx_read_page(int fd, uint32_t page, uint8_t out[NTX_PAGE]) {
     off_t off = (off_t)page * NTX_PAGE;
     size_t got = 0;
     while (got < NTX_PAGE) {
@@ -57,9 +56,8 @@ static int ntx_read_page(int fd, uint32_t page, uint8_t out[NTX_PAGE])
 }
 
 /* walk one node; leaf entries (recno != 0 marker handled by caller) */
-static int ntx_walk(int fd, rx_tag *t, uint32_t page, uint16_t keylen, uint32_t depth,
-                    uint32_t *visited)
-{
+static int ntx_walk(int fd, rx_tag* t, uint32_t page, uint16_t keylen, uint32_t depth,
+                    uint32_t* visited) {
     if (depth > 32 || page > 100000000u || (*visited)++ > 10000000u) {
         return R_ERR_CDX_NODE;
     }
@@ -76,7 +74,7 @@ static int ntx_walk(int fd, rx_tag *t, uint32_t page, uint16_t keylen, uint32_t 
     for (uint16_t i = 0; i < nk; i++) {
         uint32_t child = rx_cdx_get_u32(buf + off);
         uint32_t recno = rx_cdx_get_u32(buf + off + 4);
-        const uint8_t *key = buf + off + 8;
+        const uint8_t* key = buf + off + 8;
         off += 8 + keylen;
         if (child != 0) {
             rc = ntx_walk(fd, t, child, keylen, depth + 1, visited);
@@ -99,8 +97,7 @@ static int ntx_walk(int fd, rx_tag *t, uint32_t page, uint16_t keylen, uint32_t 
     return rc;
 }
 
-int rx_ntx_read_file(rx_dbf *dbf, const char *path, rx_idx *ix)
-{
+int rx_ntx_read_file(rx_dbf* dbf, const char* path, rx_idx* ix) {
     (void)dbf;
     if (!path || !ix) {
         return R_ERR_RANGE;
@@ -135,9 +132,9 @@ int rx_ntx_read_file(rx_dbf *dbf, const char *path, rx_idx *ix)
         RX_FATAL("out of memory");
     }
     ix->captags = 1;
-    rx_tag *t = &ix->tags[ix->ntags++];
+    rx_tag* t = &ix->tags[ix->ntags++];
     memset(t, 0, sizeof(*t));
-    const char *base = strrchr(path, '/');
+    const char* base = strrchr(path, '/');
     base = base ? base + 1 : path;
     size_t sl = 0;
     while (base[sl] && base[sl] != '.' && sl < 11) {

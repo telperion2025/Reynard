@@ -14,8 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static void scroll_push(rx_cmdwin *c, const char *line)
-{
+static void scroll_push(rx_cmdwin* c, const char* line) {
     if (c->nlines == c->caplines) {
         if (c->caplines >= c->maxlines) {
             free(c->lines[c->head]);
@@ -26,7 +25,7 @@ static void scroll_push(rx_cmdwin *c, const char *line)
             if (nc > c->maxlines) {
                 nc = c->maxlines;
             }
-            char **nl = realloc(c->lines, nc * sizeof(char *));
+            char** nl = realloc(c->lines, nc * sizeof(char*));
             if (!nl) {
                 RX_FATAL("out of memory");
             }
@@ -39,8 +38,7 @@ static void scroll_push(rx_cmdwin *c, const char *line)
     c->nlines++;
 }
 
-void cmdwin_out(rx_cmdwin *c, const char *s, size_t n)
-{
+void cmdwin_out(rx_cmdwin* c, const char* s, size_t n) {
     for (size_t i = 0; i < n; i++) {
         char ch = s[i];
         if (ch == '\n') {
@@ -55,14 +53,12 @@ void cmdwin_out(rx_cmdwin *c, const char *s, size_t n)
     }
 }
 
-int cmdwin_out_hook(void *ud, const char *s, size_t n)
-{
-    cmdwin_out((rx_cmdwin *)ud, s, n);
+int cmdwin_out_hook(void* ud, const char* s, size_t n) {
+    cmdwin_out((rx_cmdwin*)ud, s, n);
     return R_OK;
 }
 
-void cmdwin_layout(struct rx_ui *ui, rx_cmdwin *c)
-{
+void cmdwin_layout(struct rx_ui* ui, rx_cmdwin* c) {
     if (c->w.w == 0 || c->w.h == 0) {
         int h = ui->scr.h - 1 - 1; /* above the status line */
         int ch = 8;
@@ -80,9 +76,8 @@ void cmdwin_layout(struct rx_ui *ui, rx_cmdwin *c)
     win_clamp(ui, &c->w);
 }
 
-static void cmdwin_render(struct rx_ui *ui, rx_win *w)
-{
-    rx_cmdwin *c = w->ud;
+static void cmdwin_render(struct rx_ui* ui, rx_win* w) {
+    rx_cmdwin* c = w->ud;
     win_box(ui, w, RXA_CMD_BORDER, RXA_CMD_TITLE);
     int ix = w->x + 1, iy = w->y + 1;
     int iw = w->w - 2, ih = w->h - 2;
@@ -97,21 +92,20 @@ static void cmdwin_render(struct rx_ui *ui, rx_win *w)
         if (li < 0) {
             continue;
         }
-        const char *line = c->lines[(c->head + (size_t)li) % c->caplines];
+        const char* line = c->lines[(c->head + (size_t)li) % c->caplines];
         scr_textn_clip(&ui->scr, ix, iy + r, line, strlen(line), RXA_CMD, iw);
     }
     gs_render(&c->ed, &ui->scr, ix, input_row, iw, RXA_CMD);
 }
 
-static int cmdwin_key(struct rx_ui *ui, rx_win *w, const rkey *k)
-{
-    rx_cmdwin *c = w->ud;
+static int cmdwin_key(struct rx_ui* ui, rx_win* w, const rkey* k) {
+    rx_cmdwin* c = w->ud;
     if (ui->paused && !(k->sym == RXK_CTL('S'))) {
         return 1; /* paused: swallow input except the resume key */
     }
     switch (k->sym) {
     case RXK_ENTER: {
-        char *line = rx_strdup(c->ed.buf ? c->ed.buf : "");
+        char* line = rx_strdup(c->ed.buf ? c->ed.buf : "");
         if (line[0]) {
             cmdwin_out(c, line, strlen(line));
             cmdwin_out(c, "\n", 1);
@@ -195,9 +189,8 @@ static int cmdwin_key(struct rx_ui *ui, rx_win *w, const rkey *k)
     }
 }
 
-static int cmdwin_mouse(struct rx_ui *ui, rx_win *w, const rmouse *m)
-{
-    rx_cmdwin *c = w->ud;
+static int cmdwin_mouse(struct rx_ui* ui, rx_win* w, const rmouse* m) {
+    rx_cmdwin* c = w->ud;
     int zone = win_border_zone(w, m->x, m->y);
     switch (m->kind) {
     case RM_PRESS:
@@ -233,9 +226,8 @@ static int cmdwin_mouse(struct rx_ui *ui, rx_win *w, const rmouse *m)
     }
 }
 
-rx_cmdwin *cmdwin_new(struct rx_ui *ui)
-{
-    rx_cmdwin *c = calloc(1, sizeof(*c));
+rx_cmdwin* cmdwin_new(struct rx_ui* ui) {
+    rx_cmdwin* c = calloc(1, sizeof(*c));
     if (!c) {
         RX_FATAL("out of memory");
     }
@@ -254,8 +246,7 @@ rx_cmdwin *cmdwin_new(struct rx_ui *ui)
     return c;
 }
 
-void cmdwin_free(rx_cmdwin *c)
-{
+void cmdwin_free(rx_cmdwin* c) {
     gs_hist_save(&c->ed);
     gs_free(&c->ed);
     for (size_t i = 0; i < c->nlines; i++) {

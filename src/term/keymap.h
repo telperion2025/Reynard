@@ -18,7 +18,7 @@ enum {
     RXK_ESC,
     RXK_TAB,
     RXK_BACKTAB,
-    RXK_BS,       /**< backspace */
+    RXK_BS, /**< backspace */
     RXK_UP,
     RXK_DOWN,
     RXK_LEFT,
@@ -42,7 +42,7 @@ enum {
     RXK_F11,
     RXK_F12,
     RXK_RESIZE = 0x100, /**< synthetic: window resized (EV_RESIZE uses kind) */
-    RXK_BASE = 0x200     /**< printable/special keys start here */
+    RXK_BASE = 0x200    /**< printable/special keys start here */
 };
 
 #define RXK_CTL(c) (RXK_BASE + 0x100 + ((c) & 0x1F)) /**< Ctrl+A..Z canonical */

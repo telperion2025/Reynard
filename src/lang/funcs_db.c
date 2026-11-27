@@ -14,8 +14,7 @@
 #include "reynard/dbf.h"
 #include "util/util.h"
 
-static int cur_dbf(rx_ctx *c, rx_dbf **out, r_err *err)
-{
+static int cur_dbf(rx_ctx* c, rx_dbf** out, r_err* err) {
     (void)c;
     int rc = rx_wa_dbf(0, out);
     if (rc != R_OK) {
@@ -25,15 +24,14 @@ static int cur_dbf(rx_ctx *c, rx_dbf **out, r_err *err)
     return rc;
 }
 
-static int f_recno(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_recno(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "RECNO() expects no arguments");
         return err->code;
     }
     (void)argv;
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     int rc = cur_dbf(c, &dbf, err);
     if (rc != R_OK) {
         return rc;
@@ -44,15 +42,14 @@ static int f_recno(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
     return R_OK;
 }
 
-static int f_reccount(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_reccount(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "RECCOUNT() expects no arguments");
         return err->code;
     }
     (void)argv;
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     int rc = cur_dbf(c, &dbf, err);
     if (rc != R_OK) {
         return rc;
@@ -63,15 +60,14 @@ static int f_reccount(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err
     return R_OK;
 }
 
-static int f_bof(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_bof(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "BOF() expects no arguments");
         return err->code;
     }
     (void)argv;
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     int rc = cur_dbf(c, &dbf, err);
     if (rc != R_OK) {
         return rc;
@@ -82,15 +78,14 @@ static int f_bof(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err
     return R_OK;
 }
 
-static int f_eof(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_eof(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "EOF() expects no arguments");
         return err->code;
     }
     (void)argv;
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     int rc = cur_dbf(c, &dbf, err);
     if (rc != R_OK) {
         return rc;
@@ -101,15 +96,14 @@ static int f_eof(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err
     return R_OK;
 }
 
-static int f_deleted(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_deleted(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "DELETED() expects no arguments");
         return err->code;
     }
     (void)argv;
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     int rc = cur_dbf(c, &dbf, err);
     if (rc != R_OK) {
         return rc;
@@ -120,15 +114,14 @@ static int f_deleted(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
     return R_OK;
 }
 
-static int f_alias(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_alias(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     int area = 0;
     if (argc == 1) {
         double d;
         if (rv_to_num(&argv[0], &d)) {
             area = (int)d;
         } else {
-            const char *s;
+            const char* s;
             size_t n;
             if (!rv_to_str(&argv[0], &s, &n)) {
                 err->code = R_ERR_TYPE;
@@ -137,7 +130,7 @@ static int f_alias(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
             }
             for (int i = 1; i <= 255; i++) {
                 if (rx_wa_used(i)) {
-                    const char *a;
+                    const char* a;
                     rx_wa_alias(i, &a);
                     if (n == strlen(a) && memcmp(s, a, n) == 0) {
                         area = i;
@@ -156,15 +149,14 @@ static int f_alias(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
         snprintf(err->msg, sizeof(err->msg), "ALIAS() expects 0 or 1 arguments");
         return err->code;
     }
-    const char *a = "";
+    const char* a = "";
     rx_wa_alias(area, &a);
     f_str(out, rx_strdup(a), strlen(a));
     (void)c;
     return R_OK;
 }
 
-static int f_select(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_select(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 1) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "SELECT() expects 0 or 1 arguments");
@@ -176,7 +168,7 @@ static int f_select(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *
             f_num(c, out, (int)d == 0 ? rx_wa_current() : (double)(int)d);
             return R_OK;
         }
-        const char *s;
+        const char* s;
         size_t n;
         if (!rv_to_str(&argv[0], &s, &n)) {
             err->code = R_ERR_TYPE;
@@ -184,7 +176,7 @@ static int f_select(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *
         }
         for (int i = 1; i <= 255; i++) {
             if (rx_wa_used(i)) {
-                const char *a;
+                const char* a;
                 rx_wa_alias(i, &a);
                 if (strlen(a) == n && memcmp(s, a, n) == 0) {
                     f_num(c, out, i);
@@ -199,15 +191,14 @@ static int f_select(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *
     return R_OK;
 }
 
-static int f_used(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_used(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     int area = 0;
     if (argc == 1) {
         double d;
         if (rv_to_num(&argv[0], &d)) {
             area = (int)d;
         } else {
-            const char *s;
+            const char* s;
             size_t n;
             if (!rv_to_str(&argv[0], &s, &n)) {
                 err->code = R_ERR_TYPE;
@@ -217,7 +208,7 @@ static int f_used(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
             area = -1;
             for (int i = 1; i <= 255; i++) {
                 if (rx_wa_used(i)) {
-                    const char *a;
+                    const char* a;
                     rx_wa_alias(i, &a);
                     if (strlen(a) == n && memcmp(s, a, n) == 0) {
                         area = i;
@@ -236,15 +227,14 @@ static int f_used(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *er
     return R_OK;
 }
 
-static int f_fcount(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_fcount(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "FCOUNT() expects no arguments");
         return err->code;
     }
     (void)argv;
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     int rc = cur_dbf(c, &dbf, err);
     if (rc != R_OK) {
         return rc;
@@ -255,8 +245,7 @@ static int f_fcount(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *
     return R_OK;
 }
 
-static int f_field(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_field(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (f_argc(err, argc, 1, "FIELD") != 0) {
         return err->code;
     }
@@ -266,7 +255,7 @@ static int f_field(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
         snprintf(err->msg, sizeof(err->msg), "FIELD() expects numeric");
         return err->code;
     }
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     int rc = cur_dbf(c, &dbf, err);
     if (rc != R_OK) {
         return rc;
@@ -282,17 +271,16 @@ static int f_field(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
     return R_OK;
 }
 
-static int f_fsize(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_fsize(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (f_argc(err, argc, 1, "FSIZE") != 0) {
         return err->code;
     }
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     int rc = cur_dbf(c, &dbf, err);
     if (rc != R_OK) {
         return rc;
     }
-    const char *s;
+    const char* s;
     size_t n;
     size_t idx;
     if (rv_to_str(&argv[0], &s, &n)) {
@@ -321,15 +309,14 @@ static int f_fsize(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
     return R_OK;
 }
 
-static int f_header(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_header(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "HEADER() expects no arguments");
         return err->code;
     }
     (void)argv;
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     int rc = cur_dbf(c, &dbf, err);
     if (rc != R_OK) {
         return rc;
@@ -341,15 +328,14 @@ static int f_header(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *
     return R_OK;
 }
 
-static int f_recsize(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_recsize(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "RECSIZE() expects no arguments");
         return err->code;
     }
     (void)argv;
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     int rc = cur_dbf(c, &dbf, err);
     if (rc != R_OK) {
         return rc;
@@ -366,15 +352,14 @@ static int f_recsize(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
     return R_OK;
 }
 
-static int f_found(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_found(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "FOUND() expects no arguments");
         return err->code;
     }
     (void)argv;
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     int rc = cur_dbf(c, &dbf, err);
     if (rc != R_OK) {
         f_logic(out, L_F);
@@ -384,15 +369,14 @@ static int f_found(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
     return R_OK;
 }
 
-static int f_flock(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_flock(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "FLOCK() expects no arguments");
         return err->code;
     }
     (void)argv;
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     int rc = cur_dbf(c, &dbf, err);
     if (rc != R_OK) {
         f_logic(out, L_F);
@@ -403,14 +387,13 @@ static int f_flock(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
     return R_OK;
 }
 
-static int f_rlock(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_rlock(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 1) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "RLOCK() expects 0 or 1 arguments");
         return err->code;
     }
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     int rc = cur_dbf(c, &dbf, err);
     if (rc != R_OK) {
         f_logic(out, L_F);
@@ -433,25 +416,24 @@ static int f_rlock(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
     return R_OK;
 }
 
-static int f_lupdate(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_lupdate(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "LUPDATE() expects no arguments");
         return err->code;
     }
     (void)argv;
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     int rc = cur_dbf(c, &dbf, err);
     if (rc != R_OK) {
         return rc;
     }
     int y, m, d;
     if (rx_dbf_lupdate(dbf, &y, &m, &d) == R_OK) {
-        r_date dt = { (int16_t)y, (int16_t)m, (int16_t)d };
+        r_date dt = {(int16_t)y, (int16_t)m, (int16_t)d};
         f_date(out, dt);
     } else {
-        r_date dt = { 0, 0, 0 };
+        r_date dt = {0, 0, 0};
         f_date(out, dt);
     }
     (void)c;
@@ -461,20 +443,19 @@ static int f_lupdate(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
 /* ---- M6 §8.4 index introspection (Appendix A) ---- */
 
 /* area argument: numeric work area or alias; area 0 = current */
-static int area_arg(rx_ctx *c, const rval *v, int *area, r_err *err)
-{
+static int area_arg(rx_ctx* c, const rval* v, int* area, r_err* err) {
     (void)c;
     double d;
     if (rv_to_num(v, &d)) {
         *area = (int)d;
         return R_OK;
     }
-    const char *s;
+    const char* s;
     size_t n;
     if (rv_to_str(v, &s, &n)) {
         for (int i = 1; i <= 255; i++) {
             if (rx_wa_used(i)) {
-                const char *a;
+                const char* a;
                 rx_wa_alias(i, &a);
                 if (strlen(a) == n && memcmp(a, s, n) == 0) {
                     *area = i;
@@ -492,8 +473,7 @@ static int area_arg(rx_ctx *c, const rval *v, int *area, r_err *err)
 }
 
 /* case-insensitive prefix compare of exactly n bytes */
-static int ci_eq_n(const char *a, const char *b, size_t n)
-{
+static int ci_eq_n(const char* a, const char* b, size_t n) {
     for (size_t i = 0; i < n; i++) {
         if (tolower((unsigned char)a[i]) != tolower((unsigned char)b[i])) {
             return 0;
@@ -503,16 +483,15 @@ static int ci_eq_n(const char *a, const char *b, size_t n)
 }
 
 /* find an attached index file by path, basename or stem (case-insensitive) */
-static int file_of_name(rx_dbf *dbf, const char *s, size_t n)
-{
+static int file_of_name(rx_dbf* dbf, const char* s, size_t n) {
     int nf = rx_index_file_count(dbf);
     for (int fi = 0; fi < nf; fi++) {
-        const char *p = NULL;
+        const char* p = NULL;
         rx_index_file_path(dbf, fi, &p);
         if (strlen(p) == n && ci_eq_n(p, s, n)) {
             return fi;
         }
-        const char *base = strrchr(p, '/');
+        const char* base = strrchr(p, '/');
         base = base ? base + 1 : p;
         if (strlen(base) == n && ci_eq_n(base, s, n)) {
             return fi;
@@ -526,21 +505,19 @@ static int file_of_name(rx_dbf *dbf, const char *s, size_t n)
     return -1;
 }
 
-static int f_filter(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_filter(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc > 0) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "FILTER() expects no arguments");
         return err->code;
     }
     (void)argv;
-    const char *t = c->filter_text ? c->filter_text : "";
+    const char* t = c->filter_text ? c->filter_text : "";
     f_str(out, rx_strdup(t), strlen(t));
     return R_OK;
 }
 
-static int f_order(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_order(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     int area = 0;
     if (argc == 1) {
         if (area_arg(c, &argv[0], &area, err) != R_OK) {
@@ -551,7 +528,7 @@ static int f_order(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
         snprintf(err->msg, sizeof(err->msg), "ORDER() expects 0 or 1 arguments");
         return err->code;
     }
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     if (rx_wa_dbf(area == 0 ? rx_wa_current() : area, &dbf) != R_OK) {
         f_str(out, rx_strdup(""), 0);
         return R_OK;
@@ -562,15 +539,14 @@ static int f_order(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *e
         f_str(out, rx_strdup(""), 0);
         return R_OK;
     }
-    const char *name = "";
+    const char* name = "";
     rx_tag_info(dbf, fi, ti, &name, NULL, NULL);
     f_str(out, rx_strdup(name), strlen(name));
     return R_OK;
 }
 
 /* TAG([cdx,] n [, area]) / KEY([cdx,] n [, area]): shared walk */
-static int tag_nth(rx_dbf *dbf, const char *cdx, long n, int want_key, char **res)
-{
+static int tag_nth(rx_dbf* dbf, const char* cdx, long n, int want_key, char** res) {
     int nf = rx_index_file_count(dbf);
     if (cdx) {
         int fi = file_of_name(dbf, cdx, strlen(cdx));
@@ -602,13 +578,12 @@ static int tag_nth(rx_dbf *dbf, const char *cdx, long n, int want_key, char **re
     return 0;
 }
 
-static int f_tag(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_tag(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     size_t i = 0;
-    const char *cdx = NULL;
+    const char* cdx = NULL;
     if (argc == 0) {
         /* TAG() = name of the controlling order tag */
-        rx_dbf *dbf;
+        rx_dbf* dbf;
         if (rx_wa_dbf(0, &dbf) != R_OK) {
             f_str(out, rx_strdup(""), 0);
             return R_OK;
@@ -619,7 +594,7 @@ static int f_tag(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err
             f_str(out, rx_strdup(""), 0);
             return R_OK;
         }
-        const char *name = "";
+        const char* name = "";
         rx_tag_info(dbf, fi, ti, &name, NULL, NULL);
         f_str(out, rx_strdup(name), strlen(name));
         return R_OK;
@@ -627,7 +602,7 @@ static int f_tag(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err
     if (argc >= 1) {
         double d;
         if (!rv_to_num(&argv[0], &d)) {
-            const char *s;
+            const char* s;
             size_t n;
             if (!rv_to_str(&argv[0], &s, &n)) {
                 err->code = R_ERR_TYPE;
@@ -658,12 +633,12 @@ static int f_tag(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err
         snprintf(err->msg, sizeof(err->msg), "TAG() expects at most 3 arguments");
         return err->code;
     }
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     if (rx_wa_dbf(area == 0 ? rx_wa_current() : area, &dbf) != R_OK) {
         f_str(out, rx_strdup(""), 0);
         return R_OK;
     }
-    char *res = NULL;
+    char* res = NULL;
     if (!tag_nth(dbf, cdx, (long)d, 0, &res)) {
         f_str(out, rx_strdup(""), 0);
         return R_OK;
@@ -672,13 +647,12 @@ static int f_tag(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err
     return R_OK;
 }
 
-static int f_key(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_key(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     size_t i = 0;
-    const char *cdx = NULL;
+    const char* cdx = NULL;
     if (argc == 0) {
         /* KEY() = key expression of the controlling order tag */
-        rx_dbf *dbf;
+        rx_dbf* dbf;
         if (rx_wa_dbf(0, &dbf) != R_OK) {
             f_str(out, rx_strdup(""), 0);
             return R_OK;
@@ -689,7 +663,7 @@ static int f_key(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err
             f_str(out, rx_strdup(""), 0);
             return R_OK;
         }
-        const char *key = "";
+        const char* key = "";
         rx_tag_info(dbf, fi, ti, NULL, &key, NULL);
         f_str(out, rx_strdup(key), strlen(key));
         return R_OK;
@@ -697,7 +671,7 @@ static int f_key(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err
     if (argc >= 1) {
         double d;
         if (!rv_to_num(&argv[0], &d)) {
-            const char *s;
+            const char* s;
             size_t n;
             if (!rv_to_str(&argv[0], &s, &n)) {
                 err->code = R_ERR_TYPE;
@@ -723,12 +697,12 @@ static int f_key(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err
     if (argc > i + 1 && area_arg(c, &argv[i + 1], &area, err) != R_OK) {
         return err->code;
     }
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     if (rx_wa_dbf(area == 0 ? rx_wa_current() : area, &dbf) != R_OK) {
         f_str(out, rx_strdup(""), 0);
         return R_OK;
     }
-    char *res = NULL;
+    char* res = NULL;
     if (!tag_nth(dbf, cdx, (long)d, 1, &res)) {
         f_str(out, rx_strdup(""), 0);
         return R_OK;
@@ -737,15 +711,14 @@ static int f_key(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err
     return R_OK;
 }
 
-static int f_tagcount(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
-    const char *cdx = NULL;
+static int f_tagcount(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
+    const char* cdx = NULL;
     int area = 0;
     size_t i = 0;
     if (argc >= 1) {
         double d;
         if (!rv_to_num(&argv[0], &d)) {
-            const char *s;
+            const char* s;
             size_t n;
             if (!rv_to_str(&argv[0], &s, &n)) {
                 err->code = R_ERR_TYPE;
@@ -762,7 +735,7 @@ static int f_tagcount(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err
         }
     }
     (void)i;
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     if (rx_wa_dbf(area == 0 ? rx_wa_current() : area, &dbf) != R_OK) {
         f_num(c, out, 0);
         return R_OK;
@@ -782,8 +755,8 @@ static int f_tagcount(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err
 }
 
 /* CDX(n [, area]) / MDX(n [, area]) / NDX(n [, area]): nth attached file */
-static int f_idxfile(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err, int want_cdx)
-{
+static int f_idxfile(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err,
+                     int want_cdx) {
     if (argc < 1 || argc > 2) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "CDX()/NDX() expect 1 or 2 arguments");
@@ -799,7 +772,7 @@ static int f_idxfile(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
     if (argc == 2 && area_arg(c, &argv[1], &area, err) != R_OK) {
         return err->code;
     }
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     if (rx_wa_dbf(area == 0 ? rx_wa_current() : area, &dbf) != R_OK) {
         f_str(out, rx_strdup(""), 0);
         return R_OK;
@@ -812,7 +785,7 @@ static int f_idxfile(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
         }
         k++;
         if (k == (long)d) {
-            const char *p = NULL;
+            const char* p = NULL;
             rx_index_file_path(dbf, fi, &p);
             f_str(out, rx_strdup(p), strlen(p));
             return R_OK;
@@ -822,29 +795,25 @@ static int f_idxfile(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err 
     return R_OK;
 }
 
-static int f_cdx(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_cdx(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return f_idxfile(c, a, v, o, e, 1);
 }
 
-static int f_mdx(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_mdx(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return f_idxfile(c, a, v, o, e, 1);
 }
 
-static int f_ndx(rx_ctx *c, size_t a, const rval *v, rval *o, r_err *e)
-{
+static int f_ndx(rx_ctx* c, size_t a, const rval* v, rval* o, r_err* e) {
     return f_idxfile(c, a, v, o, e, 0);
 }
 
-static int f_keycount(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
-    const char *cdx = NULL;
+static int f_keycount(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
+    const char* cdx = NULL;
     int area = 0;
     if (argc >= 1) {
         double d;
         if (!rv_to_num(&argv[0], &d)) {
-            const char *s;
+            const char* s;
             size_t n;
             if (!rv_to_str(&argv[0], &s, &n)) {
                 err->code = R_ERR_TYPE;
@@ -859,7 +828,7 @@ static int f_keycount(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err
             return err->code;
         }
     }
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     if (rx_wa_dbf(area == 0 ? rx_wa_current() : area, &dbf) != R_OK) {
         f_num(c, out, 0);
         return R_OK;
@@ -892,8 +861,7 @@ static int f_keycount(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err
     return R_OK;
 }
 
-static int f_target(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_target(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc < 1 || argc > 2) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "TARGET() expects 1 or 2 arguments");
@@ -925,8 +893,7 @@ static int f_target(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *
     return R_OK;
 }
 
-static int f_relation(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err *err)
-{
+static int f_relation(rx_ctx* c, size_t argc, const rval* argv, rval* out, r_err* err) {
     if (argc < 1 || argc > 2) {
         err->code = R_ERR_TYPE;
         snprintf(err->msg, sizeof(err->msg), "RELATION() expects 1 or 2 arguments");
@@ -950,7 +917,7 @@ static int f_relation(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err
         }
         k++;
         if (k == (long)d) {
-            const char *t = c->rels[i].text ? c->rels[i].text : "";
+            const char* t = c->rels[i].text ? c->rels[i].text : "";
             f_str(out, rx_strdup(t), strlen(t));
             return R_OK;
         }
@@ -960,16 +927,36 @@ static int f_relation(rx_ctx *c, size_t argc, const rval *argv, rval *out, r_err
 }
 
 const rx_funcdef rx_funcs_db[] = {
-    { "RECNO", f_recno },     { "RECCOUNT", f_reccount }, { "BOF", f_bof },     { "EOF", f_eof },
-    { "DELETED", f_deleted }, { "ALIAS", f_alias },       { "SELECT", f_select }, { "USED", f_used },
-    { "FCOUNT", f_fcount },   { "FIELD", f_field },       { "FSIZE", f_fsize }, { "HEADER", f_header },
-    { "RECSIZE", f_recsize }, { "FOUND", f_found },       { "LUPDATE", f_lupdate },
-    { "FILTER", f_filter },   { "ORDER", f_order },       { "TAG", f_tag },
-    { "FLOCK", f_flock },     { "RLOCK", f_rlock },       { "LOCK", f_rlock },
+    {"RECNO", f_recno},
+    {"RECCOUNT", f_reccount},
+    {"BOF", f_bof},
+    {"EOF", f_eof},
+    {"DELETED", f_deleted},
+    {"ALIAS", f_alias},
+    {"SELECT", f_select},
+    {"USED", f_used},
+    {"FCOUNT", f_fcount},
+    {"FIELD", f_field},
+    {"FSIZE", f_fsize},
+    {"HEADER", f_header},
+    {"RECSIZE", f_recsize},
+    {"FOUND", f_found},
+    {"LUPDATE", f_lupdate},
+    {"FILTER", f_filter},
+    {"ORDER", f_order},
+    {"TAG", f_tag},
+    {"FLOCK", f_flock},
+    {"RLOCK", f_rlock},
+    {"LOCK", f_rlock},
     /* M6 §8.4 index introspection (Appendix A) */
-    { "TAGCOUNT", f_tagcount }, { "CDX", f_cdx },         { "MDX", f_mdx },     { "NDX", f_ndx },
-    { "KEY", f_key },         { "KEYCOUNT", f_keycount }, { "TARGET", f_target },
-    { "RELATION", f_relation },
+    {"TAGCOUNT", f_tagcount},
+    {"CDX", f_cdx},
+    {"MDX", f_mdx},
+    {"NDX", f_ndx},
+    {"KEY", f_key},
+    {"KEYCOUNT", f_keycount},
+    {"TARGET", f_target},
+    {"RELATION", f_relation},
 };
 
 const size_t rx_funcs_db_n = sizeof(rx_funcs_db) / sizeof(rx_funcs_db[0]);

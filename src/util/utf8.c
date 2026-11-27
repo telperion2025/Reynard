@@ -7,8 +7,7 @@
  */
 #include "util/util.h"
 
-size_t utf8_decode(const char *s, size_t n, uint32_t *cp)
-{
+size_t utf8_decode(const char* s, size_t n, uint32_t* cp) {
     if (n == 0) {
         *cp = 0;
         return 0;
@@ -36,8 +35,7 @@ size_t utf8_decode(const char *s, size_t n, uint32_t *cp)
     return 1;
 }
 
-size_t utf8_encode(uint32_t cp, char *out)
-{
+size_t utf8_encode(uint32_t cp, char* out) {
     if (cp < 0x80) {
         out[0] = (char)cp;
         return 1;
@@ -60,8 +58,7 @@ size_t utf8_encode(uint32_t cp, char *out)
     return 4;
 }
 
-size_t utf8_length(const char *s, size_t n)
-{
+size_t utf8_length(const char* s, size_t n) {
     size_t count = 0;
     size_t i = 0;
     while (i < n) {
@@ -76,8 +73,7 @@ size_t utf8_length(const char *s, size_t n)
     return count;
 }
 
-int utf8_cp_width(uint32_t cp)
-{
+int utf8_cp_width(uint32_t cp) {
     /* Combining diacriticals and zero-width joiners are width 0. */
     if (cp >= 0x0300 && cp <= 0x036F) {
         return 0;

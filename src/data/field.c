@@ -12,9 +12,8 @@
 
 #include "util/util.h"
 
-static int decode_char(const rx_dbf *dbf, const uint8_t *raw, uint8_t len, rval *out)
-{
-    char *utf8 = NULL;
+static int decode_char(const rx_dbf* dbf, const uint8_t* raw, uint8_t len, rval* out) {
+    char* utf8 = NULL;
     size_t n = 0;
     int rc = R_OK;
     if (dbf->codepage > 0) {
@@ -36,9 +35,8 @@ static int decode_char(const rx_dbf *dbf, const uint8_t *raw, uint8_t len, rval 
     return R_OK;
 }
 
-int rx_field_decode(const rx_dbf *dbf, size_t fldidx, const uint8_t *raw, rval *out)
-{
-    const rx_fielddef *f = &dbf->fields[fldidx];
+int rx_field_decode(const rx_dbf* dbf, size_t fldidx, const uint8_t* raw, rval* out) {
+    const rx_fielddef* f = &dbf->fields[fldidx];
     rx_rval_undef(out);
     switch (f->type) {
     case RFT_C:
@@ -46,7 +44,7 @@ int rx_field_decode(const rx_dbf *dbf, size_t fldidx, const uint8_t *raw, rval *
     case RFT_N:
     case RFT_F: {
         int blank;
-        double d = rx_parse_num((const char *)raw, f->len, &blank);
+        double d = rx_parse_num((const char*)raw, f->len, &blank);
         out->t = RX_T_N;
         out->u.n.d = d;
         out->u.n.dec = f->dec;
@@ -179,8 +177,7 @@ int rx_field_decode(const rx_dbf *dbf, size_t fldidx, const uint8_t *raw, rval *
 
 /* ============================ encode (M2 write path) ============================ */
 
-static double rval_num_or(const rval *v, int *ok)
-{
+static double rval_num_or(const rval* v, int* ok) {
     switch (v->t) {
     case RX_T_N:
         *ok = 1;
@@ -206,13 +203,12 @@ static double rval_num_or(const rval *v, int *ok)
     }
 }
 
-int rx_field_encode(rx_dbf *dbf, size_t fldidx, const rval *in, uint8_t *raw)
-{
-    const rx_fielddef *f = &dbf->fields[fldidx];
+int rx_field_encode(rx_dbf* dbf, size_t fldidx, const rval* in, uint8_t* raw) {
+    const rx_fielddef* f = &dbf->fields[fldidx];
     memset(raw, ' ', f->len);
     switch (f->type) {
     case RFT_C: {
-        const char *s = "";
+        const char* s = "";
         size_t n = 0;
         if (in->t == RX_T_C) {
             s = in->u.c.utf8 ? in->u.c.utf8 : "";
@@ -224,7 +220,7 @@ int rx_field_encode(rx_dbf *dbf, size_t fldidx, const rval *in, uint8_t *raw)
             return R_ERR_TYPE;
         }
         if (dbf->codepage > 0) {
-            uint8_t *cp = malloc(n ? n : 1); /* UTF-8 -> single byte never expands */
+            uint8_t* cp = malloc(n ? n : 1); /* UTF-8 -> single byte never expands */
             if (!cp) {
                 RX_FATAL("out of memory");
             }

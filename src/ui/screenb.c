@@ -16,11 +16,18 @@
 
 /* ============================ designer ============================ */
 
-static void draw_box(rx_screen *scr, int r1, int c1, int r2, int c2, uint16_t attr)
-{
+static void draw_box(rx_screen* scr, int r1, int c1, int r2, int c2, uint16_t attr) {
     int y1 = r1 + 1, x1 = c1, y2 = r2 + 1, x2 = c2;
-    if (y2 < y1) { int t = y1; y1 = y2; y2 = t; }
-    if (x2 < x1) { int t = x1; x1 = x2; x2 = t; }
+    if (y2 < y1) {
+        int t = y1;
+        y1 = y2;
+        y2 = t;
+    }
+    if (x2 < x1) {
+        int t = x1;
+        x1 = x2;
+        x2 = t;
+    }
     if (y1 < 1 || y2 > scr->h - 2 || x1 < 0 || x2 >= scr->w) {
         return;
     }
@@ -38,12 +45,11 @@ static void draw_box(rx_screen *scr, int r1, int c1, int r2, int c2, uint16_t at
     }
 }
 
-static void designer_render(rx_ui *ui, const scr_file *sf, int cy, int cx, int boxmode, int br, int bc,
-                            const char *prompt, const getsay *ed)
-{
+static void designer_render(rx_ui* ui, const scr_file* sf, int cy, int cx, int boxmode, int br,
+                            int bc, const char* prompt, const getsay* ed) {
     scr_fill(&ui->scr, 0, 1, ui->scr.w, ui->scr.h - 2, ' ', RXA_DESKTOP);
     for (size_t i = 0; i < sf->nitems; i++) {
-        const scr_item *it = &sf->items[i];
+        const scr_item* it = &sf->items[i];
         int y = it->row + 1, x = it->col;
         if (y < 1 || y >= ui->scr.h - 1) {
             continue;
@@ -90,7 +96,7 @@ static void designer_render(rx_ui *ui, const scr_file *sf, int cy, int cx, int b
     }
     /* cursor: inverted cell */
     if (cy + 1 >= 1 && cy + 1 < ui->scr.h - 1 && cx >= 0 && cx < ui->scr.w) {
-        rcell *c = &ui->scr.cells[(cy + 1) * ui->scr.w + cx];
+        rcell* c = &ui->scr.cells[(cy + 1) * ui->scr.w + cx];
         uint32_t ch = c->ch ? c->ch : ' ';
         scr_fill(&ui->scr, cx, cy + 1, 1, 1, ch, RXA(RXC_BLACK, RXC_BCYAN));
     }
@@ -99,8 +105,10 @@ static void designer_render(rx_ui *ui, const scr_file *sf, int cy, int cx, int b
         snprintf(line, sizeof(line), "%s%s", prompt, ed && ed->buf ? ed->buf : "");
         ui_set_msg(ui, "%s", line);
     } else {
-        ui_set_msg(ui, "SCREEN %s: arrows move  S=say  G=get  B=box  X=del  ^W=save  Esc=cancel  (%zu items)",
-                   sf->name, sf->nitems);
+        ui_set_msg(
+            ui,
+            "SCREEN %s: arrows move  S=say  G=get  B=box  X=del  ^W=save  Esc=cancel  (%zu items)",
+            sf->name, sf->nitems);
     }
     menubar_render(ui);
     statusbar_render(ui);
@@ -108,9 +116,8 @@ static void designer_render(rx_ui *ui, const scr_file *sf, int cy, int cx, int b
 }
 
 /* modal line prompt on the message line; returns R_OK with text, 1 = cancelled */
-static int designer_prompt(rx_ui *ui, const scr_file *sf, int cy, int cx, int boxmode, int br, int bc,
-                           const char *prompt, char *out, size_t outsz)
-{
+static int designer_prompt(rx_ui* ui, const scr_file* sf, int cy, int cx, int boxmode, int br,
+                           int bc, const char* prompt, char* out, size_t outsz) {
     getsay ed;
     gs_init(&ed, 0);
     int cancelled = 0;
@@ -130,7 +137,7 @@ static int designer_prompt(rx_ui *ui, const scr_file *sf, int cy, int cx, int bo
         if (ev.kind != EV_KEY) {
             continue;
         }
-        const rkey *k = &ev.u.k;
+        const rkey* k = &ev.u.k;
         if (k->sym == RXK_ESC) {
             cancelled = 1;
             break;
@@ -174,17 +181,16 @@ static int designer_prompt(rx_ui *ui, const scr_file *sf, int cy, int cx, int bo
     return cancelled ? 1 : R_OK;
 }
 
-int ui_screen_designer(void *ud, struct rx_stmt *s)
-{
-    rx_ui *ui = ud;
-    rx_ctx *ctx = ui->ctx;
-    const char *name = s->nstrs > 0 ? s->strs[0] : "SCREEN";
+int ui_screen_designer(void* ud, struct rx_stmt* s) {
+    rx_ui* ui = ud;
+    rx_ctx* ctx = ui->ctx;
+    const char* name = s->nstrs > 0 ? s->strs[0] : "SCREEN";
     int create = s->kind == ST_CREATE_SCREEN;
     char scrpath[600], rsopath[600];
     snprintf(scrpath, sizeof(scrpath), "%s.scr", name);
     snprintf(rsopath, sizeof(rsopath), "%s.rso", name);
     scr_file sfv;
-    scr_file *sf = &sfv;
+    scr_file* sf = &sfv;
     if (create) {
         scrf_init(sf, name);
     } else {
@@ -218,7 +224,7 @@ int ui_screen_designer(void *ud, struct rx_stmt *s)
             continue;
         }
         if (ev.kind == EV_MOUSE) {
-            const rmouse *m = &ev.u.m;
+            const rmouse* m = &ev.u.m;
             if (m->kind == RM_PRESS && m->button == 1 && m->y >= 1 && m->y < ui->scr.h - 1) {
                 cy = m->y - 1;
                 cx = m->x;
@@ -228,7 +234,7 @@ int ui_screen_designer(void *ud, struct rx_stmt *s)
         if (ev.kind != EV_KEY) {
             continue;
         }
-        const rkey *k = &ev.u.k;
+        const rkey* k = &ev.u.k;
         if (k->sym == RXK_ESC) {
             done = 1;
             break;
@@ -248,22 +254,27 @@ int ui_screen_designer(void *ud, struct rx_stmt *s)
         }
         switch (k->sym) {
         case RXK_UP:
-            if (cy > 0) cy--;
+            if (cy > 0)
+                cy--;
             break;
         case RXK_DOWN:
-            if (cy < ui->scr.h - 3) cy++;
+            if (cy < ui->scr.h - 3)
+                cy++;
             break;
         case RXK_LEFT:
-            if (cx > 0) cx--;
+            if (cx > 0)
+                cx--;
             break;
         case RXK_RIGHT:
-            if (cx < ui->scr.w - 1) cx++;
+            if (cx < ui->scr.w - 1)
+                cx++;
             break;
         default:
             if (k->cp == 's' || k->cp == 'S') {
                 char txt[256];
-                if (designer_prompt(ui, sf, cy, cx, boxmode, br, bc, "SAY text: ", txt, sizeof(txt)) == R_OK) {
-                    scr_item *it = scrf_add(sf);
+                if (designer_prompt(ui, sf, cy, cx, boxmode, br, bc, "SAY text: ", txt,
+                                    sizeof(txt)) == R_OK) {
+                    scr_item* it = scrf_add(sf);
                     it->type = SCR_SAY;
                     it->row = cy;
                     it->col = cx;
@@ -271,13 +282,14 @@ int ui_screen_designer(void *ud, struct rx_stmt *s)
                 }
             } else if (k->cp == 'g' || k->cp == 'G') {
                 char v[64];
-                if (designer_prompt(ui, sf, cy, cx, boxmode, br, bc, "GET var: ", v, sizeof(v)) == R_OK) {
-                    scr_item *it = scrf_add(sf);
+                if (designer_prompt(ui, sf, cy, cx, boxmode, br, bc, "GET var: ", v, sizeof(v)) ==
+                    R_OK) {
+                    scr_item* it = scrf_add(sf);
                     it->type = SCR_GET;
                     it->row = cy;
                     it->col = cx;
                     snprintf(it->var, sizeof(it->var), "%s", v);
-                    for (char *c = it->var; *c; c++) {
+                    for (char* c = it->var; *c; c++) {
                         *c = (char)toupper((unsigned char)*c);
                     }
                     it->h = 1;
@@ -289,7 +301,7 @@ int ui_screen_designer(void *ud, struct rx_stmt *s)
                     br = cy;
                     bc = cx;
                 } else {
-                    scr_item *it = scrf_add(sf);
+                    scr_item* it = scrf_add(sf);
                     it->type = SCR_BOX;
                     it->row = br;
                     it->col = bc;
@@ -300,19 +312,29 @@ int ui_screen_designer(void *ud, struct rx_stmt *s)
             } else if (k->cp == 'x' || k->cp == 'X') {
                 /* delete the topmost item covering the cursor */
                 for (size_t i = sf->nitems; i-- > 0;) {
-                    scr_item *it = &sf->items[i];
+                    scr_item* it = &sf->items[i];
                     int hit = 0;
                     if (it->type == SCR_BOX || it->type == SCR_LINE) {
                         int y1 = it->row, y2 = it->row2, x1 = it->col, x2 = it->col2;
-                        if (y2 < y1) { int t = y1; y1 = y2; y2 = t; }
-                        if (x2 < x1) { int t = x1; x1 = x2; x2 = t; }
+                        if (y2 < y1) {
+                            int t = y1;
+                            y1 = y2;
+                            y2 = t;
+                        }
+                        if (x2 < x1) {
+                            int t = x1;
+                            x1 = x2;
+                            x2 = t;
+                        }
                         hit = (cy == y1 || cy == y2 || (cy > y1 && cy < y2)) &&
                               (cx == x1 || cx == x2 || (cx > x1 && cx < x2));
                     } else {
-                        hit = (it->row == cy && cx >= it->col && cx < it->col + (int)strlen(it->text[0] ? it->text : it->var) + 4);
+                        hit = (it->row == cy && cx >= it->col &&
+                               cx < it->col + (int)strlen(it->text[0] ? it->text : it->var) + 4);
                     }
                     if (hit) {
-                        memmove(&sf->items[i], &sf->items[i + 1], (sf->nitems - i - 1) * sizeof(scr_item));
+                        memmove(&sf->items[i], &sf->items[i + 1],
+                                (sf->nitems - i - 1) * sizeof(scr_item));
                         sf->nitems--;
                         break;
                     }

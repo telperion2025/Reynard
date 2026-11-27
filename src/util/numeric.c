@@ -16,8 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-void rx_format_num(char *out, size_t outsz, double d, int dec, int fixed)
-{
+void rx_format_num(char* out, size_t outsz, double d, int dec, int fixed) {
     if (isnan(d)) {
         snprintf(out, outsz, "NaN");
         return;
@@ -39,8 +38,7 @@ void rx_format_num(char *out, size_t outsz, double d, int dec, int fixed)
     snprintf(out, outsz, "%.*f", dec, d);
 }
 
-double rx_parse_num(const char *s, size_t n, int *blank)
-{
+double rx_parse_num(const char* s, size_t n, int* blank) {
     size_t i = 0;
     int any = 0;
     while (i < n && (s[i] == ' ' || s[i] == '\t')) {

@@ -27,22 +27,21 @@
 /* ============================ .RPJ parsing ============================ */
 
 typedef struct proj_file {
-    char rel[300];  /**< path relative to the .RPJ dir, as listed */
-    char kind[8];   /**< PRG MENU SCREEN REPORT LABEL DBF */
+    char rel[300]; /**< path relative to the .RPJ dir, as listed */
+    char kind[8];  /**< PRG MENU SCREEN REPORT LABEL DBF */
 } proj_file;
 
 typedef struct rpj {
-    char dir[600];  /**< directory of the .rpj (files resolve against it) */
+    char dir[600]; /**< directory of the .rpj (files resolve against it) */
     char name[64];
     char main[300];
     proj_file files[64];
     size_t nfiles;
 } rpj;
 
-static void rpj_dir_of(const char *path, char *out, size_t outsz)
-{
+static void rpj_dir_of(const char* path, char* out, size_t outsz) {
     snprintf(out, outsz, "%.*s", (int)outsz - 1, path);
-    char *sl = strrchr(out, '/');
+    char* sl = strrchr(out, '/');
     if (sl) {
         *sl = '\0';
     } else {
@@ -50,9 +49,8 @@ static void rpj_dir_of(const char *path, char *out, size_t outsz)
     }
 }
 
-static char *read_text(const char *path, size_t *outn)
-{
-    FILE *f = fopen(path, "rb");
+static char* read_text(const char* path, size_t* outn) {
+    FILE* f = fopen(path, "rb");
     if (!f) {
         return NULL;
     }
@@ -75,9 +73,8 @@ static char *read_text(const char *path, size_t *outn)
 }
 
 /* one whitespace token; supports "quoted strings"; returns NULL at end */
-static char *next_tok(char **pp)
-{
-    char *p = *pp;
+static char* next_tok(char** pp) {
+    char* p = *pp;
     while (*p && isspace((unsigned char)*p)) {
         p++;
     }
@@ -85,7 +82,7 @@ static char *next_tok(char **pp)
         *pp = p;
         return NULL;
     }
-    char *start;
+    char* start;
     if (*p == '"') {
         p++;
         start = p;
@@ -110,23 +107,21 @@ static char *next_tok(char **pp)
     return start;
 }
 
-static int rpj_add(rpj *pj, const char *kind, const char *rel, r_err *err, int line)
-{
+static int rpj_add(rpj* pj, const char* kind, const char* rel, r_err* err, int line) {
     if (pj->nfiles >= 64) {
         err->code = R_ERR_RANGE;
         snprintf(err->msg, sizeof(err->msg), ".RPJ line %d: too many files (64 max)", line);
         return err->code;
     }
-    proj_file *f = &pj->files[pj->nfiles++];
+    proj_file* f = &pj->files[pj->nfiles++];
     snprintf(f->rel, sizeof(f->rel), "%s", rel);
     snprintf(f->kind, sizeof(f->kind), "%s", kind);
     return R_OK;
 }
 
-static int rpj_parse(const char *path, rpj *pj, r_err *err)
-{
+static int rpj_parse(const char* path, rpj* pj, r_err* err) {
     size_t n;
-    char *src = read_text(path, &n);
+    char* src = read_text(path, &n);
     if (!src) {
         err->code = R_ERR_IO_NOTFOUND;
         snprintf(err->msg, sizeof(err->msg), "Cannot open project file %.460s", path);
@@ -138,27 +133,26 @@ static int rpj_parse(const char *path, rpj *pj, r_err *err)
     int lineno = 0;
     int header_ok = 0;
     int ended = 0;
-    char *cur = src;
+    char* cur = src;
     while (cur && *cur) {
         /* extract one line */
-        char *nl = strchr(cur, '\n');
+        char* nl = strchr(cur, '\n');
         if (nl) {
             *nl = '\0';
         }
         lineno++;
-        char *p = cur;
-        char *w = next_tok(&p);
+        char* p = cur;
+        char* w = next_tok(&p);
         if (!w || w[0] == '#' || w[0] == '*') {
             goto nextline;
         }
         if (lineno == 1) {
-            char *v = next_tok(&p);
-            char *num = next_tok(&p);
+            char* v = next_tok(&p);
+            char* num = next_tok(&p);
             if (rx_strcasecmp(w, "REYNARD") != 0 || !v || rx_strcasecmp(v, "PROJECT") != 0 ||
                 !num || atoi(num) != 1) {
                 err->code = R_ERR_SYNTAX;
-                snprintf(err->msg, sizeof(err->msg),
-                         ".RPJ line 1: expected 'REYNARD PROJECT 1'");
+                snprintf(err->msg, sizeof(err->msg), ".RPJ line 1: expected 'REYNARD PROJECT 1'");
                 free(src);
                 return err->code;
             }
@@ -176,13 +170,13 @@ static int rpj_parse(const char *path, rpj *pj, r_err *err)
             goto nextline;
         }
         if (rx_strcasecmp(w, "NAME") == 0) {
-            char *v = next_tok(&p);
+            char* v = next_tok(&p);
             if (!v) {
                 goto badkw;
             }
             snprintf(pj->name, sizeof(pj->name), "%s", v);
         } else if (rx_strcasecmp(w, "MAIN") == 0) {
-            char *v = next_tok(&p);
+            char* v = next_tok(&p);
             if (!v) {
                 goto badkw;
             }
@@ -190,7 +184,7 @@ static int rpj_parse(const char *path, rpj *pj, r_err *err)
         } else if (rx_strcasecmp(w, "PRG") == 0 || rx_strcasecmp(w, "MENU") == 0 ||
                    rx_strcasecmp(w, "SCREEN") == 0 || rx_strcasecmp(w, "REPORT") == 0 ||
                    rx_strcasecmp(w, "LABEL") == 0 || rx_strcasecmp(w, "DBF") == 0) {
-            char *v = next_tok(&p);
+            char* v = next_tok(&p);
             if (!v) {
                 goto badkw;
             }
@@ -201,8 +195,7 @@ static int rpj_parse(const char *path, rpj *pj, r_err *err)
             }
         } else {
             err->code = R_ERR_SYNTAX;
-            snprintf(err->msg, sizeof(err->msg), ".RPJ line %d: unknown keyword '%s'",
-                     lineno, w);
+            snprintf(err->msg, sizeof(err->msg), ".RPJ line %d: unknown keyword '%s'", lineno, w);
             free(src);
             return err->code;
         }
@@ -232,10 +225,9 @@ static int rpj_parse(const char *path, rpj *pj, r_err *err)
 
 /* ============================ helpers ============================ */
 
-static int sha_file(const char *path, uint8_t hash[32], char **data, size_t *len)
-{
+static int sha_file(const char* path, uint8_t hash[32], char** data, size_t* len) {
     size_t n;
-    char *b = read_text(path, &n);
+    char* b = read_text(path, &n);
     if (!b) {
         return R_ERR_IO_NOTFOUND;
     }
@@ -252,22 +244,30 @@ static int sha_file(const char *path, uint8_t hash[32], char **data, size_t *len
     return R_OK;
 }
 
-static void hex32(const uint8_t h[32], char out[65])
-{
+static void hex32(const uint8_t h[32], char out[65]) {
     for (int i = 0; i < 32; i++) {
         snprintf(out + i * 2, 3, "%02x", h[i]);
     }
 }
 
-static void json_escape(strbuf *sb, const char *s)
-{
-    for (const unsigned char *c = (const unsigned char *)s; *c; c++) {
+static void json_escape(strbuf* sb, const char* s) {
+    for (const unsigned char* c = (const unsigned char*)s; *c; c++) {
         switch (*c) {
-        case '"': sb_puts(sb, "\\\""); break;
-        case '\\': sb_puts(sb, "\\\\"); break;
-        case '\n': sb_puts(sb, "\\n"); break;
-        case '\r': sb_puts(sb, "\\r"); break;
-        case '\t': sb_puts(sb, "\\t"); break;
+        case '"':
+            sb_puts(sb, "\\\"");
+            break;
+        case '\\':
+            sb_puts(sb, "\\\\");
+            break;
+        case '\n':
+            sb_puts(sb, "\\n");
+            break;
+        case '\r':
+            sb_puts(sb, "\\r");
+            break;
+        case '\t':
+            sb_puts(sb, "\\t");
+            break;
         default:
             if (*c < 0x20) {
                 char tmp[8];
@@ -280,34 +280,30 @@ static void json_escape(strbuf *sb, const char *s)
     }
 }
 
-static const char *base_name(const char *path)
-{
-    const char *sl = strrchr(path, '/');
+static const char* base_name(const char* path) {
+    const char* sl = strrchr(path, '/');
     return sl ? sl + 1 : path;
 }
 
-static void stem_of(const char *path, char *out, size_t outsz)
-{
-    const char *b = base_name(path);
+static void stem_of(const char* path, char* out, size_t outsz) {
+    const char* b = base_name(path);
     snprintf(out, outsz, "%s", b);
-    char *dot = strrchr(out, '.');
+    char* dot = strrchr(out, '.');
     if (dot) {
         *dot = '\0';
     }
 }
 
-static int is_kind(const proj_file *f, const char *k)
-{
+static int is_kind(const proj_file* f, const char* k) {
     return strcmp(f->kind, k) == 0;
 }
 
 /* data dictionary entry for one DBF, appended as JSON to sb */
-static int dict_dbfs(strbuf *sb, rpj *pj)
-{
+static int dict_dbfs(strbuf* sb, rpj* pj) {
     sb_puts(sb, "{\"databases\": [");
     int first = 1;
     for (size_t i = 0; i < pj->nfiles; i++) {
-        proj_file *f = &pj->files[i];
+        proj_file* f = &pj->files[i];
         if (!is_kind(f, "DBF")) {
             continue;
         }
@@ -328,7 +324,7 @@ static int dict_dbfs(strbuf *sb, rpj *pj)
         sb_puts(sb, "\", \"sha256\": \"");
         sb_puts(sb, hx);
         sb_puts(sb, "\", \"fields\": [");
-        rx_dbf *dbf = NULL;
+        rx_dbf* dbf = NULL;
         int rc = rx_dbf_open(full, RD_READONLY | RD_SHARED, &dbf);
         if (rc == R_OK) {
             size_t nf = 0;
@@ -341,7 +337,7 @@ static int dict_dbfs(strbuf *sb, rpj *pj)
                 if (fi) {
                     sb_putc(sb, ',');
                 }
-                char t[2] = { (char)fd.type, '\0' };
+                char t[2] = {(char)fd.type, '\0'};
                 sb_puts(sb, "{\"name\": \"");
                 json_escape(sb, fd.name);
                 sb_puts(sb, "\", \"type\": \"");
@@ -366,11 +362,10 @@ static int dict_dbfs(strbuf *sb, rpj *pj)
 /* ============================ manifest (mini JSON) ============================ */
 
 /* find "key" in json, then return pointer just past the following ':' */
-static const char *json_find(const char *j, const char *key)
-{
+static const char* json_find(const char* j, const char* key) {
     char pat[80];
     snprintf(pat, sizeof(pat), "\"%s\"", key);
-    const char *p = strstr(j, pat);
+    const char* p = strstr(j, pat);
     if (!p) {
         return NULL;
     }
@@ -382,8 +377,7 @@ static const char *json_find(const char *j, const char *key)
 }
 
 /* read a JSON string value at p into out (handles \" \\ \n etc.) */
-static const char *json_str(const char *p, char *out, size_t outsz)
-{
+static const char* json_str(const char* p, char* out, size_t outsz) {
     if (!p || *p != '"') {
         return NULL;
     }
@@ -426,10 +420,9 @@ typedef struct manifest {
 } manifest;
 
 /* parse the manifest we wrote (objects inside "files": [...]) */
-static int manifest_parse(const char *j, manifest *m)
-{
+static int manifest_parse(const char* j, manifest* m) {
     memset(m, 0, sizeof(*m));
-    const char *p = json_find(j, "name");
+    const char* p = json_find(j, "name");
     if (p) {
         json_str(p, m->name, sizeof(m->name));
     }
@@ -445,11 +438,11 @@ static int manifest_parse(const char *j, manifest *m)
     while (*p && *p != ']') {
         if (*p == '{') {
             p++;
-            manifest_file *f = &m->files[m->nfiles < 64 ? m->nfiles : 63];
+            manifest_file* f = &m->files[m->nfiles < 64 ? m->nfiles : 63];
             memset(f, 0, sizeof(*f));
             while (*p && *p != '}') {
                 char key[32];
-                const char *kp = json_find(p, "");
+                const char* kp = json_find(p, "");
                 (void)kp;
                 /* read key */
                 while (*p == ' ' || *p == ',') {
@@ -472,7 +465,7 @@ static int manifest_parse(const char *j, manifest *m)
                 } else if (strcmp(key, "sha256") == 0) {
                     p = json_str(p, f->sha, sizeof(f->sha));
                 } else if (strcmp(key, "size") == 0) {
-                    f->size = strtol(p, (char **)&p, 10);
+                    f->size = strtol(p, (char**)&p, 10);
                 } else {
                     /* skip unknown value: string, number, nested */
                     if (*p == '"') {
@@ -503,11 +496,10 @@ static int manifest_parse(const char *j, manifest *m)
 
 /* ============================ packed sources ============================ */
 
-static int packed_add(rx_ctx *ctx, const char *stem, char *src /* owned */)
-{
+static int packed_add(rx_ctx* ctx, const char* stem, char* src /* owned */) {
     char up[300];
     snprintf(up, sizeof(up), "%s", stem);
-    for (char *c = up; *c; c++) {
+    for (char* c = up; *c; c++) {
         *c = (char)toupper((unsigned char)*c);
     }
     for (size_t i = 0; i < ctx->npacked; i++) {
@@ -519,8 +511,8 @@ static int packed_add(rx_ctx *ctx, const char *stem, char *src /* owned */)
     }
     if (ctx->npacked == ctx->cappacked) {
         size_t nc = ctx->cappacked ? ctx->cappacked * 2 : 8;
-        char **nn = realloc(ctx->packed_names, nc * sizeof(char *));
-        char **ns = realloc(ctx->packed_srcs, nc * sizeof(char *));
+        char** nn = realloc(ctx->packed_names, nc * sizeof(char*));
+        char** ns = realloc(ctx->packed_srcs, nc * sizeof(char*));
         if (!nn || !ns) {
             RX_FATAL("out of memory");
         }
@@ -534,8 +526,7 @@ static int packed_add(rx_ctx *ctx, const char *stem, char *src /* owned */)
     return R_OK;
 }
 
-static void packed_clear(rx_ctx *ctx)
-{
+static void packed_clear(rx_ctx* ctx) {
     for (size_t i = 0; i < ctx->npacked; i++) {
         free(ctx->packed_names[i]);
         free(ctx->packed_srcs[i]);
@@ -548,19 +539,18 @@ static void packed_clear(rx_ctx *ctx)
 }
 
 /* register every src/ entry of an open rpp as packed source + procs */
-static int rpp_register_sources(rx_ctx *ctx, const rx_rpp *r)
-{
+static int rpp_register_sources(rx_ctx* ctx, const rx_rpp* r) {
     for (size_t i = 0; i < r->nents; i++) {
-        const rx_rpp_ent *e = &r->ents[i];
+        const rx_rpp_ent* e = &r->ents[i];
         if (strncmp(e->name, "src/", 4) != 0) {
             continue;
         }
-        uint8_t *buf;
+        uint8_t* buf;
         size_t n;
         if (rx_rpp_read(r, e, &buf, &n) != R_OK) {
             return R_ERR_DBF_TRUNCATED;
         }
-        char *src = malloc(n + 1);
+        char* src = malloc(n + 1);
         if (!src) {
             free(buf);
             RX_FATAL("out of memory");
@@ -574,7 +564,7 @@ static int rpp_register_sources(rx_ctx *ctx, const rx_rpp *r)
         /* pre-register procedures so DO finds them without running the file */
         r_err err;
         memset(&err, 0, sizeof(err));
-        rx_stmt *stmts = NULL;
+        rx_stmt* stmts = NULL;
         size_t nstmt = 0;
         char nm[700];
         snprintf(nm, sizeof(nm), "%.590s!%.100s", ctx->rpp_path, e->name);
@@ -591,11 +581,10 @@ static int rpp_register_sources(rx_ctx *ctx, const rx_rpp *r)
 
 /* ============================ BUILD PROJECT ============================ */
 
-static int write_atomic(const char *path, const char *data, size_t n)
-{
+static int write_atomic(const char* path, const char* data, size_t n) {
     char tmp[700];
     snprintf(tmp, sizeof(tmp), "%s.tmp", path);
-    FILE *f = fopen(tmp, "wb");
+    FILE* f = fopen(tmp, "wb");
     if (!f) {
         return R_ERR_IO_OPEN;
     }
@@ -618,19 +607,18 @@ static int write_atomic(const char *path, const char *data, size_t n)
 }
 
 /* content-based up-to-date check against an existing .rpp */
-static int rpp_up_to_date(const char *rpppath, rpj *pj)
-{
+static int rpp_up_to_date(const char* rpppath, rpj* pj) {
     rx_rpp r;
     if (rx_rpp_open(rpppath, &r) != R_OK) {
         return 0;
     }
-    const rx_rpp_ent *me = rx_rpp_find(&r, "manifest.json");
+    const rx_rpp_ent* me = rx_rpp_find(&r, "manifest.json");
     int up = 0;
     if (me) {
-        uint8_t *buf;
+        uint8_t* buf;
         size_t n;
         if (rx_rpp_read(&r, me, &buf, &n) == R_OK) {
-            char *j = malloc(n + 1);
+            char* j = malloc(n + 1);
             if (j) {
                 memcpy(j, buf, n);
                 j[n] = '\0';
@@ -648,7 +636,7 @@ static int rpp_up_to_date(const char *rpppath, rpj *pj)
                         }
                         char hx[65];
                         hex32(h, hx);
-                        const manifest_file *mf = NULL;
+                        const manifest_file* mf = NULL;
                         for (size_t k = 0; k < m.nfiles; k++) {
                             if (strcmp(m.files[k].path, pj->files[i].rel) == 0) {
                                 mf = &m.files[k];
@@ -669,12 +657,11 @@ static int rpp_up_to_date(const char *rpppath, rpj *pj)
     return up;
 }
 
-int rx_cmd_build_project(rx_ctx *ctx, rx_stmt *s)
-{
+int rx_cmd_build_project(rx_ctx* ctx, rx_stmt* s) {
     if (s->nstrs < 1) {
         return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "BUILD PROJECT needs a name");
     }
-    const char *name = s->strs[0];
+    const char* name = s->strs[0];
     char rpjpath[700];
     if (s->nstrs > 1) {
         snprintf(rpjpath, sizeof(rpjpath), "%s", s->strs[1]);
@@ -731,7 +718,7 @@ int rx_cmd_build_project(rx_ctx *ctx, rx_stmt *s)
     }
 
     /* build the container */
-    rx_zipw *w = rx_zipw_new();
+    rx_zipw* w = rx_zipw_new();
     if (!w) {
         return rx_raise(ctx, R_ERR_OS, s->line, s->col, "out of memory");
     }
@@ -774,11 +761,11 @@ int rx_cmd_build_project(rx_ctx *ctx, rx_stmt *s)
 
     /* per-file entries */
     for (size_t i = 0; i < pj.nfiles; i++) {
-        proj_file *f = &pj.files[i];
+        proj_file* f = &pj.files[i];
         char full[900];
         snprintf(full, sizeof(full), "%s/%s", pj.dir, f->rel);
         size_t n;
-        char *data = read_text(full, &n);
+        char* data = read_text(full, &n);
         if (!data) {
             sb_free(&man);
             rx_zipw_free(w);
@@ -791,10 +778,10 @@ int rx_cmd_build_project(rx_ctx *ctx, rx_stmt *s)
             /* compiled RXP1 blob */
             r_err cerr;
             memset(&cerr, 0, sizeof(cerr));
-            rx_stmt *stmts = NULL;
+            rx_stmt* stmts = NULL;
             size_t nstmt = 0;
             if (rx_compile_source(data, f->rel, &stmts, &nstmt, &cerr) == R_OK) {
-                char *blob;
+                char* blob;
                 size_t bloblen;
                 if (rx_rxp_pack(hashes[i], stmts, nstmt, &blob, &bloblen) == R_OK) {
                     char stem[300];
@@ -812,8 +799,8 @@ int rx_cmd_build_project(rx_ctx *ctx, rx_stmt *s)
                 free(data);
                 sb_free(&man);
                 rx_zipw_free(w);
-                return rx_raise(ctx, cerr.code, s->line, s->col,
-                                "Compile error in %s: %s", f->rel, cerr.msg);
+                return rx_raise(ctx, cerr.code, s->line, s->col, "Compile error in %s: %s", f->rel,
+                                cerr.msg);
             }
         } else if (is_kind(f, "SCREEN") || is_kind(f, "REPORT") || is_kind(f, "LABEL")) {
             snprintf(entry, sizeof(entry), "res/%s", f->rel);
@@ -835,7 +822,7 @@ int rx_cmd_build_project(rx_ctx *ctx, rx_stmt *s)
     }
     sb_free(&man);
 
-    char *zbuf;
+    char* zbuf;
     size_t zlen;
     size_t nent = rx_zipw_count(w);
     rc = rx_zipw_finish(w, &zbuf, &zlen);
@@ -868,8 +855,8 @@ int rx_cmd_build_project(rx_ctx *ctx, rx_stmt *s)
     }
 
     if (ctx->set.talk) {
-        rx_outf(ctx, "Project '%s' built: %s (%zu entries, %zu bytes)\n", pj.name, rpppath,
-                nent, zlen);
+        rx_outf(ctx, "Project '%s' built: %s (%zu entries, %zu bytes)\n", pj.name, rpppath, nent,
+                zlen);
         rx_outf(ctx, "Launcher: %s\n", shpath);
     }
     return R_OK;
@@ -877,10 +864,9 @@ int rx_cmd_build_project(rx_ctx *ctx, rx_stmt *s)
 
 /* ============================ SET PROCEDURE TO ============================ */
 
-int rx_cmd_set_proc(rx_ctx *ctx, rx_stmt *s)
-{
+int rx_cmd_set_proc(rx_ctx* ctx, rx_stmt* s) {
     /* SET PROCEDURE TO [file[.prg|.rpp]] — strs: PROCEDURE TO <file> */
-    const char *toval = NULL;
+    const char* toval = NULL;
     if (s->nstrs >= 3 && rx_strcasecmp(s->strs[1], "TO") == 0) {
         toval = s->strs[2];
     } else if (s->nstrs >= 2 && rx_strcasecmp(s->strs[1], "TO") != 0) {
@@ -897,15 +883,13 @@ int rx_cmd_set_proc(rx_ctx *ctx, rx_stmt *s)
         rx_rpp r;
         int rc = rx_rpp_open(toval, &r);
         if (rc != R_OK) {
-            return rx_raise(ctx, rc, s->line, s->col, "Cannot open procedure file %s",
-                            toval);
+            return rx_raise(ctx, rc, s->line, s->col, "Cannot open procedure file %s", toval);
         }
         snprintf(ctx->rpp_path, sizeof(ctx->rpp_path), "%s", toval);
         rc = rpp_register_sources(ctx, &r);
         rx_rpp_close(&r);
         if (rc != R_OK) {
-            return rx_raise(ctx, rc, s->line, s->col, "Cannot load packed sources from %s",
-                            toval);
+            return rx_raise(ctx, rc, s->line, s->col, "Cannot load packed sources from %s", toval);
         }
         return R_OK;
     }
@@ -917,13 +901,13 @@ int rx_cmd_set_proc(rx_ctx *ctx, rx_stmt *s)
         snprintf(path, sizeof(path), "%s.prg", toval);
     }
     size_t n;
-    char *src = read_text(path, &n);
+    char* src = read_text(path, &n);
     if (!src) {
         return rx_raise(ctx, R_ERR_IO_NOTFOUND, s->line, s->col, "Cannot open %s", path);
     }
     r_err err;
     memset(&err, 0, sizeof(err));
-    rx_stmt *stmts = NULL;
+    rx_stmt* stmts = NULL;
     size_t nstmt = 0;
     int rc = rx_compile_source(src, path, &stmts, &nstmt, &err);
     free(src);
@@ -940,11 +924,10 @@ int rx_cmd_set_proc(rx_ctx *ctx, rx_stmt *s)
 
 /* ============================ --run ============================ */
 
-static int mkdir_p(const char *path)
-{
+static int mkdir_p(const char* path) {
     char tmp[700];
     snprintf(tmp, sizeof(tmp), "%s", path);
-    for (char *p = tmp + 1; *p; p++) {
+    for (char* p = tmp + 1; *p; p++) {
         if (*p == '/') {
             *p = '\0';
             mkdir(tmp, 0777);
@@ -959,18 +942,17 @@ static int mkdir_p(const char *path)
 
 /* extract res/ and data/ entries of the rpp into a per-app cache dir and
    return it (static buffer) so the caller can prepend it to SET PATH */
-static const char *rpp_extract(const rx_ctx *ctx, const rx_rpp *r, char *out, size_t outsz)
-{
+static const char* rpp_extract(const rx_ctx* ctx, const rx_rpp* r, char* out, size_t outsz) {
     uint8_t h[32];
     rx_sha256(r->data, r->len, h);
     char hex[65];
     hex32(h, hex);
-    const char *xdg = getenv("XDG_CACHE_HOME");
+    const char* xdg = getenv("XDG_CACHE_HOME");
     char base[600];
     if (xdg && *xdg) {
         snprintf(base, sizeof(base), "%s/reynard/rpp/%s", xdg, hex);
     } else {
-        const char *home = getenv("HOME");
+        const char* home = getenv("HOME");
         if (home && *home) {
             snprintf(base, sizeof(base), "%s/.cache/reynard/rpp/%s", home, hex);
         } else {
@@ -979,11 +961,11 @@ static const char *rpp_extract(const rx_ctx *ctx, const rx_rpp *r, char *out, si
     }
     int any = 0;
     for (size_t i = 0; i < r->nents; i++) {
-        const char *nm = r->ents[i].name;
+        const char* nm = r->ents[i].name;
         if (strncmp(nm, "res/", 4) != 0 && strncmp(nm, "data/", 5) != 0) {
             continue;
         }
-        const char *rel = nm + (nm[0] == 'r' ? 4 : 5);
+        const char* rel = nm + (nm[0] == 'r' ? 4 : 5);
         if (!*rel || strchr(rel, '/')) {
             continue; /* keep the cache dir flat */
         }
@@ -996,8 +978,8 @@ static const char *rpp_extract(const rx_ctx *ctx, const rx_rpp *r, char *out, si
         return NULL;
     }
     for (size_t i = 0; i < r->nents; i++) {
-        const char *nm = r->ents[i].name;
-        const char *rel = NULL;
+        const char* nm = r->ents[i].name;
+        const char* rel = NULL;
         if (strncmp(nm, "res/", 4) == 0) {
             rel = nm + 4;
         } else if (strncmp(nm, "data/", 5) == 0 && strcmp(nm, "data/dictionary.json") != 0) {
@@ -1006,14 +988,14 @@ static const char *rpp_extract(const rx_ctx *ctx, const rx_rpp *r, char *out, si
         if (!rel || !*rel || strchr(rel, '/')) {
             continue;
         }
-        uint8_t *buf;
+        uint8_t* buf;
         size_t n;
         if (rx_rpp_read(r, &r->ents[i], &buf, &n) != R_OK) {
             continue;
         }
         char dst[800];
         snprintf(dst, sizeof(dst), "%s/%s", base, rel);
-        write_atomic(dst, (const char *)buf, n);
+        write_atomic(dst, (const char*)buf, n);
         free(buf);
     }
     snprintf(out, outsz, "%s", base);
@@ -1021,27 +1003,26 @@ static const char *rpp_extract(const rx_ctx *ctx, const rx_rpp *r, char *out, si
     return out;
 }
 
-int rx_run_rpp(rx_ctx *ctx, const char *path)
-{
+int rx_run_rpp(rx_ctx* ctx, const char* path) {
     rx_rpp r;
     int rc = rx_rpp_open(path, &r);
     if (rc != R_OK) {
         return rx_raise(ctx, rc, 0, 0, "Cannot open application %s", path);
     }
-    const rx_rpp_ent *me = rx_rpp_find(&r, "manifest.json");
+    const rx_rpp_ent* me = rx_rpp_find(&r, "manifest.json");
     if (!me) {
         rx_rpp_close(&r);
         return rx_raise(ctx, R_ERR_DBF_TRUNCATED, 0, 0, "%s: not a Reynard .rpp (no manifest)",
                         path);
     }
-    uint8_t *mbuf;
+    uint8_t* mbuf;
     size_t mn;
     rc = rx_rpp_read(&r, me, &mbuf, &mn);
     if (rc != R_OK) {
         rx_rpp_close(&r);
         return rx_raise(ctx, rc, 0, 0, "%s: corrupt manifest", path);
     }
-    char *j = malloc(mn + 1);
+    char* j = malloc(mn + 1);
     if (!j) {
         free(mbuf);
         rx_rpp_close(&r);
@@ -1067,17 +1048,17 @@ int rx_run_rpp(rx_ctx *ctx, const char *path)
        GENERATE SCREEN / REPORT FORM / USE find them (spec 9.6 packaging) */
     {
         char exdir[700];
-        const char *ex = rpp_extract(ctx, &r, exdir, sizeof(exdir));
+        const char* ex = rpp_extract(ctx, &r, exdir, sizeof(exdir));
         if (ex) {
             char np[1200];
             if (ctx->set.path[0]) {
-                snprintf(np, sizeof(np), "%s,%.*s", ex, (int)(sizeof(ctx->set.path) - strlen(ex) - 2),
-                         ctx->set.path);
+                snprintf(np, sizeof(np), "%s,%.*s", ex,
+                         (int)(sizeof(ctx->set.path) - strlen(ex) - 2), ctx->set.path);
             } else {
                 snprintf(np, sizeof(np), "%s", ex);
             }
-            snprintf(ctx->set.path, sizeof(ctx->set.path), "%.*s",
-                     (int)sizeof(ctx->set.path) - 1, np);
+            snprintf(ctx->set.path, sizeof(ctx->set.path), "%.*s", (int)sizeof(ctx->set.path) - 1,
+                     np);
         }
     }
 
@@ -1086,8 +1067,8 @@ int rx_run_rpp(rx_ctx *ctx, const char *path)
     stem_of(m.main, mainstem, sizeof(mainstem));
     char binname[400];
     snprintf(binname, sizeof(binname), "bin/%s.rxp", mainstem);
-    const rx_rpp_ent *be = rx_rpp_find(&r, binname);
-    const rx_rpp_ent *se = NULL;
+    const rx_rpp_ent* be = rx_rpp_find(&r, binname);
+    const rx_rpp_ent* se = NULL;
     char srcname[400];
     snprintf(srcname, sizeof(srcname), "src/%s", m.main);
     se = rx_rpp_find(&r, srcname);
@@ -1098,20 +1079,20 @@ int rx_run_rpp(rx_ctx *ctx, const char *path)
     }
     if (se) {
         /* need the source sha for the rxp hash check */
-        uint8_t *sbuf;
+        uint8_t* sbuf;
         size_t sn;
         if (rx_rpp_read(&r, se, &sbuf, &sn) == R_OK) {
             uint8_t h[32];
             rx_sha256(sbuf, sn, h);
             if (be) {
-                uint8_t *bbuf;
+                uint8_t* bbuf;
                 size_t bn;
                 if (rx_rpp_read(&r, be, &bbuf, &bn) == R_OK) {
-                    rx_stmt *stmts = NULL;
+                    rx_stmt* stmts = NULL;
                     size_t nstmt = 0;
-                    if (rx_rxp_unpack((const char *)bbuf, bn, h, &stmts, &nstmt) == R_OK) {
+                    if (rx_rxp_unpack((const char*)bbuf, bn, h, &stmts, &nstmt) == R_OK) {
                         snprintf(ctx->prog, sizeof(ctx->prog), "%.150s!%.100s", path, m.main);
-                        ctx->src = (const char *)sbuf;
+                        ctx->src = (const char*)sbuf;
                         rc = rx_exec(ctx, stmts, nstmt);
                         ctx->src = NULL;
                         for (size_t i = 0; i < nstmt; i++) {
@@ -1128,7 +1109,7 @@ int rx_run_rpp(rx_ctx *ctx, const char *path)
             }
             if (!be || rc == R_ERR_DBF_BADRXP || rc == R_ERR_DBF_TRUNCATED) {
                 /* source fallback */
-                char *src = malloc(sn + 1);
+                char* src = malloc(sn + 1);
                 if (!src) {
                     free(sbuf);
                     rx_rpp_close(&r);
@@ -1159,8 +1140,7 @@ int rx_run_rpp(rx_ctx *ctx, const char *path)
 
 /* M9 9.6: resource resolution across SET DEFAULT / SET PATH (packed .rpp
    resources are extracted to a cache dir that --run prepends to SET PATH) */
-int rx_resolve_res(rx_ctx *ctx, const char *name, const char *ext, char *out, size_t outsz)
-{
+int rx_resolve_res(rx_ctx* ctx, const char* name, const char* ext, char* out, size_t outsz) {
     char base[400];
     if (strchr(name, '.')) {
         snprintf(base, sizeof(base), "%s", name);
@@ -1168,7 +1148,7 @@ int rx_resolve_res(rx_ctx *ctx, const char *name, const char *ext, char *out, si
         snprintf(base, sizeof(base), "%s.%s", name, ext);
     }
     snprintf(out, outsz, "%s", base);
-    FILE *f = fopen(out, "rb");
+    FILE* f = fopen(out, "rb");
     if (f) {
         fclose(f);
         return R_OK;
@@ -1186,8 +1166,8 @@ int rx_resolve_res(rx_ctx *ctx, const char *name, const char *ext, char *out, si
     if (ctx->set.path[0]) {
         char pc[1024];
         snprintf(pc, sizeof(pc), "%s", ctx->set.path);
-        char *save = NULL;
-        for (char *d = strtok_r(pc, ",", &save); d; d = strtok_r(NULL, ",", &save)) {
+        char* save = NULL;
+        for (char* d = strtok_r(pc, ",", &save); d; d = strtok_r(NULL, ",", &save)) {
             char cand[700];
             snprintf(cand, sizeof(cand), "%s/%s", d, base);
             f = fopen(cand, "rb");

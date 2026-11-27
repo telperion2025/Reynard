@@ -11,16 +11,14 @@
 
 #include <string.h>
 
-void win_push(struct rx_ui *ui, rx_win *w)
-{
+void win_push(struct rx_ui* ui, rx_win* w) {
     w->next = ui->wins;
     ui->wins = w;
     ui->dirty = 1;
 }
 
-void win_remove(struct rx_ui *ui, rx_win *w)
-{
-    rx_win **pp = &ui->wins;
+void win_remove(struct rx_ui* ui, rx_win* w) {
+    rx_win** pp = &ui->wins;
     while (*pp) {
         if (*pp == w) {
             *pp = w->next;
@@ -32,20 +30,17 @@ void win_remove(struct rx_ui *ui, rx_win *w)
     }
 }
 
-void win_bring_top(struct rx_ui *ui, rx_win *w)
-{
+void win_bring_top(struct rx_ui* ui, rx_win* w) {
     win_remove(ui, w);
     win_push(ui, w);
 }
 
-rx_win *win_top(struct rx_ui *ui)
-{
+rx_win* win_top(struct rx_ui* ui) {
     return ui->wins;
 }
 
-rx_win *win_at(struct rx_ui *ui, int x, int y)
-{
-    for (rx_win *w = ui->wins; w; w = w->next) {
+rx_win* win_at(struct rx_ui* ui, int x, int y) {
+    for (rx_win* w = ui->wins; w; w = w->next) {
         if (w->visible && x >= w->x && x < w->x + w->w && y >= w->y && y < w->y + w->h) {
             return w;
         }
@@ -53,8 +48,7 @@ rx_win *win_at(struct rx_ui *ui, int x, int y)
     return NULL;
 }
 
-int win_border_zone(const rx_win *w, int x, int y)
-{
+int win_border_zone(const rx_win* w, int x, int y) {
     int on_left = x == w->x;
     int on_right = x == w->x + w->w - 1;
     int on_top = y == w->y;
@@ -68,8 +62,7 @@ int win_border_zone(const rx_win *w, int x, int y)
     return WIN_ZONE_MOVE;
 }
 
-void win_box(struct rx_ui *ui, const rx_win *w, uint16_t border, uint16_t title_attr)
-{
+void win_box(struct rx_ui* ui, const rx_win* w, uint16_t border, uint16_t title_attr) {
     scr_box(&ui->scr, w->x, w->y, w->w, w->h, NULL, border);
     if (w->title[0]) {
         char t[80];
@@ -83,13 +76,11 @@ void win_box(struct rx_ui *ui, const rx_win *w, uint16_t border, uint16_t title_
     }
 }
 
-int win_close_hit(const rx_win *w, int x, int y)
-{
+int win_close_hit(const rx_win* w, int x, int y) {
     return w->w >= 5 && y == w->y && x == w->x + w->w - 2;
 }
 
-void win_clamp(struct rx_ui *ui, rx_win *w)
-{
+void win_clamp(struct rx_ui* ui, rx_win* w) {
     if (w->w < w->min_w) {
         w->w = w->min_w;
     }

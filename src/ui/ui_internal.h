@@ -25,9 +25,22 @@ extern "C" {
    attr = fg | bg<<4 into 64 pairs. Both term backends map these to curses
    colors through the same CGA->curses table. */
 enum {
-    RXC_BLACK = 0, RXC_BLUE,  RXC_GREEN, RXC_CYAN,  RXC_RED,   RXC_MAGENTA, RXC_YELLOW,
-    RXC_WHITE,     RXC_GRAY,  RXC_BBLUE, RXC_BGREEN, RXC_BCYAN, RXC_BRED,   RXC_BMAGENTA,
-    RXC_BYELLOW,   RXC_BWHITE
+    RXC_BLACK = 0,
+    RXC_BLUE,
+    RXC_GREEN,
+    RXC_CYAN,
+    RXC_RED,
+    RXC_MAGENTA,
+    RXC_YELLOW,
+    RXC_WHITE,
+    RXC_GRAY,
+    RXC_BBLUE,
+    RXC_BGREEN,
+    RXC_BCYAN,
+    RXC_BRED,
+    RXC_BMAGENTA,
+    RXC_BYELLOW,
+    RXC_BWHITE
 };
 #define RXA(fg, bg) ((uint16_t)((((bg) & 15) << 4) | ((fg) & 15)))
 
@@ -63,27 +76,27 @@ enum {
 /* ============================ screen (screen.c) ============================ */
 
 typedef struct rx_screen {
-    rcell *cells;
+    rcell* cells;
     int w, h;
-    struct rrect *dmg;
+    struct rrect* dmg;
     size_t ndmg, capdmg;
     uint8_t pal[256][2]; /**< slot = fg | bg<<4 */
 } rx_screen;
 
-void scr_init(rx_screen *s, int w, int h);
-void scr_free(rx_screen *s);
-void scr_resize(rx_screen *s, int w, int h);
-void scr_put(rx_screen *s, int x, int y, uint32_t ch, uint16_t attr);
-void scr_text(rx_screen *s, int x, int y, const char *utf8, uint16_t attr);
-void scr_textn(rx_screen *s, int x, int y, const char *utf8, size_t n, uint16_t attr);
-void scr_textn_clip(rx_screen *s, int x, int y, const char *utf8, size_t n, uint16_t attr,
+void scr_init(rx_screen* s, int w, int h);
+void scr_free(rx_screen* s);
+void scr_resize(rx_screen* s, int w, int h);
+void scr_put(rx_screen* s, int x, int y, uint32_t ch, uint16_t attr);
+void scr_text(rx_screen* s, int x, int y, const char* utf8, uint16_t attr);
+void scr_textn(rx_screen* s, int x, int y, const char* utf8, size_t n, uint16_t attr);
+void scr_textn_clip(rx_screen* s, int x, int y, const char* utf8, size_t n, uint16_t attr,
                     int maxw); /**< stop before x+maxw so text never crosses a window border */
-void scr_fill(rx_screen *s, int x, int y, int w, int h, uint32_t ch, uint16_t attr);
-void scr_hline(rx_screen *s, int x, int y, int w, uint32_t ch, uint16_t attr);
-void scr_box(rx_screen *s, int x, int y, int w, int h, const char *title, uint16_t attr);
-void scr_set_pair(rx_screen *s, int idx, uint8_t fg, uint8_t bg);
-void scr_damage(rx_screen *s, int x, int y, int w, int h); /**< force damage rect */
-int scr_blit(rx_screen *s, const term_backend *tb); /**< 1 if painted */
+void scr_fill(rx_screen* s, int x, int y, int w, int h, uint32_t ch, uint16_t attr);
+void scr_hline(rx_screen* s, int x, int y, int w, uint32_t ch, uint16_t attr);
+void scr_box(rx_screen* s, int x, int y, int w, int h, const char* title, uint16_t attr);
+void scr_set_pair(rx_screen* s, int idx, uint8_t fg, uint8_t bg);
+void scr_damage(rx_screen* s, int x, int y, int w, int h); /**< force damage rect */
+int scr_blit(rx_screen* s, const term_backend* tb);        /**< 1 if painted */
 
 /* ============================ windows (window.c) ============================ */
 
@@ -97,37 +110,37 @@ struct rx_win {
     int visible;
     int want_close; /**< set by a window to ask the loop to remove+free it */
     int fullscreen; /**< M4 browse: always clamped to the workspace on resize */
-    rx_win *next; /**< stack link; the stack head is the front window */
-    void (*render)(struct rx_ui *ui, rx_win *w);
-    int (*key)(struct rx_ui *ui, rx_win *w, const rkey *k);     /**< 1 = consumed */
-    int (*mouse)(struct rx_ui *ui, rx_win *w, const rmouse *m); /**< 1 = consumed */
-    void (*free_fn)(rx_win *w); /**< heap windows only (dialogs) */
-    void *ud;
+    rx_win* next;   /**< stack link; the stack head is the front window */
+    void (*render)(struct rx_ui* ui, rx_win* w);
+    int (*key)(struct rx_ui* ui, rx_win* w, const rkey* k);     /**< 1 = consumed */
+    int (*mouse)(struct rx_ui* ui, rx_win* w, const rmouse* m); /**< 1 = consumed */
+    void (*free_fn)(rx_win* w);                                 /**< heap windows only (dialogs) */
+    void* ud;
 };
 
 #define WIN_ZONE_NONE 0
 #define WIN_ZONE_MOVE 1 /**< border drag */
 #define WIN_ZONE_SIZE 2 /**< corner drag */
 
-void win_push(struct rx_ui *ui, rx_win *w);
-void win_remove(struct rx_ui *ui, rx_win *w);
-void win_bring_top(struct rx_ui *ui, rx_win *w);
-rx_win *win_top(struct rx_ui *ui);
-rx_win *win_at(struct rx_ui *ui, int x, int y);
-int win_border_zone(const rx_win *w, int x, int y);
-void win_box(struct rx_ui *ui, const rx_win *w, uint16_t border, uint16_t title_attr);
-int win_close_hit(const rx_win *w, int x, int y); /**< title-bar × button */
-void win_clamp(struct rx_ui *ui, rx_win *w);
+void win_push(struct rx_ui* ui, rx_win* w);
+void win_remove(struct rx_ui* ui, rx_win* w);
+void win_bring_top(struct rx_ui* ui, rx_win* w);
+rx_win* win_top(struct rx_ui* ui);
+rx_win* win_at(struct rx_ui* ui, int x, int y);
+int win_border_zone(const rx_win* w, int x, int y);
+void win_box(struct rx_ui* ui, const rx_win* w, uint16_t border, uint16_t title_attr);
+int win_close_hit(const rx_win* w, int x, int y); /**< title-bar × button */
+void win_clamp(struct rx_ui* ui, rx_win* w);
 
 /* ============================ getsay (getsay.c) ============================ */
 
 #define GS_MAXHIST 1000
 
 typedef struct getsay {
-    char *buf;
+    char* buf;
     size_t len, cap;
     size_t cur; /**< cursor byte offset */
-    char **hist;
+    char** hist;
     size_t nhist, caphist, hpos;
     size_t maxhist;
     char hist_path[300];
@@ -135,27 +148,27 @@ typedef struct getsay {
     char comp_base[256];
 } getsay;
 
-void gs_init(getsay *g, size_t maxhist);
-void gs_free(getsay *g);
-void gs_clear(getsay *g);
-void gs_insert_cp(getsay *g, uint32_t cp);
-void gs_insert(getsay *g, const char *s, size_t n);
-int gs_backspace(getsay *g);
-int gs_delete(getsay *g);
-void gs_left(getsay *g);
-void gs_right(getsay *g);
-void gs_home(getsay *g);
-void gs_end(getsay *g);
-void gs_kill_end(getsay *g);
-int gs_hist_up(getsay *g);
-int gs_hist_down(getsay *g);
-void gs_hist_add(getsay *g, const char *line);
-void gs_hist_path(getsay *g, char *out, size_t outsz);
-void gs_hist_load(getsay *g);
-void gs_hist_save(getsay *g);
-void gs_reset_hist_nav(getsay *g); /**< back to the fresh line after exec/abort */
-void gs_complete(getsay *g);
-void gs_render(getsay *g, rx_screen *s, int x, int y, int w, uint16_t attr);
+void gs_init(getsay* g, size_t maxhist);
+void gs_free(getsay* g);
+void gs_clear(getsay* g);
+void gs_insert_cp(getsay* g, uint32_t cp);
+void gs_insert(getsay* g, const char* s, size_t n);
+int gs_backspace(getsay* g);
+int gs_delete(getsay* g);
+void gs_left(getsay* g);
+void gs_right(getsay* g);
+void gs_home(getsay* g);
+void gs_end(getsay* g);
+void gs_kill_end(getsay* g);
+int gs_hist_up(getsay* g);
+int gs_hist_down(getsay* g);
+void gs_hist_add(getsay* g, const char* line);
+void gs_hist_path(getsay* g, char* out, size_t outsz);
+void gs_hist_load(getsay* g);
+void gs_hist_save(getsay* g);
+void gs_reset_hist_nav(getsay* g); /**< back to the fresh line after exec/abort */
+void gs_complete(getsay* g);
+void gs_render(getsay* g, rx_screen* s, int x, int y, int w, uint16_t attr);
 
 /* ============================ command window (cmdwin.c) ============================ */
 
@@ -163,7 +176,7 @@ void gs_render(getsay *g, rx_screen *s, int x, int y, int w, uint16_t attr);
 
 typedef struct rx_cmdwin {
     rx_win w;
-    char **lines; /**< scrollback ring */
+    char** lines; /**< scrollback ring */
     size_t nlines, caplines, head;
     size_t maxlines;
     char pend[2048]; /**< partial line accumulator for out_hook */
@@ -173,107 +186,107 @@ typedef struct rx_cmdwin {
     int ddx, ddy;
 } rx_cmdwin;
 
-rx_cmdwin *cmdwin_new(struct rx_ui *ui);
-void cmdwin_free(rx_cmdwin *c);
-void cmdwin_out(rx_cmdwin *c, const char *s, size_t n);
-int cmdwin_out_hook(void *ud, const char *s, size_t n);
-void cmdwin_layout(struct rx_ui *ui, rx_cmdwin *c);
+rx_cmdwin* cmdwin_new(struct rx_ui* ui);
+void cmdwin_free(rx_cmdwin* c);
+void cmdwin_out(rx_cmdwin* c, const char* s, size_t n);
+int cmdwin_out_hook(void* ud, const char* s, size_t n);
+void cmdwin_layout(struct rx_ui* ui, rx_cmdwin* c);
 
 /* ============================ menubar (menudef.c, menubar.c) ============================ */
 
 typedef struct menu_item {
-    const char *label;
+    const char* label;
     int hotkey; /**< uppercase letter or 0 */
-    int (*action)(rx_ctx *ctx);
-    int (*disabled)(rx_ctx *ctx);
-    int (*checked)(rx_ctx *ctx);
-    int sep; /**< separator line */
-    const char *cmd; /**< M9 9.5 app menus: run this command string instead of action */
+    int (*action)(rx_ctx* ctx);
+    int (*disabled)(rx_ctx* ctx);
+    int (*checked)(rx_ctx* ctx);
+    int sep;         /**< separator line */
+    const char* cmd; /**< M9 9.5 app menus: run this command string instead of action */
 } menu_item;
 
 typedef struct menu_def {
-    const char *title;
+    const char* title;
     int hotkey;
-    const menu_item *items;
+    const menu_item* items;
     size_t nitems;
 } menu_def;
 
 extern const menu_def rx_menus[];
 extern const size_t rx_menus_n;
 /* M9 9.5: g_menus is rx_menus plus at most one active app menu (the Run pad) */
-extern const menu_def *g_menus;
+extern const menu_def* g_menus;
 extern size_t g_menus_n;
-void menudef_set_app(const char *title, int hotkey, const char *const *labels, const int *hks,
-                     const char *const *cmds, const int *seps, size_t n);
+void menudef_set_app(const char* title, int hotkey, const char* const* labels, const int* hks,
+                     const char* const* cmds, const int* seps, size_t n);
 void menudef_clear_app(void);
 
-void menubar_render(struct rx_ui *ui);
-int menubar_key(struct rx_ui *ui, const rkey *k);
-int menubar_mouse(struct rx_ui *ui, const rmouse *m);
-void menubar_close(struct rx_ui *ui);
-int menubar_title_at(const struct rx_ui *ui, int x); /**< row 0 hit, -1 none */
-void menubar_pulldown_geom(const struct rx_ui *ui, int *x, int *y, int *w, int *h);
+void menubar_render(struct rx_ui* ui);
+int menubar_key(struct rx_ui* ui, const rkey* k);
+int menubar_mouse(struct rx_ui* ui, const rmouse* m);
+void menubar_close(struct rx_ui* ui);
+int menubar_title_at(const struct rx_ui* ui, int x); /**< row 0 hit, -1 none */
+void menubar_pulldown_geom(const struct rx_ui* ui, int* x, int* y, int* w, int* h);
 
 /* ============================ status line (statusbar.c) ============================ */
 
-void statusbar_render(struct rx_ui *ui);
+void statusbar_render(struct rx_ui* ui);
 
 /* ============================ dialogs (dialog.c, helpwin.c) ============================ */
 
-rx_win *dlg_new(struct rx_ui *ui, const char *title, int w, int h);
-void dlg_add_line(rx_win *w, const char *line);
-void dlg_set_editor(rx_win *w); /**< bottom row becomes a getsay input line */
-void dlg_about(struct rx_ui *ui);
-void dlg_macros(struct rx_ui *ui);
-void dlg_filer(struct rx_ui *ui);
-void dlg_calc(struct rx_ui *ui);
-void dlg_calendar(struct rx_ui *ui);
-void dlg_ascii(struct rx_ui *ui);
-void dlg_help(struct rx_ui *ui);
+rx_win* dlg_new(struct rx_ui* ui, const char* title, int w, int h);
+void dlg_add_line(rx_win* w, const char* line);
+void dlg_set_editor(rx_win* w); /**< bottom row becomes a getsay input line */
+void dlg_about(struct rx_ui* ui);
+void dlg_macros(struct rx_ui* ui);
+void dlg_filer(struct rx_ui* ui);
+void dlg_calc(struct rx_ui* ui);
+void dlg_calendar(struct rx_ui* ui);
+void dlg_ascii(struct rx_ui* ui);
+void dlg_help(struct rx_ui* ui);
 
 /* ============================ ui state (ui.c) ============================ */
 
 typedef struct rx_ui {
-    rx_ctx *ctx;
-    const term_backend *tb;
+    rx_ctx* ctx;
+    const term_backend* tb;
     rx_screen scr;
-    rx_win *wins; /**< pane stack, head = front */
-    rx_cmdwin *cmd;
-    int menu_open;  /**< index into rx_menus, -1 closed */
-    int menu_kb;    /**< menubar keyboard-active (F10/Alt) */
-    int menu_sel;   /**< selected item in the open pulldown */
-    rx_win *mouse_cap; /**< window that captured the button press (drag) */
-    char msg[300];  /**< message line (status bar left) */
-    int caps, num;  /**< status indicators */
-    int paused;     /**< Ctrl+S pause */
+    rx_win* wins; /**< pane stack, head = front */
+    rx_cmdwin* cmd;
+    int menu_open;     /**< index into rx_menus, -1 closed */
+    int menu_kb;       /**< menubar keyboard-active (F10/Alt) */
+    int menu_sel;      /**< selected item in the open pulldown */
+    rx_win* mouse_cap; /**< window that captured the button press (drag) */
+    char msg[300];     /**< message line (status bar left) */
+    int caps, num;     /**< status indicators */
+    int paused;        /**< Ctrl+S pause */
     int dirty;
     /* M7 §9.2: pending @ SAY texts painted on the desktop */
-    char **says;
+    char** says;
     int (*say_xy)[2];
     size_t nsays, capsays;
 } rx_ui;
 
-rx_ui *rx_ui_current(void);
-void ui_set_msg(rx_ui *ui, const char *fmt, ...);
-void ui_render(rx_ui *ui);
-void ui_msgline_hook(void *ud, const char *s);
+rx_ui* rx_ui_current(void);
+void ui_set_msg(rx_ui* ui, const char* fmt, ...);
+void ui_render(rx_ui* ui);
+void ui_msgline_hook(void* ud, const char* s);
 
 /* ============================ browse (browse.c, M4 §9.1) ============================ */
 /** rx_ctx->browse_fn hook: open a BROWSE/APPEND grid window for the stmt. */
-int ui_browse_open(void *ud, rx_stmt *s);
+int ui_browse_open(void* ud, rx_stmt* s);
 
 /* M7 §9.2 forms: @ SAY painting + modal READ loop */
-int ui_say(void *ud, int row, int col, const char *text);
+int ui_say(void* ud, int row, int col, const char* text);
 /* M7 9.2 screen builder designer (screenb.c); the .SCR/.RSO model and codegen
    live in util/scrfmt.h */
-int ui_screen_designer(void *ud, struct rx_stmt *s);
+int ui_screen_designer(void* ud, struct rx_stmt* s);
 /* M8 9.3/9.4: report/label designer + preview window */
-int ui_rptb_designer(void *ud, struct rx_stmt *s);
-int ui_preview(void *ud, const char *title, const char *text);
-void ui_says_render(rx_ui *ui);
-void ui_gets_render(rx_ui *ui);
-void ui_says_free(rx_ui *ui);
-int ui_read(void *ud);
+int ui_rptb_designer(void* ud, struct rx_stmt* s);
+int ui_preview(void* ud, const char* title, const char* text);
+void ui_says_render(rx_ui* ui);
+void ui_gets_render(rx_ui* ui);
+void ui_says_free(rx_ui* ui);
+int ui_read(void* ud);
 
 #ifdef __cplusplus
 }

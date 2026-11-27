@@ -21,53 +21,49 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <ctype.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include <fcntl.h>
 #include <unistd.h>
 
-#include "data.h"
 #include "cdx_internal.h"
+#include "data.h"
 
 #include "util/util.h"
 
 #define _POSIX_C_SOURCE 200809L
 
-#include "data.h"
 #include "cdx_internal.h"
+#include "data.h"
 
 #include <ctype.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include <fcntl.h>
 #include <unistd.h>
 
 #include "util/util.h"
 
-
-
 /* ============================ key encoding ============================ */
 
-static void put_u64(strbuf *b, uint64_t u)
-{
+static void put_u64(strbuf* b, uint64_t u) {
     for (int i = 7; i >= 0; i--) {
         sb_putc(b, (char)(u >> (8 * i)));
     }
 }
 
-int rx_key_encode(const rval *v, strbuf *out)
-{
+int rx_key_encode(const rval* v, strbuf* out) {
     switch (v->t) {
     case RX_T_U:
         sb_putc(out, 'U');
         break;
     case RX_T_C: {
         sb_putc(out, 'C');
-        const char *s = v->u.c.utf8 ? v->u.c.utf8 : "";
+        const char* s = v->u.c.utf8 ? v->u.c.utf8 : "";
         size_t n = v->u.c.utf8 ? v->u.c.n : 0;
         while (n && s[n - 1] == ' ') {
             n--; /* character keys have trailing spaces stripped */
@@ -106,12 +102,18 @@ int rx_key_encode(const rval *v, strbuf *out)
         if (yy == 0) {
             memset(tmp, ' ', 8); /* empty date sorts first */
         } else {
-            if (yy < 0) yy = 0;
-            if (yy > 9999) yy = 9999;
-            if (mm < 1) mm = 1;
-            if (mm > 12) mm = 12;
-            if (dd < 1) dd = 1;
-            if (dd > 31) dd = 31;
+            if (yy < 0)
+                yy = 0;
+            if (yy > 9999)
+                yy = 9999;
+            if (mm < 1)
+                mm = 1;
+            if (mm > 12)
+                mm = 12;
+            if (dd < 1)
+                dd = 1;
+            if (dd > 31)
+                dd = 31;
             tmp[0] = (char)('0' + yy / 1000);
             tmp[1] = (char)('0' + (yy / 100) % 10);
             tmp[2] = (char)('0' + (yy / 10) % 10);
@@ -132,13 +134,13 @@ int rx_key_encode(const rval *v, strbuf *out)
     case RX_T_G: {
         /* memo/general keys index as their text/bytes uppercased like C */
         sb_putc(out, 'C');
-        const char *s = NULL;
+        const char* s = NULL;
         size_t n = 0;
         if (v->t == RX_T_M && v->u.memo.loaded) {
             s = v->u.memo.loaded->utf8;
             n = v->u.memo.loaded->n;
         } else if (v->t == RX_T_G && v->u.g.bytes) {
-            s = (const char *)v->u.g.bytes;
+            s = (const char*)v->u.g.bytes;
             n = v->u.g.n;
         }
         if (s) {
@@ -158,8 +160,7 @@ int rx_key_encode(const rval *v, strbuf *out)
     return R_OK;
 }
 
-static int ent_cmp(const rx_ent *a, const rx_ent *b, int descending)
-{
+static int ent_cmp(const rx_ent* a, const rx_ent* b, int descending) {
     size_t m = a->klen < b->klen ? a->klen : b->klen;
     int c = memcmp(a->key, b->key, m);
     if (c == 0) {
@@ -173,26 +174,23 @@ static int ent_cmp(const rx_ent *a, const rx_ent *b, int descending)
 
 /* ============================ in-memory tag ops ============================ */
 
-static rx_tag *tag_get(rx_dbf *dbf, int fi, int ti)
-{
+static rx_tag* tag_get(rx_dbf* dbf, int fi, int ti) {
     if (!dbf || fi < 0 || ti < 0 || (size_t)fi >= dbf->nidxs) {
         return NULL;
     }
-    rx_idx *ix = dbf->idxs[fi];
+    rx_idx* ix = dbf->idxs[fi];
     if (!ix || (size_t)ti >= ix->ntags) {
         return NULL;
     }
     return &ix->tags[ti];
 }
 
-static void ent_free(rx_ent *e)
-{
+static void ent_free(rx_ent* e) {
     free(e->key);
     e->key = NULL;
 }
 
-void rx_cdx_tag_clear_ents(rx_tag *t)
-{
+void rx_cdx_tag_clear_ents(rx_tag* t) {
     for (size_t i = 0; i < t->n; i++) {
         ent_free(&t->ents[i]);
     }
@@ -204,15 +202,13 @@ void rx_cdx_tag_clear_ents(rx_tag *t)
 
 static int g_sort_desc; /* qsort context (the engine is single-threaded) */
 
-static int ent_qsort_cmp(const void *a, const void *b)
-{
-    return ent_cmp((const rx_ent *)a, (const rx_ent *)b, g_sort_desc);
+static int ent_qsort_cmp(const void* a, const void* b) {
+    return ent_cmp((const rx_ent*)a, (const rx_ent*)b, g_sort_desc);
 }
 
 /* sort ents if needed; for UNIQUE tags drop exact-duplicate keys (keeping
    the lowest recno, i.e. the first record that produced the key) */
-void rx_cdx_tag_ensure_sorted(rx_tag *t)
-{
+void rx_cdx_tag_ensure_sorted(rx_tag* t) {
     if (t->sorted || t->n == 0) {
         t->sorted = 1;
         return;
@@ -223,8 +219,8 @@ void rx_cdx_tag_ensure_sorted(rx_tag *t)
         size_t w = 0;
         for (size_t i = 0; i < t->n; i++) {
             if (w > 0) {
-                rx_ent *pr = &t->ents[w - 1];
-                rx_ent *c = &t->ents[i];
+                rx_ent* pr = &t->ents[w - 1];
+                rx_ent* c = &t->ents[i];
                 size_t m = pr->klen < c->klen ? pr->klen : c->klen;
                 int c2 = memcmp(pr->key, c->key, m);
                 if (c2 == 0) {
@@ -242,20 +238,19 @@ void rx_cdx_tag_ensure_sorted(rx_tag *t)
     t->sorted = 1;
 }
 
-int rx_cdx_tag_insert_sorted(rx_tag *t, const uint8_t *key, size_t klen, uint32_t recno)
-{
+int rx_cdx_tag_insert_sorted(rx_tag* t, const uint8_t* key, size_t klen, uint32_t recno) {
     /* O(1) append; the array is (re)sorted lazily on first read (seek /
        positional access / flush), so bulk builds of 100k+ keys stay linear */
     if (t->n == t->cap) {
         size_t nc = t->cap ? t->cap * 2 : 64;
-        rx_ent *ne = realloc(t->ents, nc * sizeof(rx_ent));
+        rx_ent* ne = realloc(t->ents, nc * sizeof(rx_ent));
         if (!ne) {
             RX_FATAL("out of memory");
         }
         t->ents = ne;
         t->cap = nc;
     }
-    rx_ent *en = &t->ents[t->n++];
+    rx_ent* en = &t->ents[t->n++];
     en->key = malloc(klen ? klen : 1);
     if (!en->key) {
         RX_FATAL("out of memory");
@@ -270,8 +265,7 @@ int rx_cdx_tag_insert_sorted(rx_tag *t, const uint8_t *key, size_t klen, uint32_
 
 /* ============================ low-level block I/O ============================ */
 
-int rx_cdx_blk_read(int fd, uint32_t blk, uint8_t out[RX_CDX_BLOCK])
-{
+int rx_cdx_blk_read(int fd, uint32_t blk, uint8_t out[RX_CDX_BLOCK]) {
     off_t off = (off_t)blk * RX_CDX_BLOCK;
     size_t got = 0;
     while (got < RX_CDX_BLOCK) {
@@ -284,8 +278,7 @@ int rx_cdx_blk_read(int fd, uint32_t blk, uint8_t out[RX_CDX_BLOCK])
     return R_OK;
 }
 
-int rx_cdx_blk_write(int fd, uint32_t blk, const uint8_t buf[RX_CDX_BLOCK])
-{
+int rx_cdx_blk_write(int fd, uint32_t blk, const uint8_t buf[RX_CDX_BLOCK]) {
     off_t off = (off_t)blk * RX_CDX_BLOCK;
     size_t put = 0;
     while (put < RX_CDX_BLOCK) {
@@ -298,18 +291,15 @@ int rx_cdx_blk_write(int fd, uint32_t blk, const uint8_t buf[RX_CDX_BLOCK])
     return R_OK;
 }
 
-uint16_t rx_cdx_get_u16(const uint8_t *p)
-{
+uint16_t rx_cdx_get_u16(const uint8_t* p) {
     return (uint16_t)(p[0] | (p[1] << 8));
 }
 
-uint32_t rx_cdx_get_u32(const uint8_t *p)
-{
+uint32_t rx_cdx_get_u32(const uint8_t* p) {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
-uint64_t rx_cdx_get_u64(const uint8_t *p)
-{
+uint64_t rx_cdx_get_u64(const uint8_t* p) {
     uint64_t u = 0;
     for (int i = 7; i >= 0; i--) {
         u = (u << 8) | p[i];
@@ -317,22 +307,19 @@ uint64_t rx_cdx_get_u64(const uint8_t *p)
     return u;
 }
 
-static void put_u16b(uint8_t *p, uint16_t v)
-{
+static void put_u16b(uint8_t* p, uint16_t v) {
     p[0] = (uint8_t)v;
     p[1] = (uint8_t)(v >> 8);
 }
 
-static void put_u32b(uint8_t *p, uint32_t v)
-{
+static void put_u32b(uint8_t* p, uint32_t v) {
     p[0] = (uint8_t)v;
     p[1] = (uint8_t)(v >> 8);
     p[2] = (uint8_t)(v >> 16);
     p[3] = (uint8_t)(v >> 24);
 }
 
-static void put_u64b(uint8_t *p, uint64_t v)
-{
+static void put_u64b(uint8_t* p, uint64_t v) {
     for (int i = 0; i < 8; i++) {
         p[i] = (uint8_t)(v >> (8 * i));
     }
@@ -344,8 +331,7 @@ static void put_u64b(uint8_t *p, uint64_t v)
 #define RX_DIR_HDR_SIZE 24
 #define RX_DIR_ENTRIES ((RX_CDX_BLOCK - RX_DIR_HDR_SIZE) / RX_TAG_HDR_SIZE)
 
-static int cdx_read_dir(int fd, rx_idx *ix)
-{
+static int cdx_read_dir(int fd, rx_idx* ix) {
     uint8_t buf[RX_CDX_BLOCK];
     uint32_t blk = 0;
     for (;;) {
@@ -358,17 +344,17 @@ static int cdx_read_dir(int fd, rx_idx *ix)
         uint16_t n = rx_cdx_get_u16(buf + 6);
         uint32_t next = rx_cdx_get_u32(buf + 8);
         for (uint16_t i = 0; i < n && i < RX_DIR_ENTRIES; i++) {
-            const uint8_t *h = buf + RX_DIR_HDR_SIZE + (size_t)i * RX_TAG_HDR_SIZE;
+            const uint8_t* h = buf + RX_DIR_HDR_SIZE + (size_t)i * RX_TAG_HDR_SIZE;
             if (ix->ntags == ix->captags) {
                 size_t nc = ix->captags ? ix->captags * 2 : 8;
-                rx_tag *nt = realloc(ix->tags, nc * sizeof(rx_tag));
+                rx_tag* nt = realloc(ix->tags, nc * sizeof(rx_tag));
                 if (!nt) {
                     RX_FATAL("out of memory");
                 }
                 ix->tags = nt;
                 ix->captags = nc;
             }
-            rx_tag *t = &ix->tags[ix->ntags++];
+            rx_tag* t = &ix->tags[ix->ntags++];
             memset(t, 0, sizeof(*t));
             memcpy(t->name, h, 11);
             t->name[11] = '\0';
@@ -395,8 +381,7 @@ static int cdx_read_dir(int fd, rx_idx *ix)
 }
 
 /* read one tag's B+tree into t->ents (leaf order) */
-static int cdx_read_tree(int fd, rx_tag *t, uint32_t root, uint32_t nkeys_expected)
-{
+static int cdx_read_tree(int fd, rx_tag* t, uint32_t root, uint32_t nkeys_expected) {
     uint8_t buf[RX_CDX_BLOCK];
     uint32_t cur = root;
     int rc = R_OK;
@@ -457,14 +442,14 @@ static int cdx_read_tree(int fd, rx_tag *t, uint32_t root, uint32_t nkeys_expect
                 }
                 if (t->n == t->cap) {
                     size_t nc = t->cap ? t->cap * 2 : 64;
-                    rx_ent *ne = realloc(t->ents, nc * sizeof(rx_ent));
+                    rx_ent* ne = realloc(t->ents, nc * sizeof(rx_ent));
                     if (!ne) {
                         RX_FATAL("out of memory");
                     }
                     t->ents = ne;
                     t->cap = nc;
                 }
-                rx_ent *en = &t->ents[t->n++];
+                rx_ent* en = &t->ents[t->n++];
                 en->key = malloc(klen ? klen : 1);
                 if (!en->key) {
                     RX_FATAL("out of memory");
@@ -492,8 +477,7 @@ static int cdx_read_tree(int fd, rx_tag *t, uint32_t root, uint32_t nkeys_expect
     return rc;
 }
 
-static int cdx_read_tag_trees(int fd, rx_idx *ix)
-{
+static int cdx_read_tag_trees(int fd, rx_idx* ix) {
     /* re-read dir to get root pages, then trees */
     uint8_t buf[RX_CDX_BLOCK];
     uint32_t blk = 0;
@@ -505,7 +489,7 @@ static int cdx_read_tag_trees(int fd, rx_idx *ix)
         uint16_t n = rx_cdx_get_u16(buf + 6);
         uint32_t next = rx_cdx_get_u32(buf + 8);
         for (uint16_t i = 0; i < n && i < RX_DIR_ENTRIES && ti < ix->ntags; i++) {
-            const uint8_t *h = buf + RX_DIR_HDR_SIZE + (size_t)i * RX_TAG_HDR_SIZE;
+            const uint8_t* h = buf + RX_DIR_HDR_SIZE + (size_t)i * RX_TAG_HDR_SIZE;
             uint32_t root = rx_cdx_get_u32(h + 206);
             uint64_t nk = rx_cdx_get_u64(h + 222);
             int rc = cdx_read_tree(fd, &ix->tags[ti], root, (uint32_t)nk);
@@ -524,13 +508,18 @@ static int cdx_read_tag_trees(int fd, rx_idx *ix)
 
 /* ============================ CDX write (deterministic bulk build) ============================ */
 
-void rx_cdx_wr_u16(uint8_t *p, uint16_t v) { put_u16b(p, v); }
-void rx_cdx_wr_u32(uint8_t *p, uint32_t v) { put_u32b(p, v); }
-void rx_cdx_wr_u64(uint8_t *p, uint64_t v) { put_u64b(p, v); }
+void rx_cdx_wr_u16(uint8_t* p, uint16_t v) {
+    put_u16b(p, v);
+}
+void rx_cdx_wr_u32(uint8_t* p, uint32_t v) {
+    put_u32b(p, v);
+}
+void rx_cdx_wr_u64(uint8_t* p, uint64_t v) {
+    put_u64b(p, v);
+}
 
 /* append a leaf entry; returns 0 on success, 1 when full */
-static int leaf_put(uint8_t *buf, size_t *off, const rx_ent *e)
-{
+static int leaf_put(uint8_t* buf, size_t* off, const rx_ent* e) {
     if (*off + 2 + e->klen + 4 > RX_CDX_BLOCK) {
         return 1;
     }
@@ -543,8 +532,8 @@ static int leaf_put(uint8_t *buf, size_t *off, const rx_ent *e)
     return 0;
 }
 
-static int internal_put(uint8_t *buf, size_t *off, const uint8_t *key, size_t klen, uint32_t child)
-{
+static int internal_put(uint8_t* buf, size_t* off, const uint8_t* key, size_t klen,
+                        uint32_t child) {
     if (*off + 2 + klen + 8 > RX_CDX_BLOCK) {
         return 1;
     }
@@ -561,8 +550,7 @@ static int internal_put(uint8_t *buf, size_t *off, const uint8_t *key, size_t kl
 
 /* Write tag t's tree starting at block *next; returns root page in *root_out.
  * Pages are allocated sequentially; the file is sized by the caller. */
-int rx_cdx_write_tree(int fd, rx_tag *t, uint32_t *next, uint32_t *root_out)
-{
+int rx_cdx_write_tree(int fd, rx_tag* t, uint32_t* next, uint32_t* root_out) {
     /* deterministic bulk build. Node layout: u16 type @0, u16 key count @2,
        u32 left sibling @4, u32 right sibling @8, u32 leftmost child @12,
        entries from offset 16. Leaf entry: u16 klen, key, u32 recno.
@@ -576,16 +564,16 @@ int rx_cdx_write_tree(int fd, rx_tag *t, uint32_t *next, uint32_t *root_out)
     }
     typedef struct {
         uint32_t page;
-        const rx_ent *first; /* first key of this node's subtree */
+        const rx_ent* first; /* first key of this node's subtree */
         size_t count;
     } nodeinfo;
-    nodeinfo *level = NULL;
+    nodeinfo* level = NULL;
     size_t nlevel = 0, caplevel = 0;
     size_t i = 0;
     while (i < n) {
         if (nlevel == caplevel) {
             caplevel = caplevel ? caplevel * 2 : 64;
-            nodeinfo *nl = realloc(level, caplevel * sizeof(nodeinfo));
+            nodeinfo* nl = realloc(level, caplevel * sizeof(nodeinfo));
             if (!nl) {
                 RX_FATAL("out of memory");
             }
@@ -595,7 +583,7 @@ int rx_cdx_write_tree(int fd, rx_tag *t, uint32_t *next, uint32_t *root_out)
         uint8_t buf[RX_CDX_BLOCK];
         memset(buf, 0, sizeof(buf));
         size_t off = 16, cnt = 0;
-        const rx_ent *first = &t->ents[i];
+        const rx_ent* first = &t->ents[i];
         while (i < n) {
             size_t need = 2 + t->ents[i].klen + 4;
             if (cnt > 0 && off + need > RX_CDX_BLOCK) {
@@ -631,13 +619,13 @@ int rx_cdx_write_tree(int fd, rx_tag *t, uint32_t *next, uint32_t *root_out)
     }
     int leaf_level = 1;
     while (nlevel > 1) {
-        nodeinfo *up = NULL;
+        nodeinfo* up = NULL;
         size_t nup = 0, capup = 0;
         size_t ci = 0;
         while (ci < nlevel) {
             if (nup == capup) {
                 capup = capup ? capup * 2 : 64;
-                nodeinfo *nu = realloc(up, capup * sizeof(nodeinfo));
+                nodeinfo* nu = realloc(up, capup * sizeof(nodeinfo));
                 if (!nu) {
                     RX_FATAL("out of memory");
                 }
@@ -648,10 +636,10 @@ int rx_cdx_write_tree(int fd, rx_tag *t, uint32_t *next, uint32_t *root_out)
             memset(buf, 0, sizeof(buf));
             size_t off = 16, cnt = 0;
             rx_cdx_wr_u32(buf + 12, level[ci].page); /* leftmost child */
-            const rx_ent *first = level[ci].first;
+            const rx_ent* first = level[ci].first;
             ci++;
             while (ci < nlevel) {
-                const rx_ent *sep = level[ci].first;
+                const rx_ent* sep = level[ci].first;
                 size_t need = 2 + sep->klen + 8;
                 if (cnt > 0 && off + need > RX_CDX_BLOCK) {
                     break;
@@ -695,8 +683,7 @@ int rx_cdx_write_tree(int fd, rx_tag *t, uint32_t *next, uint32_t *root_out)
     return R_OK;
 }
 
-static int cdx_write_file(rx_idx *ix)
-{
+static int cdx_write_file(rx_idx* ix) {
     int fd = open(ix->path, O_RDWR | O_CREAT, 0644);
     if (fd < 0) {
         return R_ERR_IO_OPEN;
@@ -710,7 +697,7 @@ static int cdx_write_file(rx_idx *ix)
     next = dir_blocks;
     /* first pass: count pages per tag by building into a scratch fd? We
        build directly: compute page counts by simulating allocation */
-    uint32_t *roots = calloc(ix->ntags ? ix->ntags : 1, sizeof(uint32_t));
+    uint32_t* roots = calloc(ix->ntags ? ix->ntags : 1, sizeof(uint32_t));
     if (!roots) {
         RX_FATAL("out of memory");
     }
@@ -746,8 +733,8 @@ static int cdx_write_file(rx_idx *ix)
         rx_cdx_wr_u32(buf + 12, next);
         rx_cdx_wr_u32(buf + 16, 0);
         for (size_t i = 0; i < cnt; i++) {
-            rx_tag *t = &ix->tags[base + i];
-            uint8_t *h = buf + RX_DIR_HDR_SIZE + i * RX_TAG_HDR_SIZE;
+            rx_tag* t = &ix->tags[base + i];
+            uint8_t* h = buf + RX_DIR_HDR_SIZE + i * RX_TAG_HDR_SIZE;
             memset(h, 0, RX_TAG_HDR_SIZE);
             memcpy(h, t->name, strlen(t->name) > 11 ? 11 : strlen(t->name));
             memcpy(h + 12, t->key_expr, strlen(t->key_expr) > 128 ? 128 : strlen(t->key_expr));
@@ -774,13 +761,11 @@ static int cdx_write_file(rx_idx *ix)
 
 /* ============================ public API ============================ */
 
-int rx_index_file_count(const rx_dbf *dbf)
-{
+int rx_index_file_count(const rx_dbf* dbf) {
     return dbf ? (int)dbf->nidxs : 0;
 }
 
-int rx_index_file_path(const rx_dbf *dbf, int fi, const char **out)
-{
+int rx_index_file_path(const rx_dbf* dbf, int fi, const char** out) {
     if (!dbf || fi < 0 || (size_t)fi >= dbf->nidxs || !dbf->idxs[fi]) {
         return R_ERR_RANGE;
     }
@@ -788,25 +773,23 @@ int rx_index_file_path(const rx_dbf *dbf, int fi, const char **out)
     return R_OK;
 }
 
-int rx_index_file_is_cdx(const rx_dbf *dbf, int fi)
-{
+int rx_index_file_is_cdx(const rx_dbf* dbf, int fi) {
     if (!dbf || fi < 0 || (size_t)fi >= dbf->nidxs || !dbf->idxs[fi]) {
         return 0;
     }
     return dbf->idxs[fi]->is_cdx;
 }
 
-int rx_tag_count(const rx_dbf *dbf, int fi)
-{
+int rx_tag_count(const rx_dbf* dbf, int fi) {
     if (!dbf || fi < 0 || (size_t)fi >= dbf->nidxs || !dbf->idxs[fi]) {
         return 0;
     }
     return (int)dbf->idxs[fi]->ntags;
 }
 
-int rx_tag_info(const rx_dbf *dbf, int fi, int ti, const char **name, const char **key, int *flags)
-{
-    rx_tag *t = tag_get((rx_dbf *)dbf, fi, ti);
+int rx_tag_info(const rx_dbf* dbf, int fi, int ti, const char** name, const char** key,
+                int* flags) {
+    rx_tag* t = tag_get((rx_dbf*)dbf, fi, ti);
     if (!t) {
         return R_ERR_CDX_TAG;
     }
@@ -822,9 +805,8 @@ int rx_tag_info(const rx_dbf *dbf, int fi, int ti, const char **name, const char
     return R_OK;
 }
 
-int rx_tag_for_expr(const rx_dbf *dbf, int fi, int ti, const char **for_expr)
-{
-    rx_tag *t = tag_get((rx_dbf *)dbf, fi, ti);
+int rx_tag_for_expr(const rx_dbf* dbf, int fi, int ti, const char** for_expr) {
+    rx_tag* t = tag_get((rx_dbf*)dbf, fi, ti);
     if (!t) {
         return R_ERR_CDX_TAG;
     }
@@ -834,8 +816,7 @@ int rx_tag_for_expr(const rx_dbf *dbf, int fi, int ti, const char **for_expr)
     return R_OK;
 }
 
-int rx_index_order_set(rx_dbf *dbf, int fi, int ti)
-{
+int rx_index_order_set(rx_dbf* dbf, int fi, int ti) {
     if (!dbf) {
         return R_ERR_RANGE;
     }
@@ -852,8 +833,7 @@ int rx_index_order_set(rx_dbf *dbf, int fi, int ti)
     return R_OK;
 }
 
-int rx_index_order_get(const rx_dbf *dbf, int *fi, int *ti)
-{
+int rx_index_order_get(const rx_dbf* dbf, int* fi, int* ti) {
     if (!dbf) {
         return R_ERR_RANGE;
     }
@@ -866,11 +846,10 @@ int rx_index_order_get(const rx_dbf *dbf, int *fi, int *ti)
     return R_OK;
 }
 
-int rx_cdx_idx_add(rx_dbf *dbf, rx_idx *ix)
-{
+int rx_cdx_idx_add(rx_dbf* dbf, rx_idx* ix) {
     if (dbf->nidxs == dbf->capidxs) {
         size_t nc = dbf->capidxs ? dbf->capidxs * 2 : 4;
-        rx_idx **ni = realloc(dbf->idxs, nc * sizeof(rx_idx *));
+        rx_idx** ni = realloc(dbf->idxs, nc * sizeof(rx_idx*));
         if (!ni) {
             RX_FATAL("out of memory");
         }
@@ -881,26 +860,24 @@ int rx_cdx_idx_add(rx_dbf *dbf, rx_idx *ix)
     return R_OK;
 }
 
-int rx_cdx_idx_add_front(rx_dbf *dbf, rx_idx *ix)
-{
+int rx_cdx_idx_add_front(rx_dbf* dbf, rx_idx* ix) {
     if (dbf->nidxs == dbf->capidxs) {
         size_t nc = dbf->capidxs ? dbf->capidxs * 2 : 4;
-        rx_idx **ni = realloc(dbf->idxs, nc * sizeof(rx_idx *));
+        rx_idx** ni = realloc(dbf->idxs, nc * sizeof(rx_idx*));
         if (!ni) {
             RX_FATAL("out of memory");
         }
         dbf->idxs = ni;
         dbf->capidxs = nc;
     }
-    memmove(&dbf->idxs[1], &dbf->idxs[0], dbf->nidxs * sizeof(rx_idx *));
+    memmove(&dbf->idxs[1], &dbf->idxs[0], dbf->nidxs * sizeof(rx_idx*));
     dbf->idxs[0] = ix;
     dbf->nidxs++;
     return R_OK;
 }
 
-rx_idx *rx_cdx_idx_new(const char *path, int is_cdx, int is_ntx)
-{
-    rx_idx *ix = calloc(1, sizeof(rx_idx));
+rx_idx* rx_cdx_idx_new(const char* path, int is_cdx, int is_ntx) {
+    rx_idx* ix = calloc(1, sizeof(rx_idx));
     if (!ix) {
         RX_FATAL("out of memory");
     }
@@ -912,18 +889,17 @@ rx_idx *rx_cdx_idx_new(const char *path, int is_cdx, int is_ntx)
     return ix;
 }
 
-int rx_cdx_tag_push(rx_tag *t, const uint8_t *key, size_t klen, uint32_t recno)
-{
+int rx_cdx_tag_push(rx_tag* t, const uint8_t* key, size_t klen, uint32_t recno) {
     if (t->n == t->cap) {
         size_t nc = t->cap ? t->cap * 2 : 64;
-        rx_ent *ne = realloc(t->ents, nc * sizeof(rx_ent));
+        rx_ent* ne = realloc(t->ents, nc * sizeof(rx_ent));
         if (!ne) {
             RX_FATAL("out of memory");
         }
         t->ents = ne;
         t->cap = nc;
     }
-    rx_ent *en = &t->ents[t->n++];
+    rx_ent* en = &t->ents[t->n++];
     en->key = malloc(klen ? klen : 1);
     if (!en->key) {
         RX_FATAL("out of memory");
@@ -935,8 +911,7 @@ int rx_cdx_tag_push(rx_tag *t, const uint8_t *key, size_t klen, uint32_t recno)
     return R_OK;
 }
 
-static int tag_find(rx_idx *ix, const char *name)
-{
+static int tag_find(rx_idx* ix, const char* name) {
     for (size_t i = 0; i < ix->ntags; i++) {
         if (rx_strcasecmp(ix->tags[i].name, name) == 0) {
             return (int)i;
@@ -945,11 +920,11 @@ static int tag_find(rx_idx *ix, const char *name)
     return -1;
 }
 
-static int tag_add(rx_idx *ix, const char *name, const char *expr, const char *for_expr, int flags)
-{
+static int tag_add(rx_idx* ix, const char* name, const char* expr, const char* for_expr,
+                   int flags) {
     int ex = tag_find(ix, name);
     if (ex >= 0) {
-        rx_tag *t = &ix->tags[ex];
+        rx_tag* t = &ix->tags[ex];
         rx_cdx_tag_clear_ents(t);
         snprintf(t->key_expr, sizeof(t->key_expr), "%s", expr ? expr : "");
         snprintf(t->for_expr, sizeof(t->for_expr), "%s", for_expr ? for_expr : "");
@@ -958,17 +933,17 @@ static int tag_add(rx_idx *ix, const char *name, const char *expr, const char *f
     }
     if (ix->ntags == ix->captags) {
         size_t nc = ix->captags ? ix->captags * 2 : 8;
-        rx_tag *nt = realloc(ix->tags, nc * sizeof(rx_tag));
+        rx_tag* nt = realloc(ix->tags, nc * sizeof(rx_tag));
         if (!nt) {
             RX_FATAL("out of memory");
         }
         ix->tags = nt;
         ix->captags = nc;
     }
-    rx_tag *t = &ix->tags[ix->ntags];
+    rx_tag* t = &ix->tags[ix->ntags];
     memset(t, 0, sizeof(*t));
     snprintf(t->name, sizeof(t->name), "%s", name);
-    for (char *c = t->name; *c; c++) {
+    for (char* c = t->name; *c; c++) {
         *c = (char)toupper((unsigned char)*c);
     }
     snprintf(t->key_expr, sizeof(t->key_expr), "%s", expr ? expr : "");
@@ -978,14 +953,13 @@ static int tag_add(rx_idx *ix, const char *name, const char *expr, const char *f
     return (int)ix->ntags++;
 }
 
-int rx_index_create(rx_dbf *dbf, const char *tag, const char *cdx_path, const char *expr,
-                    const char *for_expr, int flags, int additive)
-{
+int rx_index_create(rx_dbf* dbf, const char* tag, const char* cdx_path, const char* expr,
+                    const char* for_expr, int flags, int additive) {
     (void)additive;
     if (!dbf || !tag || !expr) {
         return R_ERR_RANGE;
     }
-    rx_idx *ix = NULL;
+    rx_idx* ix = NULL;
     int fi = -1;
     if (cdx_path) {
         for (size_t i = 0; i < dbf->nidxs; i++) {
@@ -1040,9 +1014,8 @@ int rx_index_create(rx_dbf *dbf, const char *tag, const char *cdx_path, const ch
     return R_OK;
 }
 
-int rx_index_clear(rx_dbf *dbf, int fi, int ti)
-{
-    rx_tag *t = tag_get(dbf, fi, ti);
+int rx_index_clear(rx_dbf* dbf, int fi, int ti) {
+    rx_tag* t = tag_get(dbf, fi, ti);
     if (!t) {
         return R_ERR_CDX_TAG;
     }
@@ -1050,9 +1023,8 @@ int rx_index_clear(rx_dbf *dbf, int fi, int ti)
     return R_OK;
 }
 
-int rx_index_insert(rx_dbf *dbf, int fi, int ti, const rval *key, uint32_t recno)
-{
-    rx_tag *t = tag_get(dbf, fi, ti);
+int rx_index_insert(rx_dbf* dbf, int fi, int ti, const rval* key, uint32_t recno) {
+    rx_tag* t = tag_get(dbf, fi, ti);
     if (!t || !key) {
         return R_ERR_CDX_TAG;
     }
@@ -1063,20 +1035,19 @@ int rx_index_insert(rx_dbf *dbf, int fi, int ti, const rval *key, uint32_t recno
         sb_putc(&kb, '\0');
         kb.len = 0;
     }
-    int rc = rx_cdx_tag_insert_sorted(t, (const uint8_t *)kb.buf, kb.len, recno);
+    int rc = rx_cdx_tag_insert_sorted(t, (const uint8_t*)kb.buf, kb.len, recno);
     sb_free(&kb);
     return rc;
 }
 
-int rx_index_delete_rec(rx_dbf *dbf, uint32_t recno)
-{
+int rx_index_delete_rec(rx_dbf* dbf, uint32_t recno) {
     if (!dbf) {
         return R_ERR_RANGE;
     }
     for (size_t f = 0; f < dbf->nidxs; f++) {
-        rx_idx *ix = dbf->idxs[f];
+        rx_idx* ix = dbf->idxs[f];
         for (size_t ti = 0; ti < ix->ntags; ti++) {
-            rx_tag *t = &ix->tags[ti];
+            rx_tag* t = &ix->tags[ti];
             for (size_t i = 0; i < t->n; i++) {
                 if (t->ents[i].recno == recno) {
                     ent_free(&t->ents[i]);
@@ -1091,10 +1062,9 @@ int rx_index_delete_rec(rx_dbf *dbf, uint32_t recno)
     return R_OK;
 }
 
-int rx_index_seek_tag(rx_dbf *dbf, int fi, int ti, const rval *key, int exact, uint32_t *recno_out,
-                      int *found)
-{
-    rx_tag *t = tag_get(dbf, fi, ti);
+int rx_index_seek_tag(rx_dbf* dbf, int fi, int ti, const rval* key, int exact, uint32_t* recno_out,
+                      int* found) {
+    rx_tag* t = tag_get(dbf, fi, ti);
     if (!t || !key) {
         return R_ERR_CDX_TAG;
     }
@@ -1107,7 +1077,7 @@ int rx_index_seek_tag(rx_dbf *dbf, int fi, int ti, const rval *key, int exact, u
         kb.len = 0;
     }
     rx_ent probe;
-    probe.key = (uint8_t *)kb.buf;
+    probe.key = (uint8_t*)kb.buf;
     probe.klen = kb.len;
     probe.recno = 0;
     int desc = (t->flags & RX_TAG_DESC) != 0;
@@ -1115,7 +1085,7 @@ int rx_index_seek_tag(rx_dbf *dbf, int fi, int ti, const rval *key, int exact, u
     size_t lo = 0, hi = t->n;
     while (lo < hi) {
         size_t mid = lo + (hi - lo) / 2;
-        rx_ent *e = &t->ents[mid];
+        rx_ent* e = &t->ents[mid];
         size_t m = e->klen < probe.klen ? e->klen : probe.klen;
         int c = memcmp(e->key, probe.key, m);
         if (c == 0) {
@@ -1135,7 +1105,7 @@ int rx_index_seek_tag(rx_dbf *dbf, int fi, int ti, const rval *key, int exact, u
     }
     *found = 0;
     if (lo < t->n) {
-        rx_ent *e = &t->ents[lo];
+        rx_ent* e = &t->ents[lo];
         if (exact) {
             size_t m = e->klen < probe.klen ? e->klen : probe.klen;
             int c = memcmp(e->key, probe.key, m);
@@ -1153,17 +1123,15 @@ int rx_index_seek_tag(rx_dbf *dbf, int fi, int ti, const rval *key, int exact, u
     return R_OK;
 }
 
-int rx_index_seek(rx_dbf *dbf, const rval *key, int exact, uint32_t *recno_out, int *found)
-{
+int rx_index_seek(rx_dbf* dbf, const rval* key, int exact, uint32_t* recno_out, int* found) {
     if (!dbf || dbf->order_file < 0) {
         return R_ERR_CDX_TAG;
     }
     return rx_index_seek_tag(dbf, dbf->order_file, dbf->order_tag, key, exact, recno_out, found);
 }
 
-int rx_index_key_count(const rx_dbf *dbf, int fi, int ti, uint32_t *out)
-{
-    rx_tag *t = tag_get((rx_dbf *)dbf, fi, ti);
+int rx_index_key_count(const rx_dbf* dbf, int fi, int ti, uint32_t* out) {
+    rx_tag* t = tag_get((rx_dbf*)dbf, fi, ti);
     if (!t) {
         return R_ERR_CDX_TAG;
     }
@@ -1171,12 +1139,11 @@ int rx_index_key_count(const rx_dbf *dbf, int fi, int ti, uint32_t *out)
     return R_OK;
 }
 
-int rx_index_recno_at(const rx_dbf *dbf, uint32_t pos, uint32_t *recno_out)
-{
+int rx_index_recno_at(const rx_dbf* dbf, uint32_t pos, uint32_t* recno_out) {
     if (!dbf || dbf->order_file < 0) {
         return R_ERR_CDX_TAG;
     }
-    rx_tag *t = tag_get((rx_dbf *)dbf, dbf->order_file, dbf->order_tag);
+    rx_tag* t = tag_get((rx_dbf*)dbf, dbf->order_file, dbf->order_tag);
     if (!t) {
         return R_ERR_CDX_TAG;
     }
@@ -1188,13 +1155,12 @@ int rx_index_recno_at(const rx_dbf *dbf, uint32_t pos, uint32_t *recno_out)
     return R_OK;
 }
 
-int rx_index_pos_of(const rx_dbf *dbf, uint32_t recno, int64_t *pos_out)
-{
+int rx_index_pos_of(const rx_dbf* dbf, uint32_t recno, int64_t* pos_out) {
     if (!dbf || dbf->order_file < 0) {
         *pos_out = dbf ? (int64_t)recno - 1 : -1; /* natural order */
         return dbf ? R_OK : R_ERR_RANGE;
     }
-    rx_tag *t = tag_get((rx_dbf *)dbf, dbf->order_file, dbf->order_tag);
+    rx_tag* t = tag_get((rx_dbf*)dbf, dbf->order_file, dbf->order_tag);
     if (!t) {
         return R_ERR_CDX_TAG;
     }
@@ -1209,14 +1175,13 @@ int rx_index_pos_of(const rx_dbf *dbf, uint32_t recno, int64_t *pos_out)
     return R_OK;
 }
 
-int rx_index_flush(rx_dbf *dbf)
-{
+int rx_index_flush(rx_dbf* dbf) {
     if (!dbf) {
         return R_ERR_RANGE;
     }
     int rc = R_OK;
     for (size_t f = 0; f < dbf->nidxs; f++) {
-        rx_idx *ix = dbf->idxs[f];
+        rx_idx* ix = dbf->idxs[f];
         int dirty = 0;
         for (size_t ti = 0; ti < ix->ntags; ti++) {
             if (ix->tags[ti].dirty) {
@@ -1238,14 +1203,13 @@ int rx_index_flush(rx_dbf *dbf)
     return rc;
 }
 
-int rx_index_close_all(rx_dbf *dbf)
-{
+int rx_index_close_all(rx_dbf* dbf) {
     if (!dbf) {
         return R_ERR_RANGE;
     }
     rx_index_flush(dbf);
     for (size_t f = 0; f < dbf->nidxs; f++) {
-        rx_idx *ix = dbf->idxs[f];
+        rx_idx* ix = dbf->idxs[f];
         if (ix->fd >= 0) {
             close(ix->fd);
         }
@@ -1264,15 +1228,14 @@ int rx_index_close_all(rx_dbf *dbf)
     return R_OK;
 }
 
-int rx_index_close_nonsstructural(rx_dbf *dbf)
-{
+int rx_index_close_nonsstructural(rx_dbf* dbf) {
     if (!dbf) {
         return R_ERR_RANGE;
     }
     rx_index_flush(dbf);
     size_t w = 0;
     for (size_t f = 0; f < dbf->nidxs; f++) {
-        rx_idx *ix = dbf->idxs[f];
+        rx_idx* ix = dbf->idxs[f];
         if (ix->structural) {
             dbf->idxs[w++] = ix;
             continue;
@@ -1296,14 +1259,12 @@ int rx_index_close_nonsstructural(rx_dbf *dbf)
 
 /* ============================ attach / open ============================ */
 
-static int has_ext(const char *path, const char *ext)
-{
+static int has_ext(const char* path, const char* ext) {
     size_t l = strlen(path), e = strlen(ext);
     return l >= e && rx_strcasecmp(path + l - e, ext) == 0;
 }
 
-int rx_index_attach(rx_dbf *dbf, const char *path, rx_idx **out)
-{
+int rx_index_attach(rx_dbf* dbf, const char* path, rx_idx** out) {
     if (!dbf || !path) {
         return R_ERR_RANGE;
     }
@@ -1316,7 +1277,7 @@ int rx_index_attach(rx_dbf *dbf, const char *path, rx_idx **out)
             return R_OK;
         }
     }
-    rx_idx *ix = calloc(1, sizeof(rx_idx));
+    rx_idx* ix = calloc(1, sizeof(rx_idx));
     if (!ix) {
         RX_FATAL("out of memory");
     }
@@ -1352,10 +1313,10 @@ int rx_index_attach(rx_dbf *dbf, const char *path, rx_idx **out)
                     if (!ix->tags) {
                         RX_FATAL("out of memory");
                     }
-                    rx_tag *t = &ix->tags[ix->ntags++];
+                    rx_tag* t = &ix->tags[ix->ntags++];
                     memset(t, 0, sizeof(*t));
                     /* implicit tag carries the file stem (ORDER()/TAG() report it) */
-                    const char *base = strrchr(path, '/');
+                    const char* base = strrchr(path, '/');
                     base = base ? base + 1 : path;
                     char stem[12];
                     size_t sl = 0;
@@ -1404,8 +1365,7 @@ int rx_index_attach(rx_dbf *dbf, const char *path, rx_idx **out)
 }
 
 /* internal: attach the structural CDX (same stem) if it exists */
-int rx_index_attach_structural(rx_dbf *dbf)
-{
+int rx_index_attach_structural(rx_dbf* dbf) {
     char path[264];
     snprintf(path, sizeof(path), "%s", dbf->path);
     size_t l = strlen(path);
@@ -1417,15 +1377,15 @@ int rx_index_attach_structural(rx_dbf *dbf)
     if (access(path, F_OK) != 0) {
         return R_OK; /* no structural index: fine */
     }
-    rx_idx *ix = NULL;
+    rx_idx* ix = NULL;
     int rc = rx_index_attach(dbf, path, &ix);
     if (rc == R_OK && ix) {
         ix->structural = 1;
         ix->writable = dbf->exclusive && !dbf->readonly;
         /* move to slot 0 */
         size_t pos = dbf->nidxs - 1;
-        rx_idx *tmp = dbf->idxs[pos];
-        memmove(&dbf->idxs[1], &dbf->idxs[0], pos * sizeof(rx_idx *));
+        rx_idx* tmp = dbf->idxs[pos];
+        memmove(&dbf->idxs[1], &dbf->idxs[0], pos * sizeof(rx_idx*));
         dbf->idxs[0] = tmp;
         /* FoxPro rule: the first tag of the structural CDX is the controlling
            order when the table is opened */

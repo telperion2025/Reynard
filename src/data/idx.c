@@ -33,8 +33,7 @@
 
 #include "util/util.h"
 
-int rx_idx_write_file(rx_idx *ix)
-{
+int rx_idx_write_file(rx_idx* ix) {
     if (!ix || ix->ntags == 0) {
         return R_ERR_CDX_TAG;
     }
@@ -42,7 +41,7 @@ int rx_idx_write_file(rx_idx *ix)
     if (fd < 0) {
         return R_ERR_IO_OPEN;
     }
-    rx_tag *t = &ix->tags[0];
+    rx_tag* t = &ix->tags[0];
     rx_cdx_tag_ensure_sorted(t);
     uint32_t next = 1;
     uint32_t root = 0;

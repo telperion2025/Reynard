@@ -16,13 +16,12 @@
 #include <string.h>
 #include <strings.h>
 
-#include "lang/lang.h"
 #include "lang/funcs.h"
+#include "lang/lang.h"
 #include "reynard/dbf.h"
 #include "util/util.h"
 
-static const char *clause_word(rx_stmt *s, const char *key)
-{
+static const char* clause_word(rx_stmt* s, const char* key) {
     for (size_t i = 0; i < s->nclause; i++) {
         if (strcmp(s->clauses[i].key, key) == 0) {
             return s->clauses[i].word;
@@ -31,8 +30,7 @@ static const char *clause_word(rx_stmt *s, const char *key)
     return NULL;
 }
 
-static rx_clause *clause_e(rx_stmt *s, const char *key)
-{
+static rx_clause* clause_e(rx_stmt* s, const char* key) {
     for (size_t i = 0; i < s->nclause; i++) {
         if (strcmp(s->clauses[i].key, key) == 0) {
             return &s->clauses[i];
@@ -41,14 +39,12 @@ static rx_clause *clause_e(rx_stmt *s, const char *key)
     return NULL;
 }
 
-static int has_clause(rx_stmt *s, const char *key)
-{
+static int has_clause(rx_stmt* s, const char* key) {
     return clause_word(s, key) != NULL || clause_e(s, key) != NULL;
 }
 
 /* free one GET object */
-static void get_free(rx_get *g)
-{
+static void get_free(rx_get* g) {
     rx_rval_free(&g->val);
     rx_rval_free(&g->range_lo);
     rx_rval_free(&g->range_hi);
@@ -60,8 +56,7 @@ static void get_free(rx_get *g)
     rx_code_free(&g->valid);
 }
 
-static void ctx_clear_gets(rx_ctx *ctx)
-{
+static void ctx_clear_gets(rx_ctx* ctx) {
     for (size_t i = 0; i < ctx->ngets; i++) {
         get_free(&ctx->gets[i]);
     }
@@ -70,10 +65,9 @@ static void ctx_clear_gets(rx_ctx *ctx)
 
 /* resolve the GET variable: a field of the current work area wins when a
    table is open and the name is a field (FoxPro rule); else memvar */
-static int get_is_field(rx_ctx *ctx, const char *name)
-{
+static int get_is_field(rx_ctx* ctx, const char* name) {
     (void)ctx;
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     if (rx_wa_dbf(0, &dbf) != R_OK) {
         return 0;
     }
@@ -82,11 +76,10 @@ static int get_is_field(rx_ctx *ctx, const char *name)
 }
 
 /* current value of the GET var (field value or memvar value) */
-static int get_current(rx_ctx *ctx, rx_get *g, rval *out)
-{
+static int get_current(rx_ctx* ctx, rx_get* g, rval* out) {
     rx_rval_undef(out);
     if (g->is_field) {
-        rx_dbf *dbf;
+        rx_dbf* dbf;
         if (rx_wa_dbf(0, &dbf) == R_OK) {
             size_t idx;
             if (rx_dbf_field_index(dbf, g->var, &idx) == R_OK) {
@@ -95,7 +88,7 @@ static int get_current(rx_ctx *ctx, rx_get *g, rval *out)
         }
         return R_ERR_FIELD;
     }
-    rx_memvar *mv = rx_memvar_find(ctx, g->var);
+    rx_memvar* mv = rx_memvar_find(ctx, g->var);
     if (mv && !mv->is_array) {
         rx_rval_deep(out, &mv->val);
         return R_OK;
@@ -104,10 +97,9 @@ static int get_current(rx_ctx *ctx, rx_get *g, rval *out)
 }
 
 /* write the edited value back to the field/memvar */
-int rx_form_store(rx_ctx *ctx, rx_get *g)
-{
+int rx_form_store(rx_ctx* ctx, rx_get* g) {
     if (g->is_field) {
-        rx_dbf *dbf;
+        rx_dbf* dbf;
         if (rx_wa_dbf(0, &dbf) != R_OK) {
             return R_ERR_DBF_NOTOPEN;
         }
@@ -130,8 +122,7 @@ int rx_form_store(rx_ctx *ctx, rx_get *g)
     return rx_memvar_set(ctx, g->var, &g->val);
 }
 
-int rx_cmd_sayget(rx_ctx *ctx, rx_stmt *s)
-{
+int rx_cmd_sayget(rx_ctx* ctx, rx_stmt* s) {
     if (s->nexpr < 2) {
         return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "@ requires row,col");
     }
@@ -169,11 +160,11 @@ int rx_cmd_sayget(rx_ctx *ctx, rx_stmt *s)
         return R_OK;
     }
 
-    rx_clause *sayc = clause_e(s, "SAY");
-    const char *getname = clause_word(s, "GET");
+    rx_clause* sayc = clause_e(s, "SAY");
+    const char* getname = clause_word(s, "GET");
 
     /* SAY text */
-    char *saytext = NULL;
+    char* saytext = NULL;
     if (sayc) {
         rval v;
         rx_rval_undef(&v);
@@ -184,8 +175,8 @@ int rx_cmd_sayget(rx_ctx *ctx, rx_stmt *s)
         strbuf sb;
         sb_init(&sb);
         /* SAY-side PICTURE/FUNCTION (before the GET keyword) format the label */
-        const char *pic = clause_word(s, "SAYPICTURE");
-        const char *fn = clause_word(s, "SAYFUNCTION");
+        const char* pic = clause_word(s, "SAYPICTURE");
+        const char* fn = clause_word(s, "SAYFUNCTION");
         if (pic) {
             rx_picture_render(ctx, &v, pic, fn, &sb);
         } else {
@@ -212,7 +203,7 @@ int rx_cmd_sayget(rx_ctx *ctx, rx_stmt *s)
     /* register the GET */
     if (ctx->ngets == ctx->capgets) {
         size_t nc = ctx->capgets ? ctx->capgets * 2 : 8;
-        rx_get *ng = realloc(ctx->gets, nc * sizeof(rx_get));
+        rx_get* ng = realloc(ctx->gets, nc * sizeof(rx_get));
         if (!ng) {
             free(saytext);
             RX_FATAL("out of memory");
@@ -220,10 +211,10 @@ int rx_cmd_sayget(rx_ctx *ctx, rx_stmt *s)
         ctx->gets = ng;
         ctx->capgets = nc;
     }
-    rx_get *g = &ctx->gets[ctx->ngets++];
+    rx_get* g = &ctx->gets[ctx->ngets++];
     memset(g, 0, sizeof(*g));
     snprintf(g->var, sizeof(g->var), "%.63s", getname);
-    for (char *c = g->var; *c; c++) {
+    for (char* c = g->var; *c; c++) {
         *c = (char)toupper((unsigned char)*c);
     }
     g->is_field = get_is_field(ctx, g->var);
@@ -235,8 +226,8 @@ int rx_cmd_sayget(rx_ctx *ctx, rx_stmt *s)
     g->say = saytext;
     g->say_row = row;
     g->say_col = col;
-    const char *pic = clause_word(s, "PICTURE");
-    const char *fn = clause_word(s, "FUNCTION");
+    const char* pic = clause_word(s, "PICTURE");
+    const char* fn = clause_word(s, "FUNCTION");
     if (pic) {
         g->picture = rx_strdup(pic);
     }
@@ -249,7 +240,8 @@ int rx_cmd_sayget(rx_ctx *ctx, rx_stmt *s)
         rval h, w;
         rx_rval_undef(&h);
         rx_rval_undef(&w);
-        if (rx_eval(ctx, sh->e, &h, &ctx->err) == R_OK && rx_eval(ctx, sw->e, &w, &ctx->err) == R_OK) {
+        if (rx_eval(ctx, sh->e, &h, &ctx->err) == R_OK &&
+            rx_eval(ctx, sw->e, &w, &ctx->err) == R_OK) {
             double hd, wd;
             if (rv_to_num(&h, &hd) && rv_to_num(&w, &wd)) {
                 g->size_h = (int)hd;
@@ -262,7 +254,7 @@ int rx_cmd_sayget(rx_ctx *ctx, rx_stmt *s)
     /* DEFAULT / current value */
     rc = get_current(ctx, g, &g->val);
     if (rc != R_OK) {
-        rx_clause *dc = clause_e(s, "DEFAULT");
+        rx_clause* dc = clause_e(s, "DEFAULT");
         if (dc) {
             rx_rval_undef(&g->val);
             rc = rx_eval(ctx, dc->e, &g->val, &ctx->err);
@@ -272,7 +264,7 @@ int rx_cmd_sayget(rx_ctx *ctx, rx_stmt *s)
         }
     }
     /* WHEN / VALID / RANGE compiled */
-    rx_clause *wc = clause_e(s, "WHEN");
+    rx_clause* wc = clause_e(s, "WHEN");
     if (wc) {
         g->has_when = 1;
         rc = rx_compile_expr(wc->e, &g->when, &ctx->err);
@@ -280,7 +272,7 @@ int rx_cmd_sayget(rx_ctx *ctx, rx_stmt *s)
             return rc;
         }
     }
-    rx_clause *vc = clause_e(s, "VALID");
+    rx_clause* vc = clause_e(s, "VALID");
     if (vc) {
         g->has_valid = 1;
         rc = rx_compile_expr(vc->e, &g->valid, &ctx->err);
@@ -308,8 +300,7 @@ int rx_cmd_sayget(rx_ctx *ctx, rx_stmt *s)
     return R_OK;
 }
 
-int rx_cmd_read(rx_ctx *ctx, rx_stmt *s)
-{
+int rx_cmd_read(rx_ctx* ctx, rx_stmt* s) {
     if (has_clause(s, "CLEARGETS")) {
         ctx_clear_gets(ctx);
         return R_OK;
@@ -326,8 +317,7 @@ int rx_cmd_read(rx_ctx *ctx, rx_stmt *s)
         return R_OK; /* FoxPro: READ with no GETs is a no-op */
     }
     if (!ctx->read_fn) {
-        return rx_raise(ctx, R_ERR_NOUI, s->line, s->col,
-                        "READ requires the interactive UI");
+        return rx_raise(ctx, R_ERR_NOUI, s->line, s->col, "READ requires the interactive UI");
     }
     ctx->read_active = 1;
     int rc = ctx->read_fn(ctx->read_ud);
@@ -346,8 +336,7 @@ int rx_cmd_read(rx_ctx *ctx, rx_stmt *s)
 }
 
 /* called from rx_ctx_free */
-void rx_form_free_ctx(rx_ctx *ctx)
-{
+void rx_form_free_ctx(rx_ctx* ctx) {
     ctx_clear_gets(ctx);
     free(ctx->gets);
     ctx->gets = NULL;

@@ -37,14 +37,7 @@ enum {
 };
 
 /* report variable aggregates */
-enum {
-    RV_NONE = 0,
-    RV_SUM,
-    RV_COUNT,
-    RV_AVG,
-    RV_MIN,
-    RV_MAX
-};
+enum { RV_NONE = 0, RV_SUM, RV_COUNT, RV_AVG, RV_MIN, RV_MAX };
 
 typedef struct rpt_obj {
     int type;
@@ -56,7 +49,7 @@ typedef struct rpt_band {
     int type;
     int height;
     char group[160]; /* group expr raw text for GROUPHEADER/GROUPFOOTER */
-    rpt_obj *objs;
+    rpt_obj* objs;
     size_t nobjs, capobjs;
 } rpt_band;
 
@@ -77,25 +70,25 @@ typedef struct rpt_file {
     /* label setup */
     char stock[32];
     int lab_h, lab_w, lab_sp_r, lab_sp_c, lab_m_l, lab_m_t;
-    rpt_band *bands;
+    rpt_band* bands;
     size_t nbands, capbands;
-    rpt_var *vars;
+    rpt_var* vars;
     size_t nvars, capvars;
 } rpt_file;
 
-void rptf_init(rpt_file *rf, const char *name, int is_label);
-void rptf_free(rpt_file *rf);
-rpt_band *rptf_band(const rpt_file *rf, int type);       /* find or add band */
-rpt_band *rptf_band_add(rpt_file *rf, int type, int height);
-rpt_obj *rptf_obj_add(rpt_band *b);
-const char *rptf_band_name(int t);
-int rptf_band_type(const char *s);
-const char *rptf_agg_name(int a);
-int rptf_agg_from_name(const char *s);
-int rptf_serialize(const rpt_file *rf, strbuf *sb);
-int rptf_load_text(const char *text, rpt_file *rf);
-int rptf_load(const char *path, rpt_file *rf);
-int rptf_save(const char *path, const rpt_file *rf);
+void rptf_init(rpt_file* rf, const char* name, int is_label);
+void rptf_free(rpt_file* rf);
+rpt_band* rptf_band(const rpt_file* rf, int type); /* find or add band */
+rpt_band* rptf_band_add(rpt_file* rf, int type, int height);
+rpt_obj* rptf_obj_add(rpt_band* b);
+const char* rptf_band_name(int t);
+int rptf_band_type(const char* s);
+const char* rptf_agg_name(int a);
+int rptf_agg_from_name(const char* s);
+int rptf_serialize(const rpt_file* rf, strbuf* sb);
+int rptf_load_text(const char* text, rpt_file* rf);
+int rptf_load(const char* path, rpt_file* rf);
+int rptf_save(const char* path, const rpt_file* rf);
 
 #ifdef __cplusplus
 }

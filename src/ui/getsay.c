@@ -16,11 +16,10 @@
 #include <strings.h>
 #include <sys/stat.h>
 
-static void mkpath(const char *dir)
-{
+static void mkpath(const char* dir) {
     char tmp[300];
     snprintf(tmp, sizeof(tmp), "%s", dir);
-    for (char *p = tmp + 1; *p; p++) {
+    for (char* p = tmp + 1; *p; p++) {
         if (*p == '/') {
             *p = '\0';
             mkdir(tmp, 0755);
@@ -30,8 +29,7 @@ static void mkpath(const char *dir)
     mkdir(tmp, 0755);
 }
 
-static void gs_ensure(getsay *g, size_t need)
-{
+static void gs_ensure(getsay* g, size_t need) {
     if (g->len + need + 1 <= g->cap) {
         return;
     }
@@ -39,7 +37,7 @@ static void gs_ensure(getsay *g, size_t need)
     while (nc < g->len + need + 1) {
         nc *= 2;
     }
-    char *nb = realloc(g->buf, nc);
+    char* nb = realloc(g->buf, nc);
     if (!nb) {
         RX_FATAL("out of memory");
     }
@@ -47,8 +45,7 @@ static void gs_ensure(getsay *g, size_t need)
     g->cap = nc;
 }
 
-void gs_init(getsay *g, size_t maxhist)
-{
+void gs_init(getsay* g, size_t maxhist) {
     memset(g, 0, sizeof(*g));
     g->maxhist = maxhist ? maxhist : GS_MAXHIST;
     g->hpos = 0;
@@ -57,8 +54,7 @@ void gs_init(getsay *g, size_t maxhist)
     gs_hist_load(g);
 }
 
-void gs_free(getsay *g)
-{
+void gs_free(getsay* g) {
     free(g->buf);
     for (size_t i = 0; i < g->nhist; i++) {
         free(g->hist[i]);
@@ -67,8 +63,7 @@ void gs_free(getsay *g)
     memset(g, 0, sizeof(*g));
 }
 
-void gs_clear(getsay *g)
-{
+void gs_clear(getsay* g) {
     g->len = 0;
     g->cur = 0;
     if (g->buf) {
@@ -77,15 +72,13 @@ void gs_clear(getsay *g)
     g->comp = -1;
 }
 
-void gs_insert_cp(getsay *g, uint32_t cp)
-{
+void gs_insert_cp(getsay* g, uint32_t cp) {
     char tmp[5];
     size_t n = utf8_encode(cp, tmp);
     gs_insert(g, tmp, n);
 }
 
-void gs_insert(getsay *g, const char *s, size_t n)
-{
+void gs_insert(getsay* g, const char* s, size_t n) {
     gs_ensure(g, n);
     memmove(g->buf + g->cur + n, g->buf + g->cur, g->len - g->cur);
     memcpy(g->buf + g->cur, s, n);
@@ -95,8 +88,7 @@ void gs_insert(getsay *g, const char *s, size_t n)
     g->comp = -1;
 }
 
-static size_t prev_cp_off(getsay *g, size_t pos)
-{
+static size_t prev_cp_off(getsay* g, size_t pos) {
     if (pos == 0) {
         return 0;
     }
@@ -107,8 +99,7 @@ static size_t prev_cp_off(getsay *g, size_t pos)
     return p;
 }
 
-static size_t next_cp_off(getsay *g, size_t pos)
-{
+static size_t next_cp_off(getsay* g, size_t pos) {
     if (pos >= g->len) {
         return g->len;
     }
@@ -117,8 +108,7 @@ static size_t next_cp_off(getsay *g, size_t pos)
     return pos + (used ? used : 1);
 }
 
-int gs_backspace(getsay *g)
-{
+int gs_backspace(getsay* g) {
     if (g->cur == 0) {
         return 0;
     }
@@ -131,8 +121,7 @@ int gs_backspace(getsay *g)
     return 1;
 }
 
-int gs_delete(getsay *g)
-{
+int gs_delete(getsay* g) {
     if (g->cur >= g->len) {
         return 0;
     }
@@ -144,65 +133,57 @@ int gs_delete(getsay *g)
     return 1;
 }
 
-void gs_left(getsay *g)
-{
+void gs_left(getsay* g) {
     g->cur = prev_cp_off(g, g->cur);
     g->comp = -1;
 }
 
-void gs_right(getsay *g)
-{
+void gs_right(getsay* g) {
     g->cur = next_cp_off(g, g->cur);
     g->comp = -1;
 }
 
-void gs_home(getsay *g)
-{
+void gs_home(getsay* g) {
     g->cur = 0;
     g->comp = -1;
 }
 
-void gs_end(getsay *g)
-{
+void gs_end(getsay* g) {
     g->cur = g->len;
     g->comp = -1;
 }
 
-void gs_kill_end(getsay *g)
-{
+void gs_kill_end(getsay* g) {
     g->len = g->cur;
     g->buf[g->len] = '\0';
     g->comp = -1;
 }
 
-int gs_hist_up(getsay *g)
-{
+int gs_hist_up(getsay* g) {
     if (g->hpos == 0) {
         return 0;
     }
     g->hpos--;
-    const char *h = g->hist[g->hpos];
+    const char* h = g->hist[g->hpos];
     gs_clear(g);
     gs_insert(g, h, strlen(h));
     return 1;
 }
 
-int gs_hist_down(getsay *g)
-{
+int gs_hist_down(getsay* g) {
     if (g->hpos >= g->nhist) {
         return 0;
     }
     g->hpos++;
     gs_clear(g);
     if (g->hpos < g->nhist) {
-        const char *h = g->hist[g->hpos];
+        const char* h = g->hist[g->hpos];
         gs_insert(g, h, strlen(h));
     }
     return 1;
 }
 
-void gs_hist_add(getsay *g, const char *line)
-{
+void gs_hist_add(getsay* g, const char* line) {
     if (!line || !*line) {
         return;
     }
@@ -211,7 +192,7 @@ void gs_hist_add(getsay *g, const char *line)
     }
     if (g->nhist == g->caphist) {
         size_t nc = g->caphist ? g->caphist * 2 : 64;
-        char **nh = realloc(g->hist, nc * sizeof(char *));
+        char** nh = realloc(g->hist, nc * sizeof(char*));
         if (!nh) {
             RX_FATAL("out of memory");
         }
@@ -221,21 +202,20 @@ void gs_hist_add(getsay *g, const char *line)
     g->hist[g->nhist++] = rx_strdup(line);
     if (g->nhist > g->maxhist) {
         free(g->hist[0]);
-        memmove(g->hist, g->hist + 1, (g->nhist - 1) * sizeof(char *));
+        memmove(g->hist, g->hist + 1, (g->nhist - 1) * sizeof(char*));
         g->nhist--;
     }
     g->hpos = g->nhist;
     gs_hist_save(g);
 }
 
-void gs_hist_path(getsay *g, char *out, size_t outsz)
-{
-    const char *xdg = getenv("XDG_CACHE_HOME");
+void gs_hist_path(getsay* g, char* out, size_t outsz) {
+    const char* xdg = getenv("XDG_CACHE_HOME");
     char base[300];
     if (xdg && *xdg) {
         snprintf(base, sizeof(base), "%s/reynard", xdg);
     } else {
-        const char *home = getenv("HOME");
+        const char* home = getenv("HOME");
         if (home && *home) {
             snprintf(base, sizeof(base), "%s/.cache/reynard", home);
         } else {
@@ -246,9 +226,8 @@ void gs_hist_path(getsay *g, char *out, size_t outsz)
     (void)g;
 }
 
-void gs_hist_load(getsay *g)
-{
-    FILE *f = fopen(g->hist_path, "r");
+void gs_hist_load(getsay* g) {
+    FILE* f = fopen(g->hist_path, "r");
     if (!f) {
         return;
     }
@@ -260,12 +239,12 @@ void gs_hist_load(getsay *g)
         }
         if (g->nhist >= g->maxhist) {
             free(g->hist[0]);
-            memmove(g->hist, g->hist + 1, (g->nhist - 1) * sizeof(char *));
+            memmove(g->hist, g->hist + 1, (g->nhist - 1) * sizeof(char*));
             g->nhist--;
         }
         if (g->nhist == g->caphist) {
             size_t nc = g->caphist ? g->caphist * 2 : 64;
-            char **nh = realloc(g->hist, nc * sizeof(char *));
+            char** nh = realloc(g->hist, nc * sizeof(char*));
             if (!nh) {
                 RX_FATAL("out of memory");
             }
@@ -278,24 +257,22 @@ void gs_hist_load(getsay *g)
     g->hpos = g->nhist;
 }
 
-void gs_reset_hist_nav(getsay *g)
-{
+void gs_reset_hist_nav(getsay* g) {
     g->hpos = g->nhist;
 }
 
-void gs_hist_save(getsay *g)
-{
+void gs_hist_save(getsay* g) {
     if (!g->hist_path[0]) {
         return;
     }
     char dir[300];
     snprintf(dir, sizeof(dir), "%s", g->hist_path);
-    char *slash = strrchr(dir, '/');
+    char* slash = strrchr(dir, '/');
     if (slash) {
         *slash = '\0';
         mkpath(dir);
     }
-    FILE *f = fopen(g->hist_path, "w");
+    FILE* f = fopen(g->hist_path, "w");
     if (!f) {
         return;
     }
@@ -305,10 +282,9 @@ void gs_hist_save(getsay *g)
     fclose(f);
 }
 
-void gs_complete(getsay *g)
-{
+void gs_complete(getsay* g) {
     size_t kw_n = 0;
-    const char *const *kws = rx_keyword_list(&kw_n);
+    const char* const* kws = rx_keyword_list(&kw_n);
     /* the first word of the line is the completion subject */
     size_t wl = 0;
     while (wl < g->len && (g->buf[wl] == ' ' || g->buf[wl] == '\t')) {
@@ -352,8 +328,7 @@ void gs_complete(getsay *g)
     g->comp = -1;
 }
 
-void gs_render(getsay *g, rx_screen *s, int x, int y, int w, uint16_t attr)
-{
+void gs_render(getsay* g, rx_screen* s, int x, int y, int w, uint16_t attr) {
     scr_fill(s, x, y, w, 1, ' ', attr);
     if (!g->buf) {
         g->buf = calloc(1, 1);
@@ -377,7 +352,7 @@ void gs_render(getsay *g, rx_screen *s, int x, int y, int w, uint16_t attr)
         cx = x + w - 1;
     }
     if (cx >= 0 && cx < s->w && y >= 0 && y < s->h) {
-        rcell *c = &s->cells[(size_t)y * s->w + cx];
+        rcell* c = &s->cells[(size_t)y * s->w + cx];
         uint16_t inv = (uint16_t)(((c->attr & 0x0F) << 4) | ((c->attr >> 4) & 0x0F));
         uint32_t oldch = c->ch;
         uint16_t oldattr = c->attr;

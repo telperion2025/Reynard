@@ -20,22 +20,20 @@
 #include <strings.h>
 #include <unistd.h>
 
-#include "lang/lang.h"
 #include "lang/funcs.h"
+#include "lang/lang.h"
 #include "reynard/dbf.h"
 #include "util/util.h"
 
 /* ============================ path resolution ============================ */
 
-static int has_any_ext(const char *path)
-{
-    const char *base = strrchr(path, '/');
+static int has_any_ext(const char* path) {
+    const char* base = strrchr(path, '/');
     base = base ? base + 1 : path;
     return strchr(base, '.') != NULL;
 }
 
-static void ensure_ext(const char *in, const char *ext, char *out, size_t outsz)
-{
+static void ensure_ext(const char* in, const char* ext, char* out, size_t outsz) {
     snprintf(out, outsz, "%s", in);
     if (!has_any_ext(in)) {
         strncat(out, ext, outsz - strlen(out) - 1);
@@ -44,9 +42,8 @@ static void ensure_ext(const char *in, const char *ext, char *out, size_t outsz)
 
 /* resolve an index file name per SET DEFAULT / SET PATH (spec §10.3),
    trying the as-given path and the .idx/.cdx/.ntx/.ndx extensions */
-int resolve_index_m6(rx_ctx *ctx, const char *name, char *out, size_t outsz)
-{
-    static const char *exts[] = { "", ".idx", ".cdx", ".ntx", ".ndx", NULL };
+int resolve_index_m6(rx_ctx* ctx, const char* name, char* out, size_t outsz) {
+    static const char* exts[] = {"", ".idx", ".cdx", ".ntx", ".ndx", NULL};
     char cand[600];
     for (int e = 0; exts[e]; e++) {
         snprintf(cand, sizeof(cand), "%s%s", name, exts[e]);
@@ -67,9 +64,8 @@ int resolve_index_m6(rx_ctx *ctx, const char *name, char *out, size_t outsz)
     if (ctx->set.path[0]) {
         char pathcopy[1024];
         snprintf(pathcopy, sizeof(pathcopy), "%s", ctx->set.path);
-        char *save = NULL;
-        for (char *dir = strtok_r(pathcopy, ",;", &save); dir;
-             dir = strtok_r(NULL, ",;", &save)) {
+        char* save = NULL;
+        for (char* dir = strtok_r(pathcopy, ",;", &save); dir; dir = strtok_r(NULL, ",;", &save)) {
             for (int e = 0; exts[e]; e++) {
                 snprintf(cand, sizeof(cand), "%s/%s%s", dir, name, exts[e]);
                 if (access(cand, F_OK) == 0) {
@@ -91,10 +87,9 @@ int resolve_index_m6(rx_ctx *ctx, const char *name, char *out, size_t outsz)
 
 /* ============================ registry (key expr AST cache) ============================ */
 
-static rx_idxexpr *reg_find(rx_ctx *ctx, const char *dbfpath, const char *path, const char *tag)
-{
+static rx_idxexpr* reg_find(rx_ctx* ctx, const char* dbfpath, const char* path, const char* tag) {
     for (size_t i = 0; i < ctx->nidxexprs; i++) {
-        rx_idxexpr *x = &ctx->idxexprs[i];
+        rx_idxexpr* x = &ctx->idxexprs[i];
         if (strcmp(x->dbf, dbfpath) == 0 && rx_strcasecmp(x->path, path) == 0 &&
             rx_strcasecmp(x->tag, tag) == 0) {
             return x;
@@ -103,24 +98,23 @@ static rx_idxexpr *reg_find(rx_ctx *ctx, const char *dbfpath, const char *path, 
     return NULL;
 }
 
-static rx_idxexpr *reg_add(rx_ctx *ctx, const char *dbfpath, const char *path, const char *tag,
-                           const char *keytext, const char *fortext)
-{
+static rx_idxexpr* reg_add(rx_ctx* ctx, const char* dbfpath, const char* path, const char* tag,
+                           const char* keytext, const char* fortext) {
     if (ctx->nidxexprs == ctx->capidxexprs) {
         size_t nc = ctx->capidxexprs ? ctx->capidxexprs * 2 : 8;
-        rx_idxexpr *nx = realloc(ctx->idxexprs, nc * sizeof(rx_idxexpr));
+        rx_idxexpr* nx = realloc(ctx->idxexprs, nc * sizeof(rx_idxexpr));
         if (!nx) {
             RX_FATAL("out of memory");
         }
         ctx->idxexprs = nx;
         ctx->capidxexprs = nc;
     }
-    rx_idxexpr *x = &ctx->idxexprs[ctx->nidxexprs++];
+    rx_idxexpr* x = &ctx->idxexprs[ctx->nidxexprs++];
     memset(x, 0, sizeof(*x));
     snprintf(x->dbf, sizeof(x->dbf), "%s", dbfpath);
     snprintf(x->path, sizeof(x->path), "%s", path);
     snprintf(x->tag, sizeof(x->tag), "%s", tag);
-    for (char *c = x->tag; *c; c++) {
+    for (char* c = x->tag; *c; c++) {
         *c = (char)toupper((unsigned char)*c);
     }
     x->keytext = rx_strdup(keytext ? keytext : "");
@@ -128,8 +122,7 @@ static rx_idxexpr *reg_add(rx_ctx *ctx, const char *dbfpath, const char *path, c
     return x;
 }
 
-void rx_index_registry_purge(rx_ctx *ctx, const char *dbf_path)
-{
+void rx_index_registry_purge(rx_ctx* ctx, const char* dbf_path) {
     size_t w = 0;
     for (size_t i = 0; i < ctx->nidxexprs; i++) {
         if (strcmp(ctx->idxexprs[i].dbf, dbf_path) == 0) {
@@ -146,14 +139,13 @@ void rx_index_registry_purge(rx_ctx *ctx, const char *dbf_path)
 
 /* find (or create from the tag header text) the registry entry for (fi, ti)
    and make sure its ASTs are parsed */
-static rx_idxexpr *reg_ensure(rx_ctx *ctx, rx_dbf *dbf, int fi, int ti)
-{
+static rx_idxexpr* reg_ensure(rx_ctx* ctx, rx_dbf* dbf, int fi, int ti) {
     const char *name = "", *key = "", *fore = "", *fpath = "", *dpath = "";
     rx_tag_info(dbf, fi, ti, &name, &key, NULL);
     rx_tag_for_expr(dbf, fi, ti, &fore);
     rx_index_file_path(dbf, fi, &fpath);
     rx_dbf_path(dbf, &dpath);
-    rx_idxexpr *x = reg_find(ctx, dpath, fpath, name);
+    rx_idxexpr* x = reg_find(ctx, dpath, fpath, name);
     if (!x) {
         x = reg_add(ctx, dpath, fpath, name, key, fore);
     }
@@ -183,18 +175,17 @@ static rx_idxexpr *reg_ensure(rx_ctx *ctx, rx_dbf *dbf, int fi, int ti)
 
 /* ============================ tag lookup helpers ============================ */
 
-int rx_index_find_tag(rx_dbf *dbf, const char *path, const char *tag, int *fi_out, int *ti_out)
-{
+int rx_index_find_tag(rx_dbf* dbf, const char* path, const char* tag, int* fi_out, int* ti_out) {
     int nf = rx_index_file_count(dbf);
     for (int fi = 0; fi < nf; fi++) {
-        const char *fp = NULL;
+        const char* fp = NULL;
         rx_index_file_path(dbf, fi, &fp);
         if (path && rx_strcasecmp(fp, path) != 0) {
             continue;
         }
         int nt = rx_tag_count(dbf, fi);
         for (int ti = 0; ti < nt; ti++) {
-            const char *name = NULL;
+            const char* name = NULL;
             rx_tag_info(dbf, fi, ti, &name, NULL, NULL);
             if (rx_strcasecmp(name, tag) == 0) {
                 *fi_out = fi;
@@ -209,15 +200,13 @@ int rx_index_find_tag(rx_dbf *dbf, const char *path, const char *tag, int *fi_ou
     return R_ERR_CDX_TAG;
 }
 
-int rx_index_order_active(const rx_dbf *dbf)
-{
+int rx_index_order_active(const rx_dbf* dbf) {
     int fi, ti;
     rx_index_order_get(dbf, &fi, &ti);
     return fi >= 0;
 }
 
-static uint32_t order_key_count(rx_dbf *dbf)
-{
+static uint32_t order_key_count(rx_dbf* dbf) {
     int fi, ti;
     rx_index_order_get(dbf, &fi, &ti);
     uint32_t n = 0;
@@ -228,8 +217,7 @@ static uint32_t order_key_count(rx_dbf *dbf)
 }
 
 /* first tag overall (structural CDX is slot 0), or (-1,-1) when none */
-void rx_index_default_order(rx_dbf *dbf)
-{
+void rx_index_default_order(rx_dbf* dbf) {
     int nf = rx_index_file_count(dbf);
     for (int fi = 0; fi < nf; fi++) {
         int nt = rx_tag_count(dbf, fi);
@@ -242,8 +230,7 @@ void rx_index_default_order(rx_dbf *dbf)
 }
 
 /* 1-based n across all attached files (structural CDX first) -> (fi, ti) */
-int rx_index_order_nth(rx_dbf *dbf, uint32_t n, int *fi_out, int *ti_out)
-{
+int rx_index_order_nth(rx_dbf* dbf, uint32_t n, int* fi_out, int* ti_out) {
     uint32_t k = 0;
     int nf = rx_index_file_count(dbf);
     for (int fi = 0; fi < nf; fi++) {
@@ -261,8 +248,7 @@ int rx_index_order_nth(rx_dbf *dbf, uint32_t n, int *fi_out, int *ti_out)
 }
 
 /* position the pointer at any logical recno (nrec+1 = EOF) without error */
-void rx_goto_logical(rx_dbf *dbf, uint32_t recno)
-{
+void rx_goto_logical(rx_dbf* dbf, uint32_t recno) {
     uint32_t n;
     rx_dbf_recount(dbf, &n);
     if (n == 0) {
@@ -283,8 +269,7 @@ void rx_goto_logical(rx_dbf *dbf, uint32_t recno)
 /* ============================ build / maintain ============================ */
 
 /* evaluate a tag's FOR filter at the current record; 1 = include */
-static int for_passes(rx_ctx *ctx, rx_idxexpr *x)
-{
+static int for_passes(rx_ctx* ctx, rx_idxexpr* x) {
     if (!x->for_e) {
         return 1;
     }
@@ -303,9 +288,8 @@ static int for_passes(rx_ctx *ctx, rx_idxexpr *x)
     return l == L_T;
 }
 
-int rx_index_rebuild_tag(rx_ctx *ctx, rx_dbf *dbf, int fi, int ti)
-{
-    rx_idxexpr *x = reg_ensure(ctx, dbf, fi, ti);
+int rx_index_rebuild_tag(rx_ctx* ctx, rx_dbf* dbf, int fi, int ti) {
+    rx_idxexpr* x = reg_ensure(ctx, dbf, fi, ti);
     if (!x || !x->key_e) {
         return ctx->err.code ? ctx->err.code : R_ERR_CDX_TAG;
     }
@@ -341,8 +325,7 @@ int rx_index_rebuild_tag(rx_ctx *ctx, rx_dbf *dbf, int fi, int ti)
     return R_OK;
 }
 
-int rx_index_rebuild_all(rx_ctx *ctx, rx_dbf *dbf)
-{
+int rx_index_rebuild_all(rx_ctx* ctx, rx_dbf* dbf) {
     int nf = rx_index_file_count(dbf);
     for (int fi = 0; fi < nf; fi++) {
         int nt = rx_tag_count(dbf, fi);
@@ -356,8 +339,7 @@ int rx_index_rebuild_all(rx_ctx *ctx, rx_dbf *dbf)
     return R_OK;
 }
 
-int rx_index_maintain_rec(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno)
-{
+int rx_index_maintain_rec(rx_ctx* ctx, rx_dbf* dbf, uint32_t recno) {
     int rc = rx_index_delete_rec(dbf, recno);
     if (rc != R_OK) {
         return rc;
@@ -366,7 +348,7 @@ int rx_index_maintain_rec(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno)
     for (int fi = 0; fi < nf; fi++) {
         int nt = rx_tag_count(dbf, fi);
         for (int ti = 0; ti < nt; ti++) {
-            rx_idxexpr *x = reg_ensure(ctx, dbf, fi, ti);
+            rx_idxexpr* x = reg_ensure(ctx, dbf, fi, ti);
             if (!x || !x->key_e) {
                 return ctx->err.code ? ctx->err.code : R_ERR_CDX_TAG;
             }
@@ -395,8 +377,7 @@ int rx_index_maintain_rec(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno)
 
 /* ============================ INDEX ON ============================ */
 
-static int cur_table(rx_ctx *ctx, rx_stmt *s, rx_dbf **out)
-{
+static int cur_table(rx_ctx* ctx, rx_stmt* s, rx_dbf** out) {
     int rc = rx_wa_dbf(0, out);
     if (rc != R_OK) {
         return rx_raise(ctx, R_ERR_DBF_NOTOPEN, s->line, s->col, "No table in use");
@@ -404,9 +385,8 @@ static int cur_table(rx_ctx *ctx, rx_stmt *s, rx_dbf **out)
     return R_OK;
 }
 
-int rx_cmd_index_on(rx_ctx *ctx, rx_stmt *s)
-{
-    rx_dbf *dbf;
+int rx_cmd_index_on(rx_ctx* ctx, rx_stmt* s) {
+    rx_dbf* dbf;
     int rc = cur_table(ctx, s, &dbf);
     if (rc != R_OK) {
         return rc;
@@ -417,10 +397,10 @@ int rx_cmd_index_on(rx_ctx *ctx, rx_stmt *s)
     if (rx_dbf_is_readonly(dbf)) {
         return rx_raise(ctx, R_ERR_IO_PERM, s->line, s->col, "File is read only");
     }
-    const char *mode = s->nstrs > 0 ? s->strs[0] : "";
+    const char* mode = s->nstrs > 0 ? s->strs[0] : "";
     char tagname[12];
     char cdxpath[600];
-    const char *cdx = NULL; /* NULL = structural CDX */
+    const char* cdx = NULL; /* NULL = structural CDX */
     int flags = 0;
     if (strcmp(mode, "TO") == 0 && s->nstrs >= 2) {
         char ipath[600];
@@ -431,7 +411,7 @@ int rx_cmd_index_on(rx_ctx *ctx, rx_stmt *s)
             snprintf(cdxpath, sizeof(cdxpath), "%.599s", ipath);
         }
         /* implicit tag name = file stem */
-        const char *base = strrchr(cdxpath, '/');
+        const char* base = strrchr(cdxpath, '/');
         base = base ? base + 1 : cdxpath;
         size_t l = 0;
         while (base[l] && base[l] != '.' && l < 11) {
@@ -442,7 +422,7 @@ int rx_cmd_index_on(rx_ctx *ctx, rx_stmt *s)
         cdx = cdxpath;
     } else if (strcmp(mode, "TAG") == 0 && s->nstrs >= 2) {
         snprintf(tagname, sizeof(tagname), "%s", s->strs[1]);
-        for (char *c = tagname; *c; c++) {
+        for (char* c = tagname; *c; c++) {
             *c = (char)toupper((unsigned char)*c);
         }
         if (s->nstrs >= 4 && strcmp(s->strs[2], "OF") == 0) {
@@ -464,8 +444,8 @@ int rx_cmd_index_on(rx_ctx *ctx, rx_stmt *s)
     } else {
         return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "INDEX ON requires TO or TAG");
     }
-    const char *fortext = NULL;
-    rx_expr *fore = NULL;
+    const char* fortext = NULL;
+    rx_expr* fore = NULL;
     for (size_t i = 0; i < s->nclause; i++) {
         if (strcmp(s->clauses[i].key, "FOR") == 0) {
             fore = s->clauses[i].e;
@@ -483,13 +463,13 @@ int rx_cmd_index_on(rx_ctx *ctx, rx_stmt *s)
     if (ctx->set.unique) {
         flags |= RX_TAG_UNIQUE; /* SET UNIQUE ON applies to new tags */
     }
-    const char *keytext = s->keytext ? s->keytext : "";
+    const char* keytext = s->keytext ? s->keytext : "";
     rc = rx_index_create(dbf, tagname, cdx, keytext, fortext, flags, 0);
     if (rc != R_OK) {
         return rx_raise(ctx, rc, s->line, s->col, "Cannot create index tag %s", tagname);
     }
     int fi, ti;
-    const char *dpath;
+    const char* dpath;
     rx_dbf_path(dbf, &dpath);
     char spath[264];
     if (cdx) {
@@ -523,9 +503,8 @@ int rx_cmd_index_on(rx_ctx *ctx, rx_stmt *s)
 
 /* ============================ SEEK ============================ */
 
-int rx_cmd_seek(rx_ctx *ctx, rx_stmt *s)
-{
-    rx_dbf *dbf;
+int rx_cmd_seek(rx_ctx* ctx, rx_stmt* s) {
+    rx_dbf* dbf;
     int rc = cur_table(ctx, s, &dbf);
     if (rc != R_OK) {
         return rc;
@@ -583,9 +562,8 @@ int rx_cmd_seek(rx_ctx *ctx, rx_stmt *s)
 
 /* ============================ REINDEX ============================ */
 
-int rx_cmd_reindex(rx_ctx *ctx, rx_stmt *s)
-{
-    rx_dbf *dbf;
+int rx_cmd_reindex(rx_ctx* ctx, rx_stmt* s) {
+    rx_dbf* dbf;
     int rc = cur_table(ctx, s, &dbf);
     if (rc != R_OK) {
         return rc;
@@ -600,9 +578,8 @@ int rx_cmd_reindex(rx_ctx *ctx, rx_stmt *s)
 
 /* ============================ SET INDEX TO ============================ */
 
-int rx_cmd_set_index(rx_ctx *ctx, rx_stmt *s)
-{
-    rx_dbf *dbf;
+int rx_cmd_set_index(rx_ctx* ctx, rx_stmt* s) {
+    rx_dbf* dbf;
     int rc = cur_table(ctx, s, &dbf);
     if (rc != R_OK) {
         return rc;
@@ -653,20 +630,19 @@ int rx_cmd_set_index(rx_ctx *ctx, rx_stmt *s)
 /* count tags across all attached files; return the (fi, ti) of 1-based n
    (public wrapper rx_index_order_nth above) */
 
-int rx_cmd_set_order(rx_ctx *ctx, rx_stmt *s)
-{
-    rx_dbf *dbf;
+int rx_cmd_set_order(rx_ctx* ctx, rx_stmt* s) {
+    rx_dbf* dbf;
     int rc = cur_table(ctx, s, &dbf);
     if (rc != R_OK) {
         return rc;
     }
     for (size_t i = 0; i < s->nclause; i++) {
-        rx_clause *c = &s->clauses[i];
+        rx_clause* c = &s->clauses[i];
         if (strcmp(c->key, "ORD_CLEAR") == 0) {
             return rx_index_order_set(dbf, -1, -1);
         }
         if (strcmp(c->key, "ORD_TAG") == 0) {
-            const char *of = NULL;
+            const char* of = NULL;
             for (size_t j = 0; j < s->nclause; j++) {
                 if (strcmp(s->clauses[j].key, "OF") == 0) {
                     of = s->clauses[j].word;
@@ -675,7 +651,8 @@ int rx_cmd_set_order(rx_ctx *ctx, rx_stmt *s)
             char ofpath[600];
             if (of) {
                 if (resolve_index_m6(ctx, of, ofpath, sizeof(ofpath)) != R_OK) {
-                    return rx_raise(ctx, R_ERR_IO_NOTFOUND, s->line, s->col, "File %s not found", of);
+                    return rx_raise(ctx, R_ERR_IO_NOTFOUND, s->line, s->col, "File %s not found",
+                                    of);
                 }
                 of = ofpath;
             }
@@ -686,9 +663,9 @@ int rx_cmd_set_order(rx_ctx *ctx, rx_stmt *s)
             return rx_index_order_set(dbf, fi, ti);
         }
         if (strcmp(c->key, "ORD_NUM") == 0) {
-            const char *w = c->word;
+            const char* w = c->word;
             int numeric = w[0] != '\0';
-            for (const char *q = w; *q; q++) {
+            for (const char* q = w; *q; q++) {
                 if (!isdigit((unsigned char)*q)) {
                     numeric = 0;
                     break;
@@ -701,7 +678,8 @@ int rx_cmd_set_order(rx_ctx *ctx, rx_stmt *s)
                 }
                 int fi, ti;
                 if (rx_index_order_nth(dbf, (uint32_t)n, &fi, &ti) != R_OK) {
-                    return rx_raise(ctx, R_ERR_RANGE, s->line, s->col, "Invalid index number %ld", n);
+                    return rx_raise(ctx, R_ERR_RANGE, s->line, s->col, "Invalid index number %ld",
+                                    n);
                 }
                 return rx_index_order_set(dbf, fi, ti);
             }
@@ -738,9 +716,8 @@ int rx_cmd_set_order(rx_ctx *ctx, rx_stmt *s)
 
 /* ============================ ordered navigation ============================ */
 
-int rx_nav_top(rx_ctx *ctx)
-{
-    rx_dbf *dbf;
+int rx_nav_top(rx_ctx* ctx) {
+    rx_dbf* dbf;
     int rc = rx_wa_dbf(0, &dbf);
     if (rc != R_OK) {
         return rc;
@@ -757,9 +734,8 @@ int rx_nav_top(rx_ctx *ctx)
     return rx_nav_goto(ctx, r);
 }
 
-int rx_nav_bottom(rx_ctx *ctx)
-{
-    rx_dbf *dbf;
+int rx_nav_bottom(rx_ctx* ctx) {
+    rx_dbf* dbf;
     int rc = rx_wa_dbf(0, &dbf);
     if (rc != R_OK) {
         return rc;
@@ -780,9 +756,8 @@ int rx_nav_bottom(rx_ctx *ctx)
     return rx_nav_goto(ctx, r);
 }
 
-int rx_nav_skip_ordered(rx_ctx *ctx, int32_t delta)
-{
-    rx_dbf *dbf;
+int rx_nav_skip_ordered(rx_ctx* ctx, int32_t delta) {
+    rx_dbf* dbf;
     int rc = rx_wa_dbf(0, &dbf);
     if (rc != R_OK) {
         return rc;

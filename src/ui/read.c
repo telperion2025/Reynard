@@ -12,15 +12,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "ui/ui_internal.h"
 #include "lang/funcs.h"
 #include "reynard/dbf.h"
+#include "ui/ui_internal.h"
 
 /* ---------------- @ SAY painting ---------------- */
 
-int ui_say(void *ud, int row, int col, const char *text)
-{
-    rx_ui *ui = ud;
+int ui_say(void* ud, int row, int col, const char* text) {
+    rx_ui* ui = ud;
     if (!ui) {
         return R_OK;
     }
@@ -35,7 +34,7 @@ int ui_say(void *ud, int row, int col, const char *text)
     }
     if (ui->nsays == ui->capsays) {
         size_t nc = ui->capsays ? ui->capsays * 2 : 16;
-        char **nt = realloc(ui->says, nc * sizeof(char *));
+        char** nt = realloc(ui->says, nc * sizeof(char*));
         int (*nxy)[2] = realloc(ui->say_xy, nc * sizeof(*ui->say_xy));
         if (!nt || !nxy) {
             RX_FATAL("out of memory");
@@ -56,8 +55,7 @@ int ui_say(void *ud, int row, int col, const char *text)
     return R_OK;
 }
 
-void ui_says_render(rx_ui *ui)
-{
+void ui_says_render(rx_ui* ui) {
     for (size_t i = 0; i < ui->nsays; i++) {
         int y = ui->say_xy[i][0] + 1, x = ui->say_xy[i][1];
         if (y >= 1 && y < ui->scr.h - 1) {
@@ -68,11 +66,10 @@ void ui_says_render(rx_ui *ui)
 
 /* draw pending GET values (read-only) on the desktop — FoxPro leaves the
    form visible after READ until CLEAR */
-void ui_gets_render(rx_ui *ui)
-{
-    rx_ctx *ctx = ui->ctx;
+void ui_gets_render(rx_ui* ui) {
+    rx_ctx* ctx = ui->ctx;
     for (size_t i = 0; i < ctx->ngets; i++) {
-        rx_get *g = &ctx->gets[i];
+        rx_get* g = &ctx->gets[i];
         int y = g->row + 1, x = g->col;
         int w = g->size_w > 0 ? g->size_w : 10;
         if (y < 1 || y >= ui->scr.h - 1) {
@@ -91,8 +88,7 @@ void ui_gets_render(rx_ui *ui)
     }
 }
 
-void ui_says_free(rx_ui *ui)
-{
+void ui_says_free(rx_ui* ui) {
     for (size_t i = 0; i < ui->nsays; i++) {
         free(ui->says[i]);
     }
@@ -106,16 +102,15 @@ void ui_says_free(rx_ui *ui)
 /* ---------------- READ ---------------- */
 
 typedef struct {
-    getsay ed;     /* edit buffer (raw text) */
-    int dirty_ed;  /* editor modified since load */
-    int touched;   /* a printable key arrived since load: first one replaces all
-                      (FoxPro highlights the whole field when entering a GET) */
+    getsay ed;    /* edit buffer (raw text) */
+    int dirty_ed; /* editor modified since load */
+    int touched;  /* a printable key arrived since load: first one replaces all
+                     (FoxPro highlights the whole field when entering a GET) */
 } read_ed;
 
 /* display a value for editing: character values are right-stripped (the
    stored field pads on write, the editor must not) */
-static void display_for_edit(rx_ctx *ctx, const rval *v, strbuf *sb)
-{
+static void display_for_edit(rx_ctx* ctx, const rval* v, strbuf* sb) {
     sb_init(sb);
     rx_vm_display(ctx, v, sb);
     if (v->t == RX_T_C && sb->buf) {
@@ -127,14 +122,13 @@ static void display_for_edit(rx_ctx *ctx, const rval *v, strbuf *sb)
 }
 
 /* parse editor text into an rval of the current value's type */
-static int text_to_val(rx_ctx *ctx, const char *txt, const rval *cur, rval *out)
-{
+static int text_to_val(rx_ctx* ctx, const char* txt, const rval* cur, rval* out) {
     rx_rval_undef(out);
     switch (cur->t) {
     case RX_T_N:
     case RX_T_I:
     case RX_T_B: {
-        char *end = NULL;
+        char* end = NULL;
         double d = strtod(txt, &end);
         if (end == txt) {
             d = 0;
@@ -175,13 +169,12 @@ static int text_to_val(rx_ctx *ctx, const char *txt, const rval *cur, rval *out)
     (void)ctx;
 }
 
-static void render_read(rx_ui *ui, read_ed *eds, int cur)
-{
-    rx_ctx *ctx = ui->ctx;
+static void render_read(rx_ui* ui, read_ed* eds, int cur) {
+    rx_ctx* ctx = ui->ctx;
     scr_fill(&ui->scr, 0, 1, ui->scr.w, ui->scr.h - 2, ' ', RXA_DESKTOP);
     ui_says_render(ui);
     for (size_t i = 0; i < ctx->ngets; i++) {
-        rx_get *g = &ctx->gets[i];
+        rx_get* g = &ctx->gets[i];
         int y = g->row + 1, x = g->col;
         if (g->say && g->say_row >= 0) {
             scr_text(&ui->scr, g->say_col, g->say_row + 1, g->say, RXA_DESKTOP);
@@ -217,8 +210,7 @@ static void render_read(rx_ui *ui, read_ed *eds, int cur)
 }
 
 /* commit editor text into g->val; returns 0 ok, 1 = VALID failed */
-static int commit_get(rx_ctx *ctx, rx_get *g, read_ed *ed)
-{
+static int commit_get(rx_ctx* ctx, rx_get* g, read_ed* ed) {
     rval nv;
     text_to_val(ctx, ed->ed.buf ? ed->ed.buf : "", &g->val, &nv);
     /* RANGE check (numeric/date) */
@@ -253,7 +245,7 @@ static int commit_get(rx_ctx *ctx, rx_get *g, read_ed *ed)
         rx_rval_undef(&old);
         int staged = 0;
         if (g->is_field) {
-            rx_dbf *dbf;
+            rx_dbf* dbf;
             size_t idx;
             if (rx_wa_dbf(0, &dbf) == R_OK && rx_dbf_field_index(dbf, g->var, &idx) == R_OK) {
                 if (rx_dbf_get(dbf, idx, &old) == R_OK) {
@@ -263,7 +255,7 @@ static int commit_get(rx_ctx *ctx, rx_get *g, read_ed *ed)
                 }
             }
         } else {
-            rx_memvar *mv = rx_memvar_find(ctx, g->var);
+            rx_memvar* mv = rx_memvar_find(ctx, g->var);
             if (mv && !mv->is_array) {
                 rx_rval_deep(&old, &mv->val);
                 if (rx_memvar_set(ctx, g->var, &g->val) == R_OK) {
@@ -280,7 +272,7 @@ static int commit_get(rx_ctx *ctx, rx_get *g, read_ed *ed)
         rx_rval_free(&v);
         if (staged) {
             if (g->is_field) {
-                rx_dbf *dbf;
+                rx_dbf* dbf;
                 size_t idx;
                 if (rx_wa_dbf(0, &dbf) == R_OK && rx_dbf_field_index(dbf, g->var, &idx) == R_OK) {
                     rx_dbf_put(dbf, idx, ok ? &g->val : &old);
@@ -297,8 +289,7 @@ static int commit_get(rx_ctx *ctx, rx_get *g, read_ed *ed)
     return 0;
 }
 
-static int when_ok(rx_ctx *ctx, rx_get *g)
-{
+static int when_ok(rx_ctx* ctx, rx_get* g) {
     if (!g->has_when) {
         return 1;
     }
@@ -314,18 +305,17 @@ static int when_ok(rx_ctx *ctx, rx_get *g)
     return ok && l == L_T;
 }
 
-int ui_read(void *ud)
-{
-    rx_ui *ui = ud;
-    rx_ctx *ctx = ui->ctx;
+int ui_read(void* ud) {
+    rx_ui* ui = ud;
+    rx_ctx* ctx = ui->ctx;
     size_t n = ctx->ngets;
-    read_ed *eds = calloc(n, sizeof(read_ed));
+    read_ed* eds = calloc(n, sizeof(read_ed));
     if (!eds) {
         RX_FATAL("out of memory");
     }
     for (size_t i = 0; i < n; i++) {
         gs_init(&eds[i].ed, 0);
-        rx_get *g = &ctx->gets[i];
+        rx_get* g = &ctx->gets[i];
         strbuf sb;
         display_for_edit(ctx, &g->val, &sb);
         if (sb.buf) {
@@ -367,10 +357,10 @@ int ui_read(void *ud)
             continue;
         }
         if (ev.kind == EV_MOUSE) {
-            const rmouse *m = &ev.u.m;
+            const rmouse* m = &ev.u.m;
             if (m->kind == RM_PRESS && m->button == 1) {
                 for (size_t i = 0; i < n; i++) {
-                    rx_get *g = &ctx->gets[i];
+                    rx_get* g = &ctx->gets[i];
                     int y = g->row + 1, x = g->col;
                     int w = g->size_w > 0 ? g->size_w : 10;
                     if ((int)m->y == y && (int)m->x >= x && (int)m->x < x + w && g->enabled) {
@@ -396,7 +386,7 @@ int ui_read(void *ud)
         if (ev.kind != EV_KEY) {
             continue;
         }
-        const rkey *k = &ev.u.k;
+        const rkey* k = &ev.u.k;
         int nav_next = (k->sym == RXK_TAB || k->sym == RXK_ENTER || k->sym == RXK_DOWN);
         int nav_prev = (k->sym == RXK_UP || k->sym == RXK_BACKTAB);
         if (k->sym == RXK_ESC) {
@@ -461,7 +451,7 @@ int ui_read(void *ud)
             cur = nxt;
             ctx->cur_obj = cur;
             /* load the new field's value into its editor */
-            rx_get *g = &ctx->gets[cur];
+            rx_get* g = &ctx->gets[cur];
             gs_clear(&eds[cur].ed);
             eds[cur].touched = 0;
             strbuf sb;
@@ -477,13 +467,13 @@ int ui_read(void *ud)
         if (cur < 0) {
             continue;
         }
-        getsay *ed = &eds[cur].ed;
+        getsay* ed = &eds[cur].ed;
         eds[cur].dirty_ed = 1;
         /* the field is highlighted on entry: the first printable key (or a
            delete) replaces the whole contents; cursor keys just collapse the
            highlight (FoxPro behavior) */
-        int wipe = !eds[cur].touched &&
-                   (k->sym == RXK_BS || k->sym == RXK_DEL || (k->cp && k->cp >= 32));
+        int wipe =
+            !eds[cur].touched && (k->sym == RXK_BS || k->sym == RXK_DEL || (k->cp && k->cp >= 32));
         if (wipe) {
             gs_clear(ed);
             eds[cur].touched = 1;

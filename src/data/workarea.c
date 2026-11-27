@@ -14,15 +14,14 @@
 #define RX_MAX_WA 255
 
 typedef struct wa_slot {
-    rx_dbf *dbf;
+    rx_dbf* dbf;
     int used;
 } wa_slot;
 
 static wa_slot g_wa[RX_MAX_WA + 1]; /* index 1..255 */
 static int g_current = 1;
 
-int rx_wa_select(int area)
-{
+int rx_wa_select(int area) {
     if (area < 0 || area > RX_MAX_WA) {
         return R_ERR_RANGE;
     }
@@ -32,13 +31,11 @@ int rx_wa_select(int area)
     return R_OK;
 }
 
-int rx_wa_current(void)
-{
+int rx_wa_current(void) {
     return g_current;
 }
 
-int rx_wa_used(int area)
-{
+int rx_wa_used(int area) {
     if (area == 0) {
         area = g_current;
     }
@@ -48,8 +45,7 @@ int rx_wa_used(int area)
     return g_wa[area].used;
 }
 
-int rx_wa_alias(int area, const char **out)
-{
+int rx_wa_alias(int area, const char** out) {
     if (area == 0) {
         area = g_current;
     }
@@ -60,13 +56,12 @@ int rx_wa_alias(int area, const char **out)
     return rx_dbf_alias(g_wa[area].dbf, out);
 }
 
-int rx_wa_open(int area, const char *path, int mode, const char *alias)
-{
+int rx_wa_open(int area, const char* path, int mode, const char* alias) {
     if (area < 1 || area > RX_MAX_WA) {
         return R_ERR_RANGE;
     }
     rx_wa_close(area);
-    rx_dbf *dbf = NULL;
+    rx_dbf* dbf = NULL;
     int rc = rx_dbf_open(path, mode, &dbf);
     if (rc != R_OK) {
         return rc;
@@ -80,8 +75,7 @@ int rx_wa_open(int area, const char *path, int mode, const char *alias)
     return R_OK;
 }
 
-int rx_wa_close(int area)
-{
+int rx_wa_close(int area) {
     if (area == 0) {
         area = g_current;
     }
@@ -96,8 +90,7 @@ int rx_wa_close(int area)
     return R_OK;
 }
 
-int rx_wa_dbf(int area, rx_dbf **out)
-{
+int rx_wa_dbf(int area, rx_dbf** out) {
     if (area == 0) {
         area = g_current;
     }

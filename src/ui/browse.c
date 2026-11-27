@@ -27,43 +27,42 @@
 
 typedef struct rx_browse {
     rx_win w;
-    rx_ctx *ctx;
+    rx_ctx* ctx;
     int area;      /**< work area this grid is bound to */
-    rx_dbf *dbf;   /**< refreshed from the area at each render */
-    rx_bcol *cols; /**< stolen from the BROWSE stmt (owns exprs) */
+    rx_dbf* dbf;   /**< refreshed from the area at each render */
+    rx_bcol* cols; /**< stolen from the BROWSE stmt (owns exprs) */
     size_t ncols;
     int colw[BROWSE_MAXCOLS];
     int colx[BROWSE_MAXCOLS]; /**< last rendered left edge per column */
     int append_mode, noappend, nodelete, nomodify;
     int ledit, redit;
-    int partition;   /**< left-pane width in chars, 0 = none */
-    int part_n;      /**< columns in the left pane */
-    int part_x;      /**< right pane left edge */
+    int partition; /**< left-pane width in chars, 0 = none */
+    int part_n;    /**< columns in the left pane */
+    int part_x;    /**< right pane left edge */
     int lock_n;
-    int width_cap;   /**< WIDTH n */
-    int freeze_col;  /**< -1 or column index locked editable by FREEZE */
-    rx_expr *when;   /**< WHEN clause (stolen) */
+    int width_cap;  /**< WIDTH n */
+    int freeze_col; /**< -1 or column index locked editable by FREEZE */
+    rx_expr* when;  /**< WHEN clause (stolen) */
     int when_ok;
-    rx_expr *valid;  /**< record-level VALID (stolen) */
+    rx_expr* valid; /**< record-level VALID (stolen) */
     char verr[160];
-    uint32_t cur;    /**< current record (1-based) */
-    int col;         /**< cursor column */
-    uint32_t top;    /**< first visible record */
-    int hscroll;     /**< right-pane horizontal scroll (chars) */
-    int editing;     /**< column being edited, -1 none */
+    uint32_t cur; /**< current record (1-based) */
+    int col;      /**< cursor column */
+    uint32_t top; /**< first visible record */
+    int hscroll;  /**< right-pane horizontal scroll (chars) */
+    int editing;  /**< column being edited, -1 none */
     getsay ed;
     /* geometry cached at render for mouse hit-testing */
     int grid_x, hdr_y, rows_y, visrows;
     /* mouse drag state */
-    int drag;        /**< 0 none, 1 header reorder, 2 col resize, 3 cell select */
+    int drag; /**< 0 none, 1 header reorder, 2 col resize, 3 cell select */
     int drag_col;
     int sel_ar, sel_ac; /**< selection anchor (record, col) */
 } rx_browse;
 
 /* ---- clause helpers ---- */
 
-static int clause_flag(const rx_stmt *s, const char *key)
-{
+static int clause_flag(const rx_stmt* s, const char* key) {
     for (size_t i = 0; i < s->nclause; i++) {
         if (strcmp(s->clauses[i].key, key) == 0) {
             return 1;
@@ -72,8 +71,7 @@ static int clause_flag(const rx_stmt *s, const char *key)
     return 0;
 }
 
-static const char *clause_word(const rx_stmt *s, const char *key)
-{
+static const char* clause_word(const rx_stmt* s, const char* key) {
     for (size_t i = 0; i < s->nclause; i++) {
         if (strcmp(s->clauses[i].key, key) == 0) {
             return s->clauses[i].word;
@@ -84,8 +82,7 @@ static const char *clause_word(const rx_stmt *s, const char *key)
 
 /* ---- value formatting / parsing ---- */
 
-static void browse_cell_text(rx_ctx *ctx, rx_dbf *dbf, const rx_bcol *c, char *out, size_t outsz)
-{
+static void browse_cell_text(rx_ctx* ctx, rx_dbf* dbf, const rx_bcol* c, char* out, size_t outsz) {
     out[0] = '\0';
     if (!c->is_field) {
         rval v;
@@ -152,8 +149,7 @@ static void browse_cell_text(rx_ctx *ctx, rx_dbf *dbf, const rx_bcol *c, char *o
 }
 
 /* parse editor text into an rval per the field type; 1 ok, 0 invalid input */
-static int browse_parse_value(rx_ctx *ctx, rx_dbf *dbf, size_t fldidx, const char *txt, rval *out)
-{
+static int browse_parse_value(rx_ctx* ctx, rx_dbf* dbf, size_t fldidx, const char* txt, rval* out) {
     rx_fielddef fd;
     rx_dbf_field_def(dbf, fldidx, &fd);
     rx_rval_undef(out);
@@ -165,7 +161,7 @@ static int browse_parse_value(rx_ctx *ctx, rx_dbf *dbf, size_t fldidx, const cha
         return 1;
     case RFT_N:
     case RFT_F: {
-        char *end = NULL;
+        char* end = NULL;
         double d = strtod(txt, &end);
         if (end == txt || (end && *end != '\0')) {
             return 0;
@@ -176,7 +172,7 @@ static int browse_parse_value(rx_ctx *ctx, rx_dbf *dbf, size_t fldidx, const cha
         return 1;
     }
     case RFT_I: {
-        char *end = NULL;
+        char* end = NULL;
         long v = strtol(txt, &end, 10);
         if (end == txt || (end && *end != '\0')) {
             return 0;
@@ -196,7 +192,7 @@ static int browse_parse_value(rx_ctx *ctx, rx_dbf *dbf, size_t fldidx, const cha
         rx_rval_undef(&av);
         av.t = RX_T_C;
         av.u.c.n = strlen(txt);
-        av.u.c.utf8 = (char *)txt; /* borrowed for the call */
+        av.u.c.utf8 = (char*)txt; /* borrowed for the call */
         rval v;
         rx_rval_undef(&v);
         int rc = rx_func_call(ctx, fid, 1, &av, &v, &err);
@@ -231,8 +227,7 @@ static int browse_parse_value(rx_ctx *ctx, rx_dbf *dbf, size_t fldidx, const cha
 
 /* ---- navigation ---- */
 
-static void browse_eval_when(rx_browse *b)
-{
+static void browse_eval_when(rx_browse* b) {
     b->when_ok = 1;
     if (!b->when) {
         return;
@@ -246,8 +241,7 @@ static void browse_eval_when(rx_browse *b)
     rx_rval_free(&v);
 }
 
-static void browse_goto(rx_ui *ui, rx_browse *b, uint32_t recno)
-{
+static void browse_goto(rx_ui* ui, rx_browse* b, uint32_t recno) {
     uint32_t n;
     rx_dbf_recount(b->dbf, &n);
     if (n == 0) {
@@ -275,8 +269,7 @@ static void browse_goto(rx_ui *ui, rx_browse *b, uint32_t recno)
     ui->dirty = 1;
 }
 
-static void browse_move(rx_ui *ui, rx_browse *b, int32_t delta)
-{
+static void browse_move(rx_ui* ui, rx_browse* b, int32_t delta) {
     uint32_t n;
     rx_dbf_recount(b->dbf, &n);
     if (n == 0) {
@@ -305,8 +298,7 @@ static void browse_move(rx_ui *ui, rx_browse *b, int32_t delta)
     browse_goto(ui, b, (uint32_t)r);
 }
 
-static void browse_move_col(rx_ui *ui, rx_browse *b, int delta)
-{
+static void browse_move_col(rx_ui* ui, rx_browse* b, int delta) {
     int c = b->col + delta;
     if (c < 0) {
         c = 0;
@@ -330,9 +322,8 @@ static void browse_move_col(rx_ui *ui, rx_browse *b, int delta)
 
 /* ---- editing ---- */
 
-static int browse_editable(rx_browse *b, int col)
-{
-    rx_bcol *c = &b->cols[col];
+static int browse_editable(rx_browse* b, int col) {
+    rx_bcol* c = &b->cols[col];
     if (!c->is_field || c->rflag || b->nomodify) {
         return 0;
     }
@@ -350,8 +341,7 @@ static int browse_editable(rx_browse *b, int col)
     return 1;
 }
 
-static void browse_begin_edit(rx_ui *ui, rx_browse *b, uint32_t cp)
-{
+static void browse_begin_edit(rx_ui* ui, rx_browse* b, uint32_t cp) {
     gs_clear(&b->ed);
     if (cp >= 32) {
         gs_insert_cp(&b->ed, cp); /* typing replaces the cell content (FoxPro) */
@@ -361,11 +351,10 @@ static void browse_begin_edit(rx_ui *ui, rx_browse *b, uint32_t cp)
 }
 
 /* commit the editor into the field; 1 = leave edit mode, 0 = stay editing */
-static int browse_commit(rx_ui *ui, rx_browse *b)
-{
+static int browse_commit(rx_ui* ui, rx_browse* b) {
     int col = b->editing;
-    rx_bcol *c = &b->cols[col];
-    const char *txt = b->ed.buf ? b->ed.buf : "";
+    rx_bcol* c = &b->cols[col];
+    const char* txt = b->ed.buf ? b->ed.buf : "";
     rval nv;
     if (!browse_parse_value(b->ctx, b->dbf, c->fldidx, txt, &nv)) {
         ui_set_msg(ui, "Invalid value for %s", c->header);
@@ -386,7 +375,7 @@ static int browse_commit(rx_ui *ui, rx_browse *b)
     rx_dbf_get(b->dbf, c->fldidx, &old);
     rx_dbf_put(b->dbf, c->fldidx, &nv);
     int bad = 0;
-    const char *vmsg = NULL;
+    const char* vmsg = NULL;
     if (c->valid) { /* field :V — the field already holds the new value */
         rval vr;
         rx_rval_undef(&vr);
@@ -421,8 +410,7 @@ static int browse_commit(rx_ui *ui, rx_browse *b)
     return 1;
 }
 
-static void browse_toggle_delete(rx_ui *ui, rx_browse *b)
-{
+static void browse_toggle_delete(rx_ui* ui, rx_browse* b) {
     if (b->nodelete) {
         return;
     }
@@ -440,8 +428,7 @@ static void browse_toggle_delete(rx_ui *ui, rx_browse *b)
     ui->dirty = 1;
 }
 
-static void browse_append(rx_ui *ui, rx_browse *b)
-{
+static void browse_append(rx_ui* ui, rx_browse* b) {
     if (b->noappend) {
         return;
     }
@@ -471,9 +458,8 @@ static void browse_append(rx_ui *ui, rx_browse *b)
 
 /* ---- layout + render ---- */
 
-static int browse_auto_width(rx_browse *b, size_t i)
-{
-    rx_bcol *c = &b->cols[i];
+static int browse_auto_width(rx_browse* b, size_t i) {
+    rx_bcol* c = &b->cols[i];
     int w;
     if (c->is_field) {
         rx_fielddef fd;
@@ -509,9 +495,8 @@ static int browse_auto_width(rx_browse *b, size_t i)
     return w;
 }
 
-static void browse_layout(rx_ui *ui, rx_browse *b)
-{
-    rx_win *w = &b->w;
+static void browse_layout(rx_ui* ui, rx_browse* b) {
+    rx_win* w = &b->w;
     b->grid_x = w->x + 1;
     b->hdr_y = w->y + 1;
     b->rows_y = w->y + 3;
@@ -562,13 +547,11 @@ static void browse_layout(rx_ui *ui, rx_browse *b)
     (void)ui;
 }
 
-static uint16_t inv_attr(uint16_t a)
-{
+static uint16_t inv_attr(uint16_t a) {
     return (uint16_t)(((a & 0x0F) << 4) | ((a >> 4) & 0x0F));
 }
 
-static int in_selection(rx_browse *b, uint32_t rec, int col)
-{
+static int in_selection(rx_browse* b, uint32_t rec, int col) {
     if (b->drag != 3 && b->sel_ar == 0) {
         return 0;
     }
@@ -579,9 +562,8 @@ static int in_selection(rx_browse *b, uint32_t rec, int col)
     return rec >= r0 && rec <= r1 && col >= c0 && col <= c1;
 }
 
-static void browse_render(struct rx_ui *ui, rx_win *w)
-{
-    rx_browse *b = w->ud;
+static void browse_render(struct rx_ui* ui, rx_win* w) {
+    rx_browse* b = w->ud;
     if (!rx_wa_used(b->area)) {
         w->want_close = 1; /* CLOSE closed the underlying table */
         return;
@@ -666,9 +648,8 @@ static void browse_render(struct rx_ui *ui, rx_win *w)
 
 /* ---- input ---- */
 
-static int browse_key(struct rx_ui *ui, rx_win *w, const rkey *k)
-{
-    rx_browse *b = w->ud;
+static int browse_key(struct rx_ui* ui, rx_win* w, const rkey* k) {
+    rx_browse* b = w->ud;
     if (b->editing >= 0) {
         switch (k->sym) {
         case RXK_ENTER:
@@ -816,8 +797,7 @@ static int browse_key(struct rx_ui *ui, rx_win *w, const rkey *k)
 
 /* ---- mouse ---- */
 
-static int browse_col_at(rx_browse *b, int x, int *edge)
-{
+static int browse_col_at(rx_browse* b, int x, int* edge) {
     for (size_t i = 0; i < b->ncols && i < BROWSE_MAXCOLS; i++) {
         int cx = b->colx[i];
         if (x >= cx && x < cx + b->colw[i]) {
@@ -839,8 +819,7 @@ static int browse_col_at(rx_browse *b, int x, int *edge)
     return -1;
 }
 
-static void browse_size_widest(rx_ui *ui, rx_browse *b, int col)
-{
+static void browse_size_widest(rx_ui* ui, rx_browse* b, int col) {
     int w = (int)strlen(b->cols[col].header);
     uint32_t nrec;
     rx_dbf_recount(b->dbf, &nrec);
@@ -871,11 +850,10 @@ static void browse_size_widest(rx_ui *ui, rx_browse *b, int col)
     ui->dirty = 1;
 }
 
-static int browse_mouse(struct rx_ui *ui, rx_win *w, const rmouse *m)
-{
-    rx_browse *b = w->ud;
-    int in_border = m->x == w->x || m->x == w->x + w->w - 1 || m->y == w->y ||
-                    m->y == w->y + w->h - 1;
+static int browse_mouse(struct rx_ui* ui, rx_win* w, const rmouse* m) {
+    rx_browse* b = w->ud;
+    int in_border =
+        m->x == w->x || m->x == w->x + w->w - 1 || m->y == w->y || m->y == w->y + w->h - 1;
     switch (m->kind) {
     case RM_PRESS:
         win_bring_top(ui, w);
@@ -1000,9 +978,8 @@ static int browse_mouse(struct rx_ui *ui, rx_win *w, const rmouse *m)
 
 /* ---- lifecycle ---- */
 
-static void browse_free(rx_win *w)
-{
-    rx_browse *b = w->ud;
+static void browse_free(rx_win* w) {
+    rx_browse* b = w->ud;
     for (size_t i = 0; i < b->ncols; i++) {
         rx_expr_free(b->cols[i].e);
         rx_expr_free(b->cols[i].valid);
@@ -1014,14 +991,13 @@ static void browse_free(rx_win *w)
     free(b);
 }
 
-int ui_browse_open(void *ud, rx_stmt *s)
-{
-    rx_ui *ui = ud;
-    rx_dbf *dbf;
+int ui_browse_open(void* ud, rx_stmt* s) {
+    rx_ui* ui = ud;
+    rx_dbf* dbf;
     if (rx_wa_dbf(0, &dbf) != R_OK) {
         return R_ERR_DBF_NOTOPEN;
     }
-    rx_browse *b = calloc(1, sizeof(*b));
+    rx_browse* b = calloc(1, sizeof(*b));
     if (!b) {
         RX_FATAL("out of memory");
     }
@@ -1057,7 +1033,7 @@ int ui_browse_open(void *ud, rx_stmt *s)
     /* FREEZE with no FIELDS clause: the default column set was built above,
        so resolve the FREEZE field against it here */
     if (b->freeze_col < 0) {
-        const char *fz = clause_word(s, "FREEZE");
+        const char* fz = clause_word(s, "FREEZE");
         if (fz && *fz) {
             size_t idx;
             if (rx_dbf_field_index(dbf, fz, &idx) == R_OK) {
@@ -1077,10 +1053,10 @@ int ui_browse_open(void *ud, rx_stmt *s)
         }
     }
 
-    const char *title = clause_word(s, "TITLE");
-    const char *partition = clause_word(s, "PARTITION");
-    const char *lockw = clause_word(s, "LOCK");
-    const char *widthw = clause_word(s, "WIDTH");
+    const char* title = clause_word(s, "TITLE");
+    const char* partition = clause_word(s, "PARTITION");
+    const char* lockw = clause_word(s, "LOCK");
+    const char* widthw = clause_word(s, "WIDTH");
     if (partition) {
         b->partition = atoi(partition);
     }
@@ -1108,7 +1084,7 @@ int ui_browse_open(void *ud, rx_stmt *s)
         }
     }
 
-    const char *alias;
+    const char* alias;
     rx_dbf_alias(dbf, &alias);
     snprintf(b->w.title, sizeof(b->w.title), "%.63s", title && *title ? title : alias);
     b->w.min_w = 10;

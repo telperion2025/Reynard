@@ -12,8 +12,7 @@
 #include "reynard/dbf.h"
 #include "util/util.h"
 
-static int cur_dbf(rx_ctx *ctx, rx_stmt *s, rx_dbf **out)
-{
+static int cur_dbf(rx_ctx* ctx, rx_stmt* s, rx_dbf** out) {
     int rc = rx_wa_dbf(0, out);
     if (rc != R_OK) {
         return rx_raise(ctx, R_ERR_DBF_NOTOPEN, s->line, s->col, "No table in use");
@@ -21,9 +20,8 @@ static int cur_dbf(rx_ctx *ctx, rx_stmt *s, rx_dbf **out)
     return R_OK;
 }
 
-int rx_cmd_txn(rx_ctx *ctx, rx_stmt *s)
-{
-    rx_dbf *dbf;
+int rx_cmd_txn(rx_ctx* ctx, rx_stmt* s) {
+    rx_dbf* dbf;
     int rc = cur_dbf(ctx, s, &dbf);
     if (rc != R_OK) {
         return rc;

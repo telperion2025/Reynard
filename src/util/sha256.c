@@ -27,13 +27,11 @@ static const uint32_t K[64] = {
     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 };
 
-static uint32_t rotr(uint32_t x, int n)
-{
+static uint32_t rotr(uint32_t x, int n) {
     return (x >> n) | (x << (32 - n));
 }
 
-static void sha256_block(sha256_ctx *c, const uint8_t *p)
-{
+static void sha256_block(sha256_ctx* c, const uint8_t* p) {
     uint32_t w[64];
     for (int i = 0; i < 16; i++) {
         w[i] = ((uint32_t)p[i * 4] << 24) | ((uint32_t)p[i * 4 + 1] << 16) |
@@ -72,17 +70,15 @@ static void sha256_block(sha256_ctx *c, const uint8_t *p)
     c->h[7] += h;
 }
 
-static void sha256_init(sha256_ctx *c)
-{
-    static const uint32_t H0[8] = { 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-                                    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19 };
+static void sha256_init(sha256_ctx* c) {
+    static const uint32_t H0[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+                                   0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
     memcpy(c->h, H0, sizeof(H0));
     c->len = 0;
     c->nbuf = 0;
 }
 
-static void sha256_update(sha256_ctx *c, const uint8_t *p, size_t n)
-{
+static void sha256_update(sha256_ctx* c, const uint8_t* p, size_t n) {
     c->len += n;
     while (n) {
         size_t take = 64 - c->nbuf;
@@ -100,8 +96,7 @@ static void sha256_update(sha256_ctx *c, const uint8_t *p, size_t n)
     }
 }
 
-static void sha256_final(sha256_ctx *c, uint8_t out[32])
-{
+static void sha256_final(sha256_ctx* c, uint8_t out[32]) {
     uint64_t bitlen = c->len * 8;
     uint8_t pad = 0x80;
     sha256_update(c, &pad, 1);
@@ -122,8 +117,7 @@ static void sha256_final(sha256_ctx *c, uint8_t out[32])
     }
 }
 
-void rx_sha256(const void *data, size_t n, uint8_t out[32])
-{
+void rx_sha256(const void* data, size_t n, uint8_t out[32]) {
     sha256_ctx c;
     sha256_init(&c);
     sha256_update(&c, data, n);

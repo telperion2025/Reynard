@@ -13,8 +13,7 @@
 #include <ctype.h>
 #include <string.h>
 
-static int parse_num(const uint8_t *buf, size_t n, size_t *pos, long *out)
-{
+static int parse_num(const uint8_t* buf, size_t n, size_t* pos, long* out) {
     if (*pos >= n || !isdigit(buf[*pos])) {
         return -1;
     }
@@ -30,8 +29,7 @@ static int parse_num(const uint8_t *buf, size_t n, size_t *pos, long *out)
     return 0;
 }
 
-static void fill(rmouse *m, long btn, long x, long y, int release)
-{
+static void fill(rmouse* m, long btn, long x, long y, int release) {
     memset(m, 0, sizeof(*m));
     long b = btn;
     if (b & 64) { /* wheel */
@@ -59,8 +57,7 @@ static void fill(rmouse *m, long btn, long x, long y, int release)
     }
 }
 
-int mouse_decode(const uint8_t *buf, size_t n, rmouse *out, size_t *used)
-{
+int mouse_decode(const uint8_t* buf, size_t n, rmouse* out, size_t* used) {
     if (n < 3 || buf[0] != 0x1B || buf[1] != '[') {
         return -1;
     }

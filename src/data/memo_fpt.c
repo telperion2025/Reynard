@@ -22,13 +22,11 @@
 #include "data/data.h"
 #include "util/util.h"
 
-static uint32_t be32(const uint8_t *p)
-{
+static uint32_t be32(const uint8_t* p) {
     return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | p[3];
 }
 
-static void wrbe32(uint8_t *p, uint32_t v)
-{
+static void wrbe32(uint8_t* p, uint32_t v) {
     p[0] = (uint8_t)(v >> 24);
     p[1] = (uint8_t)(v >> 16);
     p[2] = (uint8_t)(v >> 8);
@@ -36,10 +34,9 @@ static void wrbe32(uint8_t *p, uint32_t v)
 }
 
 /* convert UTF-8 text to the DBF code page for storage */
-static int to_file_cp(const rx_dbf *dbf, const char *utf8, size_t n, uint8_t **out, size_t *outn)
-{
+static int to_file_cp(const rx_dbf* dbf, const char* utf8, size_t n, uint8_t** out, size_t* outn) {
     if (dbf->codepage > 0) {
-        uint8_t *b = malloc(n ? n : 1); /* UTF-8 -> single byte never expands */
+        uint8_t* b = malloc(n ? n : 1); /* UTF-8 -> single byte never expands */
         if (!b) {
             RX_FATAL("out of memory");
         }
@@ -53,7 +50,7 @@ static int to_file_cp(const rx_dbf *dbf, const char *utf8, size_t n, uint8_t **o
         *outn = bn;
         return R_OK;
     }
-    uint8_t *b = malloc(n + 1);
+    uint8_t* b = malloc(n + 1);
     if (!b) {
         RX_FATAL("out of memory");
     }
@@ -63,10 +60,9 @@ static int to_file_cp(const rx_dbf *dbf, const char *utf8, size_t n, uint8_t **o
     return R_OK;
 }
 
-static int from_file_cp(const rx_dbf *dbf, const uint8_t *raw, size_t n, r_str *out)
-{
+static int from_file_cp(const rx_dbf* dbf, const uint8_t* raw, size_t n, r_str* out) {
     if (dbf->codepage > 0) {
-        char *u8 = NULL;
+        char* u8 = NULL;
         size_t un = 0;
         int rc = cp_to_utf8(dbf->codepage, raw, n, &u8, &un);
         if (rc != R_OK) {
@@ -76,7 +72,7 @@ static int from_file_cp(const rx_dbf *dbf, const uint8_t *raw, size_t n, r_str *
         out->n = un;
         return R_OK;
     }
-    char *u8 = malloc(n + 1);
+    char* u8 = malloc(n + 1);
     if (!u8) {
         RX_FATAL("out of memory");
     }
@@ -87,8 +83,7 @@ static int from_file_cp(const rx_dbf *dbf, const uint8_t *raw, size_t n, r_str *
     return R_OK;
 }
 
-int rx_memo_fpt_read_raw(rx_dbf *dbf, uint32_t blk, uint8_t **bytes, size_t *n)
-{
+int rx_memo_fpt_read_raw(rx_dbf* dbf, uint32_t blk, uint8_t** bytes, size_t* n) {
     uint32_t bs = dbf->memo_bs ? dbf->memo_bs : 64;
     off_t off = (off_t)blk * bs;
     uint8_t h[8];
@@ -100,7 +95,7 @@ int rx_memo_fpt_read_raw(rx_dbf *dbf, uint32_t blk, uint8_t **bytes, size_t *n)
     if (len > 64u * 1024 * 1024) {
         return R_ERR_DBF_MEMO; /* implausible: corrupt header */
     }
-    uint8_t *buf = malloc(len ? len : 1);
+    uint8_t* buf = malloc(len ? len : 1);
     if (!buf) {
         RX_FATAL("out of memory");
     }
@@ -114,15 +109,14 @@ int rx_memo_fpt_read_raw(rx_dbf *dbf, uint32_t blk, uint8_t **bytes, size_t *n)
     return R_OK;
 }
 
-int rx_memo_fpt_read(rx_dbf *dbf, uint32_t blk, r_str **out)
-{
-    uint8_t *raw = NULL;
+int rx_memo_fpt_read(rx_dbf* dbf, uint32_t blk, r_str** out) {
+    uint8_t* raw = NULL;
     size_t rn = 0;
     int rc = rx_memo_fpt_read_raw(dbf, blk, &raw, &rn);
     if (rc != R_OK) {
         return rc;
     }
-    r_str *s = calloc(1, sizeof(r_str));
+    r_str* s = calloc(1, sizeof(r_str));
     if (!s) {
         free(raw);
         RX_FATAL("out of memory");
@@ -137,9 +131,9 @@ int rx_memo_fpt_read(rx_dbf *dbf, uint32_t blk, r_str **out)
     return R_OK;
 }
 
-int rx_memo_fpt_write(rx_dbf *dbf, const char *data, size_t n, uint32_t old_blk, uint32_t *blk_out)
-{
-    uint8_t *cp = NULL;
+int rx_memo_fpt_write(rx_dbf* dbf, const char* data, size_t n, uint32_t old_blk,
+                      uint32_t* blk_out) {
+    uint8_t* cp = NULL;
     size_t cn = 0;
     int rc = to_file_cp(dbf, data, n, &cp, &cn);
     if (rc != R_OK) {
@@ -152,7 +146,7 @@ int rx_memo_fpt_write(rx_dbf *dbf, const char *data, size_t n, uint32_t old_blk,
         off_t ooff = (off_t)old_blk * bs;
         if (pread(dbf->memo_fd, h, 8, ooff) == 8) {
             uint32_t old_len = be32(h + 4);
-            uint8_t *old = malloc(old_len ? old_len : 1);
+            uint8_t* old = malloc(old_len ? old_len : 1);
             struct stat st;
             long oldsize = 0;
             if (fstat(dbf->memo_fd, &st) == 0) {
@@ -196,7 +190,7 @@ int rx_memo_fpt_write(rx_dbf *dbf, const char *data, size_t n, uint32_t old_blk,
             return R_ERR_IO_WRITE;
         }
     }
-    uint8_t *block = calloc(1, alloc ? alloc : bs);
+    uint8_t* block = calloc(1, alloc ? alloc : bs);
     if (!block) {
         free(cp);
         RX_FATAL("out of memory");

@@ -22,7 +22,7 @@ extern "C" {
  * (init/shutdown). Returns R_OK on clean exit (QUIT / event-stream EOF),
  * R_ERR_NOUI when the backend cannot initialize, else a runtime code.
  */
-int rx_ui_run(rx_ctx *ctx, const term_backend *tb);
+int rx_ui_run(rx_ctx* ctx, const term_backend* tb);
 
 #ifdef __cplusplus
 }

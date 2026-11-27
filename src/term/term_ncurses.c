@@ -43,13 +43,11 @@
 /* Write terminal-mode sequences with write(2), never printf: stdio
    buffering interleaves with curses' own output and splits escape
    sequences, which prints garbage like "?1002h" onto the screen. */
-static void raw_write(const char *s)
-{
+static void raw_write(const char* s) {
     (void)write(STDOUT_FILENO, s, strlen(s));
 }
 
-static void nc_sync_size(void)
-{
+static void nc_sync_size(void) {
     struct winsize ws;
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 && ws.ws_row > 0) {
         if ((int)ws.ws_col != COLS || (int)ws.ws_row != LINES) {
@@ -58,13 +56,12 @@ static void nc_sync_size(void)
     }
 }
 
-static int nc_init(void)
-{
+static int nc_init(void) {
     if (!getenv("TERM") || !*getenv("TERM")) {
         return R_ERR_NOUI;
     }
     setlocale(LC_ALL, "");
-    WINDOW *w = initscr();
+    WINDOW* w = initscr();
     if (!w) {
         return R_ERR_NOUI;
     }
@@ -92,8 +89,7 @@ static int nc_init(void)
     return R_OK;
 }
 
-static void nc_shutdown(void)
-{
+static void nc_shutdown(void) {
     if (!getenv("REYNARD_NO_MOUSE")) {
         mousemask(0, NULL);
     }
@@ -105,26 +101,36 @@ static void nc_shutdown(void)
 #if !defined(RX_HAVE_NCURSESW_H) && !defined(RX_HAVE_NCURSESW_FLAT)
 /* narrow ncurses (e.g. macOS system 5.7, no ncursesw): draw line-drawing
    via the alternate charset and transliterate the few other glyphs we use */
-static int nc_acs_char(uint32_t ch)
-{
+static int nc_acs_char(uint32_t ch) {
     switch (ch) {
-    case 0x2500: return ACS_HLINE;
-    case 0x2502: return ACS_VLINE;
-    case 0x250C: return ACS_ULCORNER;
-    case 0x2510: return ACS_URCORNER;
-    case 0x2514: return ACS_LLCORNER;
-    case 0x2518: return ACS_LRCORNER;
-    case 0x251C: return ACS_LTEE;
-    case 0x2524: return ACS_RTEE;
-    case 0x252C: return ACS_TTEE;
-    case 0x2534: return ACS_BTEE;
-    case 0x253C: return ACS_PLUS;
-    default: return 0;
+    case 0x2500:
+        return ACS_HLINE;
+    case 0x2502:
+        return ACS_VLINE;
+    case 0x250C:
+        return ACS_ULCORNER;
+    case 0x2510:
+        return ACS_URCORNER;
+    case 0x2514:
+        return ACS_LLCORNER;
+    case 0x2518:
+        return ACS_LRCORNER;
+    case 0x251C:
+        return ACS_LTEE;
+    case 0x2524:
+        return ACS_RTEE;
+    case 0x252C:
+        return ACS_TTEE;
+    case 0x2534:
+        return ACS_BTEE;
+    case 0x253C:
+        return ACS_PLUS;
+    default:
+        return 0;
     }
 }
 
-static char ascii_fallback(uint32_t ch)
-{
+static char ascii_fallback(uint32_t ch) {
     switch (ch) {
     case 0x2013: /* – */
     case 0x2014: /* — */
@@ -141,8 +147,7 @@ static char ascii_fallback(uint32_t ch)
 }
 #endif /* !RX_HAVE_NCURSESW_H */
 
-static void nc_draw(int y, int x, rcell c)
-{
+static void nc_draw(int y, int x, rcell c) {
     uint32_t ch = c.ch ? c.ch : ' ';
     short pair = (short)((c.attr & 0xFF) + 1); /* curses pairs are 1-based */
     attr_t a = COLOR_PAIR(pair);
@@ -151,7 +156,7 @@ static void nc_draw(int y, int x, rcell c)
         mvaddch(y, x, (chtype)(a | (uint8_t)ch));
     } else {
         cchar_t cc;
-        wchar_t wch[2] = { (wchar_t)ch, 0 };
+        wchar_t wch[2] = {(wchar_t)ch, 0};
         setcchar(&cc, wch, a, pair, NULL);
         mvadd_wch(y, x, &cc);
     }
@@ -169,8 +174,7 @@ static void nc_draw(int y, int x, rcell c)
 #endif
 }
 
-static int nc_blit(rcell *cells, size_t w, size_t h, struct rrect *damage, size_t n_dmg)
-{
+static int nc_blit(rcell* cells, size_t w, size_t h, struct rrect* damage, size_t n_dmg) {
     size_t total = w * h;
     size_t dmg_area = 0;
     for (size_t i = 0; i < n_dmg; i++) {
@@ -196,18 +200,18 @@ static int nc_blit(rcell *cells, size_t w, size_t h, struct rrect *damage, size_
     return R_OK;
 }
 
-static int nc_palette(void (*set_pair)(int idx, uint8_t fg, uint8_t bg))
-{
+static int nc_palette(void (*set_pair)(int idx, uint8_t fg, uint8_t bg)) {
     if (!has_colors()) {
         return R_OK;
     }
     /* attr = fg | bg<<4 (FoxPro/CGA palette indices); map to curses colors
        with the same table term_script.c uses so both backends agree.
        Curses pairs are 1-based, so slot i gets pair i+1. */
-    static const short cga2curses[16] = { COLOR_BLACK,       COLOR_BLUE,  COLOR_GREEN,  COLOR_CYAN,
-                                          COLOR_RED,         COLOR_MAGENTA, COLOR_YELLOW, COLOR_WHITE,
-                                          COLOR_BLACK + 8,   COLOR_BLUE + 8, COLOR_GREEN + 8, COLOR_CYAN + 8,
-                                          COLOR_RED + 8,     COLOR_MAGENTA + 8, COLOR_YELLOW + 8, COLOR_WHITE + 8 };
+    static const short cga2curses[16] = {
+        COLOR_BLACK,     COLOR_BLUE,        COLOR_GREEN,      COLOR_CYAN,
+        COLOR_RED,       COLOR_MAGENTA,     COLOR_YELLOW,     COLOR_WHITE,
+        COLOR_BLACK + 8, COLOR_BLUE + 8,    COLOR_GREEN + 8,  COLOR_CYAN + 8,
+        COLOR_RED + 8,   COLOR_MAGENTA + 8, COLOR_YELLOW + 8, COLOR_WHITE + 8};
     for (int i = 0; i < 256; i++) {
         if (i + 1 >= COLOR_PAIRS) {
             break; /* pair 0 is reserved; some terminals cap at 256 pairs */
@@ -222,8 +226,7 @@ static int nc_palette(void (*set_pair)(int idx, uint8_t fg, uint8_t bg))
 
 static int nc_btn_down = 0; /**< button-1 held: press repeats become drags */
 
-static int nc_poll(revent *out, uint32_t timeout_ms)
-{
+static int nc_poll(revent* out, uint32_t timeout_ms) {
     memset(out, 0, sizeof(*out));
     timeout((int)timeout_ms);
     int ch = getch();
@@ -390,23 +393,19 @@ static int nc_poll(revent *out, uint32_t timeout_ms)
     return R_OK;
 }
 
-static void nc_bell(void)
-{
+static void nc_bell(void) {
     beep();
 }
 
-static void nc_cbreak_on(void)
-{
+static void nc_cbreak_on(void) {
     cbreak();
 }
 
-static void nc_cbreak_off(void)
-{
+static void nc_cbreak_off(void) {
     nocbreak();
 }
 
-static void nc_size(int *w, int *h)
-{
+static void nc_size(int* w, int* h) {
     struct winsize ws;
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 && ws.ws_row > 0) {
         *w = (int)ws.ws_col;
@@ -430,15 +429,13 @@ static const term_backend ncurses_backend = {
     .name = "ncurses",
 };
 
-const term_backend *rx_term_ncurses(void)
-{
+const term_backend* rx_term_ncurses(void) {
     return &ncurses_backend;
 }
 
 #else /* !RX_HAVE_NCURSES */
 
-const term_backend *rx_term_ncurses(void)
-{
+const term_backend* rx_term_ncurses(void) {
     return NULL;
 }
 

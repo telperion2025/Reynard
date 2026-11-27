@@ -8,18 +8,17 @@
  */
 #include "util/util.h"
 
-long rx_julian(int y, int m, int d)
-{
+long rx_julian(int y, int m, int d) {
     long yy = y - (m <= 2 ? 1 : 0);
     long era = (yy >= 0 ? yy : yy - 399) / 400;
     unsigned long yoe = (unsigned long)(yy - era * 400);
-    unsigned long doy = (153 * (unsigned long)(m + (m > 2 ? -3 : 9)) + 2) / 5 + (unsigned long)d - 1;
+    unsigned long doy =
+        (153 * (unsigned long)(m + (m > 2 ? -3 : 9)) + 2) / 5 + (unsigned long)d - 1;
     unsigned long doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     return era * 146097L + (long)doe - 719468L;
 }
 
-void rx_civil(long j, int *y, int *m, int *d)
-{
+void rx_civil(long j, int* y, int* m, int* d) {
     long z = j + 719468L;
     long era = (z >= 0 ? z : z - 146096L) / 146097L;
     unsigned long doe = (unsigned long)(z - era * 146097L);
@@ -32,17 +31,15 @@ void rx_civil(long j, int *y, int *m, int *d)
     *y = (int)(yy + (*m <= 2 ? 1 : 0));
 }
 
-static int is_leap(int y)
-{
+static int is_leap(int y) {
     return (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
 }
 
-int rx_date_valid(int y, int m, int d)
-{
+int rx_date_valid(int y, int m, int d) {
     if (y < 1 || m < 1 || m > 12 || d < 1) {
         return 0;
     }
-    static const int mdays[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    static const int mdays[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
     int maxd = mdays[m - 1] + (m == 2 && is_leap(y) ? 1 : 0);
     return d <= maxd;
 }

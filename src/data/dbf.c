@@ -28,34 +28,28 @@ static int g_test_mode = 0;
 static int g_cp_mark = 0x01;
 static int g_reprocess = 0;
 
-void rx_data_session(int test_mode, int cp_mark)
-{
+void rx_data_session(int test_mode, int cp_mark) {
     g_test_mode = test_mode;
     g_cp_mark = cp_mark ? cp_mark : 0x01;
 }
 
-int rx_data_default_mark(void)
-{
+int rx_data_default_mark(void) {
     return g_cp_mark;
 }
 
-int rx_data_test_mode(void)
-{
+int rx_data_test_mode(void) {
     return g_test_mode;
 }
 
-void rx_data_set_reprocess(int n)
-{
+void rx_data_set_reprocess(int n) {
     g_reprocess = n;
 }
 
-int rx_data_reprocess(void)
-{
+int rx_data_reprocess(void) {
     return g_reprocess;
 }
 
-static int accepted_version(uint8_t v)
-{
+static int accepted_version(uint8_t v) {
     switch (v) {
     case 0x03: /* dBase III+ */
     case 0x04: /* dBase IV */
@@ -71,24 +65,20 @@ static int accepted_version(uint8_t v)
     }
 }
 
-static uint16_t rd16(const uint8_t *p)
-{
+static uint16_t rd16(const uint8_t* p) {
     return (uint16_t)(p[0] | (p[1] << 8));
 }
 
-static uint32_t rd32(const uint8_t *p)
-{
+static uint32_t rd32(const uint8_t* p) {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
-static void wr16(uint8_t *p, uint16_t v)
-{
+static void wr16(uint8_t* p, uint16_t v) {
     p[0] = (uint8_t)(v & 0xFF);
     p[1] = (uint8_t)(v >> 8);
 }
 
-static void wr32(uint8_t *p, uint32_t v)
-{
+static void wr32(uint8_t* p, uint32_t v) {
     p[0] = (uint8_t)(v & 0xFF);
     p[1] = (uint8_t)((v >> 8) & 0xFF);
     p[2] = (uint8_t)((v >> 16) & 0xFF);
@@ -96,8 +86,7 @@ static void wr32(uint8_t *p, uint32_t v)
 }
 
 /* memo kind implied by the version byte (spec \u00a78.2/\u00a78.3) */
-static int memo_kind_for(uint8_t version)
-{
+static int memo_kind_for(uint8_t version) {
     switch (version) {
     case 0xF5:
     case 0x30:
@@ -110,22 +99,20 @@ static int memo_kind_for(uint8_t version)
 }
 
 /* dbf path with the extension replaced by the memo extension */
-static void memo_path_for(const char *path, int kind, char *out, size_t outsz)
-{
+static void memo_path_for(const char* path, int kind, char* out, size_t outsz) {
     snprintf(out, outsz, "%s", path);
-    char *dot = strrchr(out, '.');
-    char *slash = strrchr(out, '/');
+    char* dot = strrchr(out, '.');
+    char* slash = strrchr(out, '/');
     if (dot && (!slash || dot > slash)) {
         *dot = '\0';
     }
     snprintf(out + strlen(out), outsz - strlen(out), ".%s", kind == RX_MEMO_FPT ? "FPT" : "DBT");
 }
 
-static void rjn_path_for(const char *path, char *out, size_t outsz)
-{
+static void rjn_path_for(const char* path, char* out, size_t outsz) {
     snprintf(out, outsz, "%s", path);
-    char *dot = strrchr(out, '.');
-    char *slash = strrchr(out, '/');
+    char* dot = strrchr(out, '.');
+    char* slash = strrchr(out, '/');
     if (dot && (!slash || dot > slash)) {
         *dot = '\0';
     }
@@ -133,8 +120,7 @@ static void rjn_path_for(const char *path, char *out, size_t outsz)
 }
 
 /* stamp the header last-update date: frozen in -t, real date otherwise */
-static void touch_date(rx_dbf *dbf)
-{
+static void touch_date(rx_dbf* dbf) {
     if (g_test_mode) {
         dbf->hdr_yy = 100;
         dbf->hdr_mm = 1;
@@ -154,8 +140,7 @@ static void touch_date(rx_dbf *dbf)
     }
 }
 
-int rx_dbf_write_header(rx_dbf *dbf)
-{
+int rx_dbf_write_header(rx_dbf* dbf) {
     rx_dbf_cache_inv(dbf);
     uint8_t hdr[32];
     memset(hdr, 0, sizeof(hdr));
@@ -177,13 +162,11 @@ int rx_dbf_write_header(rx_dbf *dbf)
     return R_OK;
 }
 
-static int open_flags_for(int mode)
-{
+static int open_flags_for(int mode) {
     return (mode & RD_READONLY) ? O_RDONLY : O_RDWR;
 }
 
-int rx_dbf_open(const char *path, int mode, rx_dbf **out)
-{
+int rx_dbf_open(const char* path, int mode, rx_dbf** out) {
     if (!path || !out) {
         return R_ERR_RANGE;
     }
@@ -201,7 +184,7 @@ int rx_dbf_open(const char *path, int mode, rx_dbf **out)
         }
         return R_ERR_IO_OPEN;
     }
-    rx_dbf *dbf = calloc(1, sizeof(*dbf));
+    rx_dbf* dbf = calloc(1, sizeof(*dbf));
     dbf->order_file = -1;
     dbf->order_tag = -1;
     if (!dbf) {
@@ -260,7 +243,7 @@ int rx_dbf_open(const char *path, int mode, rx_dbf **out)
     }
     /* Field descriptors start at offset 32, each 32 bytes, terminated 0x0D. */
     size_t fsize = (size_t)dbf->header_size - 33;
-    uint8_t *desc = malloc(fsize + 1);
+    uint8_t* desc = malloc(fsize + 1);
     if (!desc) {
         rx_dbf_close(dbf);
         RX_FATAL("out of memory");
@@ -277,7 +260,7 @@ int rx_dbf_open(const char *path, int mode, rx_dbf **out)
         if (desc[i] == 0x0D) {
             break;
         }
-        rx_fielddef *f = &dbf->fields[nf];
+        rx_fielddef* f = &dbf->fields[nf];
         memset(f, 0, sizeof(*f));
         memcpy(f->name, desc + i, 11);
         f->name[10] = '\0';
@@ -361,7 +344,7 @@ int rx_dbf_open(const char *path, int mode, rx_dbf **out)
     rjn_path_for(path, dbf->rjn_path, sizeof(dbf->rjn_path));
 
     /* Default alias: file stem, uppercased. */
-    const char *base = strrchr(path, '/');
+    const char* base = strrchr(path, '/');
     base = base ? base + 1 : path;
     char stem[11];
     size_t sn = 0;
@@ -391,12 +374,11 @@ int rx_dbf_open(const char *path, int mode, rx_dbf **out)
         }
     }
     *out = dbf;
-        rx_index_attach_structural(dbf);
+    rx_index_attach_structural(dbf);
     return R_OK;
 }
 
-int rx_dbf_close(rx_dbf *dbf)
-{
+int rx_dbf_close(rx_dbf* dbf) {
     if (!dbf) {
         return R_OK;
     }
@@ -420,13 +402,12 @@ int rx_dbf_close(rx_dbf *dbf)
     free(dbf->recbuf);
     free(dbf->locks);
     free(dbf->jrecs); /* M9 8.6: transaction before-image index */
-        rx_index_close_all(dbf);
+    rx_index_close_all(dbf);
     free(dbf);
     return R_OK;
 }
 
-int rx_dbf_reopen(rx_dbf *dbf, int newmode)
-{
+int rx_dbf_reopen(rx_dbf* dbf, int newmode) {
     rx_dbf_cache_inv(dbf);
     if (!dbf) {
         return R_ERR_RANGE;
@@ -467,15 +448,13 @@ int rx_dbf_reopen(rx_dbf *dbf, int newmode)
 
 #define RX_DBCACHE (256u * 1024u) /**< read-ahead block, spec 11.3 LIST gate (M10) */
 
-void rx_dbf_cache_inv(rx_dbf *dbf)
-{
+void rx_dbf_cache_inv(rx_dbf* dbf) {
     if (dbf) {
         dbf->rcache_len = 0;
     }
 }
 
-int rx_dbf_load_rec(rx_dbf *dbf)
-{
+int rx_dbf_load_rec(rx_dbf* dbf) {
     if (dbf->eof || dbf->recno < 1 || dbf->recno > dbf->nrec) {
         return R_ERR_DBF_RECNO;
     }
@@ -513,8 +492,7 @@ int rx_dbf_load_rec(rx_dbf *dbf)
    current record; returns NULL otherwise so callers can fall back to
    rx_dbf_get (which re-reads from disk). recbuf always holds record
    loaded_rec, so a direct recno change without a load is detected. */
-const uint8_t *rx_dbf_cur_recbuf(const rx_dbf *dbf, size_t *reclen)
-{
+const uint8_t* rx_dbf_cur_recbuf(const rx_dbf* dbf, size_t* reclen) {
     if (!dbf || !dbf->recbuf) {
         return NULL;
     }
@@ -530,8 +508,7 @@ const uint8_t *rx_dbf_cur_recbuf(const rx_dbf *dbf, size_t *reclen)
     return dbf->recbuf;
 }
 
-int rx_dbf_write_rec(rx_dbf *dbf)
-{
+int rx_dbf_write_rec(rx_dbf* dbf) {
     rx_dbf_cache_inv(dbf);
     if (dbf->recno < 1 || dbf->recno > dbf->nrec) {
         return R_ERR_DBF_RECNO;
@@ -545,8 +522,7 @@ int rx_dbf_write_rec(rx_dbf *dbf)
     return R_OK;
 }
 
-int rx_dbf_read_raw(const rx_dbf *dbf, uint32_t recno, uint8_t *buf)
-{
+int rx_dbf_read_raw(const rx_dbf* dbf, uint32_t recno, uint8_t* buf) {
     if (!dbf || recno < 1 || recno > dbf->nrec) {
         return R_ERR_DBF_RECNO;
     }
@@ -558,8 +534,7 @@ int rx_dbf_read_raw(const rx_dbf *dbf, uint32_t recno, uint8_t *buf)
     return R_OK;
 }
 
-int rx_dbf_goto(rx_dbf *dbf, uint32_t recno)
-{
+int rx_dbf_goto(rx_dbf* dbf, uint32_t recno) {
     if (!dbf) {
         return R_ERR_RANGE;
     }
@@ -579,8 +554,7 @@ int rx_dbf_goto(rx_dbf *dbf, uint32_t recno)
     return rx_dbf_load_rec(dbf);
 }
 
-int rx_dbf_skip(rx_dbf *dbf, int32_t delta)
-{
+int rx_dbf_skip(rx_dbf* dbf, int32_t delta) {
     if (!dbf) {
         return R_ERR_RANGE;
     }
@@ -615,20 +589,17 @@ int rx_dbf_skip(rx_dbf *dbf, int32_t delta)
     return rx_dbf_load_rec(dbf);
 }
 
-int rx_dbf_bof(const rx_dbf *dbf, int *out)
-{
+int rx_dbf_bof(const rx_dbf* dbf, int* out) {
     *out = dbf ? dbf->bof : 1;
     return R_OK;
 }
 
-int rx_dbf_eof(const rx_dbf *dbf, int *out)
-{
+int rx_dbf_eof(const rx_dbf* dbf, int* out) {
     *out = dbf ? dbf->eof : 1;
     return R_OK;
 }
 
-int rx_dbf_recount(const rx_dbf *dbf, uint32_t *out)
-{
+int rx_dbf_recount(const rx_dbf* dbf, uint32_t* out) {
     if (!dbf) {
         return R_ERR_RANGE;
     }
@@ -636,8 +607,7 @@ int rx_dbf_recount(const rx_dbf *dbf, uint32_t *out)
     return R_OK;
 }
 
-int rx_dbf_recno(const rx_dbf *dbf, uint32_t *out)
-{
+int rx_dbf_recno(const rx_dbf* dbf, uint32_t* out) {
     if (!dbf) {
         return R_ERR_RANGE;
     }
@@ -645,15 +615,14 @@ int rx_dbf_recno(const rx_dbf *dbf, uint32_t *out)
     return R_OK;
 }
 
-int rx_dbf_get(rx_dbf *dbf, size_t fldidx, rval *out)
-{
+int rx_dbf_get(rx_dbf* dbf, size_t fldidx, rval* out) {
     if (!dbf || !out) {
         return R_ERR_RANGE;
     }
     if (fldidx >= dbf->nfld) {
         return R_ERR_FIELD;
     }
-    const rx_fielddef *f = &dbf->fields[fldidx];
+    const rx_fielddef* f = &dbf->fields[fldidx];
     if (dbf->eof || dbf->nrec == 0) {
         /* FoxPro: reading fields past EOF yields blank values, not an error */
         rx_rval_undef(out);
@@ -698,7 +667,7 @@ int rx_dbf_get(rx_dbf *dbf, size_t fldidx, rval *out)
             return rc;
         }
     }
-    const uint8_t *raw = dbf->recbuf + dbf->foff[fldidx];
+    const uint8_t* raw = dbf->recbuf + dbf->foff[fldidx];
     if (f->type == RFT_M) {
         char tmp[11];
         memcpy(tmp, raw, 10);
@@ -708,7 +677,7 @@ int rx_dbf_get(rx_dbf *dbf, size_t fldidx, rval *out)
         out->u.memo.blk = blk;
         out->u.memo.loaded = NULL;
         if (blk == 0) {
-            r_str *e = calloc(1, sizeof(r_str));
+            r_str* e = calloc(1, sizeof(r_str));
             if (!e) {
                 RX_FATAL("out of memory");
             }
@@ -721,7 +690,7 @@ int rx_dbf_get(rx_dbf *dbf, size_t fldidx, rval *out)
         if (rc != R_OK) {
             return rc;
         }
-        r_str *txt = NULL;
+        r_str* txt = NULL;
         if (dbf->memo_kind == RX_MEMO_FPT) {
             rc = rx_memo_fpt_read(dbf, blk, &txt);
         } else {
@@ -757,7 +726,7 @@ int rx_dbf_get(rx_dbf *dbf, size_t fldidx, rval *out)
             return rc;
         }
         if (dbf->memo_kind == RX_MEMO_FPT) {
-            uint8_t *bytes = NULL;
+            uint8_t* bytes = NULL;
             size_t n = 0;
             rc = rx_memo_fpt_read_raw(dbf, blk, &bytes, &n);
             if (rc == R_OK) {
@@ -770,8 +739,7 @@ int rx_dbf_get(rx_dbf *dbf, size_t fldidx, rval *out)
     return rx_field_decode(dbf, fldidx, raw, out);
 }
 
-int rx_dbf_put(rx_dbf *dbf, size_t fldidx, const rval *in)
-{
+int rx_dbf_put(rx_dbf* dbf, size_t fldidx, const rval* in) {
     if (!dbf || !in) {
         return R_ERR_RANGE;
     }
@@ -790,11 +758,11 @@ int rx_dbf_put(rx_dbf *dbf, size_t fldidx, const rval *in)
             return rc;
         }
     }
-    const rx_fielddef *f = &dbf->fields[fldidx];
-    uint8_t *raw = dbf->recbuf + dbf->foff[fldidx];
+    const rx_fielddef* f = &dbf->fields[fldidx];
+    uint8_t* raw = dbf->recbuf + dbf->foff[fldidx];
     if (f->type == RFT_M) {
         /* memo write goes through the sidecar; store the block number */
-        const char *txt = "";
+        const char* txt = "";
         size_t tn = 0;
         if (in->t == RX_T_C) {
             txt = in->u.c.utf8 ? in->u.c.utf8 : "";
@@ -841,8 +809,7 @@ int rx_dbf_put(rx_dbf *dbf, size_t fldidx, const rval *in)
     return rc;
 }
 
-int rx_flush(rx_dbf *dbf)
-{
+int rx_flush(rx_dbf* dbf) {
     if (!dbf) {
         return R_ERR_RANGE;
     }
@@ -868,8 +835,7 @@ int rx_flush(rx_dbf *dbf)
 
 /* ---- M2 write operations ---- */
 
-int rx_dbf_append(rx_dbf *dbf, uint32_t *recno)
-{
+int rx_dbf_append(rx_dbf* dbf, uint32_t* recno) {
     rx_dbf_cache_inv(dbf);
     if (!dbf) {
         return R_ERR_RANGE;
@@ -893,7 +859,7 @@ int rx_dbf_append(rx_dbf *dbf, uint32_t *recno)
             return R_ERR_IO_WRITE;
         }
     }
-    uint8_t *blank = calloc(1, dbf->rec_size);
+    uint8_t* blank = calloc(1, dbf->rec_size);
     if (!blank) {
         RX_FATAL("out of memory");
     }
@@ -940,8 +906,7 @@ int rx_dbf_append(rx_dbf *dbf, uint32_t *recno)
     return rc;
 }
 
-int rx_dbf_put_raw(rx_dbf *dbf, const uint8_t *raw)
-{
+int rx_dbf_put_raw(rx_dbf* dbf, const uint8_t* raw) {
     rx_dbf_cache_inv(dbf);
     if (!dbf || !raw) {
         return R_ERR_RANGE;
@@ -958,8 +923,7 @@ int rx_dbf_put_raw(rx_dbf *dbf, const uint8_t *raw)
     return R_OK;
 }
 
-int rx_dbf_set_deleted(rx_dbf *dbf, int del)
-{
+int rx_dbf_set_deleted(rx_dbf* dbf, int del) {
     rx_dbf_cache_inv(dbf);
     if (!dbf) {
         return R_ERR_RANGE;
@@ -992,8 +956,7 @@ int rx_dbf_set_deleted(rx_dbf *dbf, int del)
     return rx_dbf_write_header(dbf);
 }
 
-int rx_dbf_pack(rx_dbf *dbf)
-{
+int rx_dbf_pack(rx_dbf* dbf) {
     rx_dbf_cache_inv(dbf);
     if (!dbf) {
         return R_ERR_RANGE;
@@ -1014,7 +977,7 @@ int rx_dbf_pack(rx_dbf *dbf)
         }
     }
     uint32_t nrec = dbf->nrec;
-    uint8_t *all = NULL;
+    uint8_t* all = NULL;
     if (nrec) {
         all = malloc((size_t)nrec * dbf->rec_size);
         if (!all) {
@@ -1032,9 +995,9 @@ int rx_dbf_pack(rx_dbf *dbf)
     typedef struct {
         size_t recidx;
         size_t fldidx;
-        r_str *txt;
+        r_str* txt;
     } memo_snap;
-    memo_snap *snaps = NULL;
+    memo_snap* snaps = NULL;
     size_t nsnap = 0;
     if (dbf->has_memo) {
         int rc = rx_memo_open(dbf, 1);
@@ -1048,12 +1011,12 @@ int rx_dbf_pack(rx_dbf *dbf)
             RX_FATAL("out of memory");
         }
         for (uint32_t r = 1; r <= nrec; r++) {
-            const uint8_t *rec = all + (size_t)(r - 1) * dbf->rec_size;
+            const uint8_t* rec = all + (size_t)(r - 1) * dbf->rec_size;
             if (rec[0] == 0x2A) {
                 continue;
             }
             for (size_t fi = 0; fi < dbf->nfld; fi++) {
-                const rx_fielddef *f = &dbf->fields[fi];
+                const rx_fielddef* f = &dbf->fields[fi];
                 if (f->type != RFT_M && f->type != RFT_G && f->type != RFT_P) {
                     continue;
                 }
@@ -1064,7 +1027,7 @@ int rx_dbf_pack(rx_dbf *dbf)
                 if (blk == 0) {
                     continue;
                 }
-                r_str *txt = NULL;
+                r_str* txt = NULL;
                 if (dbf->memo_kind == RX_MEMO_FPT) {
                     rc = rx_memo_fpt_read(dbf, blk, &txt);
                 } else {
@@ -1135,7 +1098,7 @@ int rx_dbf_pack(rx_dbf *dbf)
         }
         /* rewrite live memos into the fresh sidecar and patch the records */
         for (size_t k = 0; k < nsnap; k++) {
-            uint8_t *rec = all + snaps[k].recidx * dbf->rec_size;
+            uint8_t* rec = all + snaps[k].recidx * dbf->rec_size;
             uint32_t newblk = 0;
             int rc;
             if (dbf->memo_kind == RX_MEMO_FPT) {
@@ -1165,7 +1128,7 @@ int rx_dbf_pack(rx_dbf *dbf)
     /* rewrite the DBF body without deleted records */
     uint32_t kept = 0;
     for (uint32_t r = 1; r <= nrec; r++) {
-        const uint8_t *rec = all + (size_t)(r - 1) * dbf->rec_size;
+        const uint8_t* rec = all + (size_t)(r - 1) * dbf->rec_size;
         if (rec[0] == 0x2A) {
             continue;
         }
@@ -1212,8 +1175,7 @@ int rx_dbf_pack(rx_dbf *dbf)
     return rx_dbf_write_header(dbf);
 }
 
-int rx_dbf_zap(rx_dbf *dbf)
-{
+int rx_dbf_zap(rx_dbf* dbf) {
     rx_dbf_cache_inv(dbf);
     if (!dbf) {
         return R_ERR_RANGE;
@@ -1274,20 +1236,17 @@ int rx_dbf_zap(rx_dbf *dbf)
     return rx_dbf_write_header(dbf);
 }
 
-void rx_dbf_set_found(rx_dbf *dbf, int found)
-{
+void rx_dbf_set_found(rx_dbf* dbf, int found) {
     if (dbf) {
         dbf->found = found;
     }
 }
 
-int rx_dbf_found(const rx_dbf *dbf)
-{
+int rx_dbf_found(const rx_dbf* dbf) {
     return dbf ? dbf->found : 0;
 }
 
-int rx_dbf_lupdate(const rx_dbf *dbf, int *y, int *m, int *d)
-{
+int rx_dbf_lupdate(const rx_dbf* dbf, int* y, int* m, int* d) {
     if (!dbf) {
         return R_ERR_RANGE;
     }
@@ -1299,8 +1258,7 @@ int rx_dbf_lupdate(const rx_dbf *dbf, int *y, int *m, int *d)
 
 /* ---- memo sidecar open (lazy) ---- */
 
-int rx_memo_open(rx_dbf *dbf, int for_write)
-{
+int rx_memo_open(rx_dbf* dbf, int for_write) {
     if (!dbf->has_memo) {
         return R_ERR_DBF_MEMO;
     }
@@ -1320,7 +1278,7 @@ int rx_memo_open(rx_dbf *dbf, int for_write)
         /* tolerate lowercase sidecar names (memo.fpt vs memo.FPT) */
         char lower[264];
         snprintf(lower, sizeof(lower), "%s", dbf->memo_path);
-        for (char *q = lower; *q; q++) {
+        for (char* q = lower; *q; q++) {
             if (*q >= 'A' && *q <= 'Z') {
                 *q = (char)(*q - 'A' + 'a');
             }
@@ -1394,8 +1352,8 @@ int rx_memo_open(rx_dbf *dbf, int for_write)
         return R_ERR_DBF_MEMO;
     }
     if (dbf->memo_kind == RX_MEMO_FPT) {
-        uint32_t next = ((uint32_t)h[0] << 24) | ((uint32_t)h[1] << 16) | ((uint32_t)h[2] << 8) |
-                        h[3];
+        uint32_t next =
+            ((uint32_t)h[0] << 24) | ((uint32_t)h[1] << 16) | ((uint32_t)h[2] << 8) | h[3];
         uint32_t bs = ((uint32_t)h[6] << 8) | h[7];
         dbf->memo_bs = bs ? bs : 64;
         dbf->memo_next = next ? next : (512 + dbf->memo_bs - 1) / dbf->memo_bs;
@@ -1408,8 +1366,7 @@ int rx_memo_open(rx_dbf *dbf, int for_write)
 
 /* ---- header introspection ---- */
 
-int rx_dbf_field_count(const rx_dbf *dbf, size_t *out)
-{
+int rx_dbf_field_count(const rx_dbf* dbf, size_t* out) {
     if (!dbf) {
         return R_ERR_RANGE;
     }
@@ -1417,8 +1374,7 @@ int rx_dbf_field_count(const rx_dbf *dbf, size_t *out)
     return R_OK;
 }
 
-int rx_dbf_field_def(const rx_dbf *dbf, size_t fldidx, rx_fielddef *out)
-{
+int rx_dbf_field_def(const rx_dbf* dbf, size_t fldidx, rx_fielddef* out) {
     if (!dbf || fldidx >= dbf->nfld) {
         return R_ERR_FIELD;
     }
@@ -1426,8 +1382,7 @@ int rx_dbf_field_def(const rx_dbf *dbf, size_t fldidx, rx_fielddef *out)
     return R_OK;
 }
 
-int rx_dbf_field_index(const rx_dbf *dbf, const char *name, size_t *out)
-{
+int rx_dbf_field_index(const rx_dbf* dbf, const char* name, size_t* out) {
     if (!dbf || !name) {
         return R_ERR_RANGE;
     }
@@ -1443,8 +1398,7 @@ int rx_dbf_field_index(const rx_dbf *dbf, const char *name, size_t *out)
     return R_ERR_FIELD;
 }
 
-int rx_dbf_alias(const rx_dbf *dbf, const char **out)
-{
+int rx_dbf_alias(const rx_dbf* dbf, const char** out) {
     if (!dbf) {
         return R_ERR_RANGE;
     }
@@ -1452,8 +1406,7 @@ int rx_dbf_alias(const rx_dbf *dbf, const char **out)
     return R_OK;
 }
 
-int rx_dbf_set_alias(rx_dbf *dbf, const char *alias)
-{
+int rx_dbf_set_alias(rx_dbf* dbf, const char* alias) {
     if (!dbf || !alias) {
         return R_ERR_RANGE;
     }
@@ -1464,8 +1417,7 @@ int rx_dbf_set_alias(rx_dbf *dbf, const char *alias)
     return R_OK;
 }
 
-int rx_dbf_deleted(const rx_dbf *dbf, int *out)
-{
+int rx_dbf_deleted(const rx_dbf* dbf, int* out) {
     if (!dbf) {
         return R_ERR_RANGE;
     }
@@ -1473,8 +1425,7 @@ int rx_dbf_deleted(const rx_dbf *dbf, int *out)
     return R_OK;
 }
 
-int rx_dbf_path(const rx_dbf *dbf, const char **out)
-{
+int rx_dbf_path(const rx_dbf* dbf, const char** out) {
     if (!dbf) {
         return R_ERR_RANGE;
     }
@@ -1482,8 +1433,7 @@ int rx_dbf_path(const rx_dbf *dbf, const char **out)
     return R_OK;
 }
 
-int rx_dbf_codepage(const rx_dbf *dbf, int *out)
-{
+int rx_dbf_codepage(const rx_dbf* dbf, int* out) {
     if (!dbf) {
         return R_ERR_RANGE;
     }
@@ -1493,18 +1443,15 @@ int rx_dbf_codepage(const rx_dbf *dbf, int *out)
 
 /* ---- locks / transactions in rlock.c / journal.c; indexes in cdx.c ---- */
 
-int rx_dbf_is_exclusive(const rx_dbf *dbf)
-{
+int rx_dbf_is_exclusive(const rx_dbf* dbf) {
     return dbf ? dbf->exclusive : 0;
 }
 
-int rx_dbf_is_readonly(const rx_dbf *dbf)
-{
+int rx_dbf_is_readonly(const rx_dbf* dbf) {
     return dbf ? dbf->readonly : 1;
 }
 
-int rx_dbf_version_mark(const rx_dbf *dbf, uint8_t *version, uint8_t *mark)
-{
+int rx_dbf_version_mark(const rx_dbf* dbf, uint8_t* version, uint8_t* mark) {
     if (!dbf) {
         return R_ERR_RANGE;
     }
@@ -1517,13 +1464,11 @@ int rx_dbf_version_mark(const rx_dbf *dbf, uint8_t *version, uint8_t *mark)
     return R_OK;
 }
 
-const uint8_t *rx_dbf_recbuf(const rx_dbf *dbf)
-{
+const uint8_t* rx_dbf_recbuf(const rx_dbf* dbf) {
     return dbf ? dbf->recbuf : NULL;
 }
 
-int rx_dbf_recsize(const rx_dbf *dbf, uint16_t *out)
-{
+int rx_dbf_recsize(const rx_dbf* dbf, uint16_t* out) {
     if (!dbf) {
         return R_ERR_RANGE;
     }

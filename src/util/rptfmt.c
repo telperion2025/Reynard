@@ -13,8 +13,7 @@
 
 #include "util/rptfmt.h"
 
-void rptf_init(rpt_file *rf, const char *name, int is_label)
-{
+void rptf_init(rpt_file* rf, const char* name, int is_label) {
     memset(rf, 0, sizeof(*rf));
     snprintf(rf->name, sizeof(rf->name), "%s", name ? name : (is_label ? "LABEL" : "REPORT"));
     rf->is_label = is_label;
@@ -35,8 +34,7 @@ void rptf_init(rpt_file *rf, const char *name, int is_label)
     }
 }
 
-void rptf_free(rpt_file *rf)
-{
+void rptf_free(rpt_file* rf) {
     for (size_t i = 0; i < rf->nbands; i++) {
         free(rf->bands[i].objs);
     }
@@ -48,104 +46,122 @@ void rptf_free(rpt_file *rf)
     rf->nvars = rf->capvars = 0;
 }
 
-const char *rptf_band_name(int t)
-{
+const char* rptf_band_name(int t) {
     switch (t) {
-    case RB_TITLE: return "TITLE";
-    case RB_PAGEHEADER: return "PAGEHEADER";
-    case RB_GROUPHEADER: return "GROUPHEADER";
-    case RB_DETAIL: return "DETAIL";
-    case RB_GROUPFOOTER: return "GROUPFOOTER";
-    case RB_PAGEFOOTER: return "PAGEFOOTER";
-    case RB_SUMMARY: return "SUMMARY";
-    default: return "?";
+    case RB_TITLE:
+        return "TITLE";
+    case RB_PAGEHEADER:
+        return "PAGEHEADER";
+    case RB_GROUPHEADER:
+        return "GROUPHEADER";
+    case RB_DETAIL:
+        return "DETAIL";
+    case RB_GROUPFOOTER:
+        return "GROUPFOOTER";
+    case RB_PAGEFOOTER:
+        return "PAGEFOOTER";
+    case RB_SUMMARY:
+        return "SUMMARY";
+    default:
+        return "?";
     }
 }
 
-int rptf_band_type(const char *s)
-{
-    if (!strcmp(s, "TITLE")) return RB_TITLE;
-    if (!strcmp(s, "PAGEHEADER")) return RB_PAGEHEADER;
-    if (!strcmp(s, "GROUPHEADER")) return RB_GROUPHEADER;
-    if (!strcmp(s, "DETAIL")) return RB_DETAIL;
-    if (!strcmp(s, "GROUPFOOTER")) return RB_GROUPFOOTER;
-    if (!strcmp(s, "PAGEFOOTER")) return RB_PAGEFOOTER;
-    if (!strcmp(s, "SUMMARY")) return RB_SUMMARY;
+int rptf_band_type(const char* s) {
+    if (!strcmp(s, "TITLE"))
+        return RB_TITLE;
+    if (!strcmp(s, "PAGEHEADER"))
+        return RB_PAGEHEADER;
+    if (!strcmp(s, "GROUPHEADER"))
+        return RB_GROUPHEADER;
+    if (!strcmp(s, "DETAIL"))
+        return RB_DETAIL;
+    if (!strcmp(s, "GROUPFOOTER"))
+        return RB_GROUPFOOTER;
+    if (!strcmp(s, "PAGEFOOTER"))
+        return RB_PAGEFOOTER;
+    if (!strcmp(s, "SUMMARY"))
+        return RB_SUMMARY;
     return 0;
 }
 
-const char *rptf_agg_name(int a)
-{
+const char* rptf_agg_name(int a) {
     switch (a) {
-    case RV_SUM: return "SUM";
-    case RV_COUNT: return "COUNT";
-    case RV_AVG: return "AVG";
-    case RV_MIN: return "MIN";
-    case RV_MAX: return "MAX";
-    default: return "NONE";
+    case RV_SUM:
+        return "SUM";
+    case RV_COUNT:
+        return "COUNT";
+    case RV_AVG:
+        return "AVG";
+    case RV_MIN:
+        return "MIN";
+    case RV_MAX:
+        return "MAX";
+    default:
+        return "NONE";
     }
 }
 
-int rptf_agg_from_name(const char *s)
-{
-    if (!strcmp(s, "SUM")) return RV_SUM;
-    if (!strcmp(s, "COUNT")) return RV_COUNT;
-    if (!strcmp(s, "AVG")) return RV_AVG;
-    if (!strcmp(s, "MIN")) return RV_MIN;
-    if (!strcmp(s, "MAX")) return RV_MAX;
+int rptf_agg_from_name(const char* s) {
+    if (!strcmp(s, "SUM"))
+        return RV_SUM;
+    if (!strcmp(s, "COUNT"))
+        return RV_COUNT;
+    if (!strcmp(s, "AVG"))
+        return RV_AVG;
+    if (!strcmp(s, "MIN"))
+        return RV_MIN;
+    if (!strcmp(s, "MAX"))
+        return RV_MAX;
     return RV_NONE;
 }
 
-rpt_band *rptf_band(const rpt_file *rf, int type)
-{
+rpt_band* rptf_band(const rpt_file* rf, int type) {
     for (size_t i = 0; i < rf->nbands; i++) {
         if (rf->bands[i].type == type) {
-            return (rpt_band *)&rf->bands[i];
+            return (rpt_band*)&rf->bands[i];
         }
     }
     return NULL;
 }
 
-rpt_band *rptf_band_add(rpt_file *rf, int type, int height)
-{
+rpt_band* rptf_band_add(rpt_file* rf, int type, int height) {
     if (rf->nbands == rf->capbands) {
         size_t nc = rf->capbands ? rf->capbands * 2 : 8;
-        rpt_band *nb = realloc(rf->bands, nc * sizeof(rpt_band));
+        rpt_band* nb = realloc(rf->bands, nc * sizeof(rpt_band));
         if (!nb) {
             RX_FATAL("out of memory");
         }
         rf->bands = nb;
         rf->capbands = nc;
     }
-    rpt_band *b = &rf->bands[rf->nbands++];
+    rpt_band* b = &rf->bands[rf->nbands++];
     memset(b, 0, sizeof(*b));
     b->type = type;
     b->height = height;
     return b;
 }
 
-rpt_obj *rptf_obj_add(rpt_band *b)
-{
+rpt_obj* rptf_obj_add(rpt_band* b) {
     if (b->nobjs == b->capobjs) {
         size_t nc = b->capobjs ? b->capobjs * 2 : 8;
-        rpt_obj *no = realloc(b->objs, nc * sizeof(rpt_obj));
+        rpt_obj* no = realloc(b->objs, nc * sizeof(rpt_obj));
         if (!no) {
             RX_FATAL("out of memory");
         }
         b->objs = no;
         b->capobjs = nc;
     }
-    rpt_obj *o = &b->objs[b->nobjs++];
+    rpt_obj* o = &b->objs[b->nobjs++];
     memset(o, 0, sizeof(*o));
     return o;
 }
 
 /* ---------------- serializer ---------------- */
 
-static void put_q(strbuf *sb, const char *s)
-{
+static void put_q(strbuf* sb, const char* s) {
     sb_putc(sb, '"');
-    for (const char *p = s; *p; p++) {
+    for (const char* p = s; *p; p++) {
         if (*p == '"' || *p == '\\') {
             sb_putc(sb, '\\');
         }
@@ -154,27 +170,27 @@ static void put_q(strbuf *sb, const char *s)
     sb_putc(sb, '"');
 }
 
-int rptf_serialize(const rpt_file *rf, strbuf *sb)
-{
+int rptf_serialize(const rpt_file* rf, strbuf* sb) {
     sb_printf(sb, "REYNARD %s 1\n", rf->is_label ? "LABEL" : "REPORT");
     sb_printf(sb, "NAME %s\n", rf->name);
     if (rf->is_label) {
         sb_printf(sb, "STOCK %s\n", rf->stock);
-        sb_printf(sb, "SIZE %d,%d SPACING %d,%d MARGINS %d,%d\n", rf->lab_h, rf->lab_w, rf->lab_sp_r,
-                  rf->lab_sp_c, rf->lab_m_l, rf->lab_m_t);
+        sb_printf(sb, "SIZE %d,%d SPACING %d,%d MARGINS %d,%d\n", rf->lab_h, rf->lab_w,
+                  rf->lab_sp_r, rf->lab_sp_c, rf->lab_m_l, rf->lab_m_t);
     } else {
         sb_printf(sb, "PAGE %d,%d\n", rf->page_w, rf->page_h);
-        sb_printf(sb, "MARGIN %d,%d,%d,%d\n", rf->margin_l, rf->margin_r, rf->margin_t, rf->margin_b);
+        sb_printf(sb, "MARGIN %d,%d,%d,%d\n", rf->margin_l, rf->margin_r, rf->margin_t,
+                  rf->margin_b);
     }
     for (size_t i = 0; i < rf->nbands; i++) {
-        const rpt_band *b = &rf->bands[i];
+        const rpt_band* b = &rf->bands[i];
         if (b->type == RB_GROUPHEADER || b->type == RB_GROUPFOOTER) {
             sb_printf(sb, "BAND %s %d \"%s\"\n", rptf_band_name(b->type), b->height, b->group);
         } else {
             sb_printf(sb, "BAND %s %d\n", rptf_band_name(b->type), b->height);
         }
         for (size_t j = 0; j < b->nobjs; j++) {
-            const rpt_obj *o = &b->objs[j];
+            const rpt_obj* o = &b->objs[j];
             switch (o->type) {
             case RO_TEXT:
                 sb_printf(sb, "OBJ TEXT %d,%d ", o->row, o->col);
@@ -194,8 +210,8 @@ int rptf_serialize(const rpt_file *rf, strbuf *sb)
         }
     }
     for (size_t i = 0; i < rf->nvars; i++) {
-        const rpt_var *v = &rf->vars[i];
-        const char *rs = v->reset == 3 ? "GROUP" : v->reset == 2 ? "PAGE" : "REPORT";
+        const rpt_var* v = &rf->vars[i];
+        const char* rs = v->reset == 3 ? "GROUP" : v->reset == 2 ? "PAGE" : "REPORT";
         sb_printf(sb, "VAR %s %s %s RESET %s", v->name, rptf_agg_name(v->agg), v->expr, rs);
         if (v->init[0]) {
             sb_printf(sb, " INITIAL %s", v->init);
@@ -212,10 +228,9 @@ typedef struct {
     char tok[320];
 } rtok;
 
-static size_t rtok_split(char *line, rtok *toks, size_t max)
-{
+static size_t rtok_split(char* line, rtok* toks, size_t max) {
     size_t n = 0;
-    char *p = line;
+    char* p = line;
     while (*p && n < max) {
         while (*p == ' ' || *p == '\t') {
             p++;
@@ -223,7 +238,7 @@ static size_t rtok_split(char *line, rtok *toks, size_t max)
         if (!*p) {
             break;
         }
-        char *out = toks[n].tok;
+        char* out = toks[n].tok;
         size_t ol = 0;
         if (*p == '"') {
             p++;
@@ -248,10 +263,9 @@ static size_t rtok_split(char *line, rtok *toks, size_t max)
 }
 
 /* rest of line after token i (raw expr) */
-static void rpt_rest(char *line, rtok *toks, size_t n, size_t i, char *out, size_t cap)
-{
+static void rpt_rest(char* line, rtok* toks, size_t n, size_t i, char* out, size_t cap) {
     /* walk the original line past the i-th token */
-    char *p = line;
+    char* p = line;
     for (size_t k = 0; k <= i && p; k++) {
         while (*p == ' ' || *p == '\t') {
             p++;
@@ -281,15 +295,14 @@ static void rpt_rest(char *line, rtok *toks, size_t n, size_t i, char *out, size
     snprintf(out, cap, "%.*s", (int)(cap - 1), p);
 }
 
-int rptf_load_text(const char *text, rpt_file *rf)
-{
+int rptf_load_text(const char* text, rpt_file* rf) {
     int is_label = 0;
     char name[64] = "";
     rptf_init(rf, "REPORT", 0);
-    char *copy = rx_strdup(text);
-    char *save = NULL;
-    rpt_band *cur = NULL;
-    for (char *line = strtok_r(copy, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) {
+    char* copy = rx_strdup(text);
+    char* save = NULL;
+    rpt_band* cur = NULL;
+    for (char* line = strtok_r(copy, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) {
         while (*line == ' ' || *line == '\t') {
             line++;
         }
@@ -313,7 +326,8 @@ int rptf_load_text(const char *text, rpt_file *rf)
             continue;
         }
         if (strncmp(line, "MARGIN ", 7) == 0) {
-            sscanf(line + 7, "%d,%d,%d,%d", &rf->margin_l, &rf->margin_r, &rf->margin_t, &rf->margin_b);
+            sscanf(line + 7, "%d,%d,%d,%d", &rf->margin_l, &rf->margin_r, &rf->margin_t,
+                   &rf->margin_b);
             continue;
         }
         if (strncmp(line, "STOCK ", 6) == 0) {
@@ -356,7 +370,7 @@ int rptf_load_text(const char *text, rpt_file *rf)
                 free(copy);
                 return R_ERR_SYNTAX;
             }
-            rpt_obj *o = rptf_obj_add(cur);
+            rpt_obj* o = rptf_obj_add(cur);
             if (!strcmp(tk[0].tok, "TEXT")) {
                 o->type = RO_TEXT;
                 sscanf(tk[1].tok, "%d,%d", &o->row, &o->col);
@@ -394,23 +408,23 @@ int rptf_load_text(const char *text, rpt_file *rf)
             }
             if (rf->nvars == rf->capvars) {
                 size_t nc = rf->capvars ? rf->capvars * 2 : 8;
-                rpt_var *nv = realloc(rf->vars, nc * sizeof(rpt_var));
+                rpt_var* nv = realloc(rf->vars, nc * sizeof(rpt_var));
                 if (!nv) {
                     RX_FATAL("out of memory");
                 }
                 rf->vars = nv;
                 rf->capvars = nc;
             }
-            rpt_var *v = &rf->vars[rf->nvars++];
+            rpt_var* v = &rf->vars[rf->nvars++];
             memset(v, 0, sizeof(*v));
             snprintf(v->name, sizeof(v->name), "%.63s", tk[0].tok);
             v->agg = rptf_agg_from_name(tk[1].tok);
             /* expr is raw text up to the RESET keyword (may contain spaces) */
             char tail[320];
             rpt_rest(line, tk, n, 2, tail, sizeof(tail));
-            char *rs = strstr(tail, " RESET ");
-            const char *resetw = "REPORT";
-            char *init = NULL;
+            char* rs = strstr(tail, " RESET ");
+            const char* resetw = "REPORT";
+            char* init = NULL;
             if (rs) {
                 *rs = '\0';
                 size_t tl = strlen(tail);
@@ -418,12 +432,12 @@ int rptf_load_text(const char *text, rpt_file *rf)
                     tail[--tl] = '\0';
                 }
                 resetw = rs + 7;
-                char *in = strstr(resetw, " INITIAL ");
+                char* in = strstr(resetw, " INITIAL ");
                 if (in) {
                     init = in + 9;
                     *in = '\0';
                     /* reset word ends here */
-                    char *sp = strchr(resetw, ' ');
+                    char* sp = strchr(resetw, ' ');
                     if (sp) {
                         *sp = '\0';
                     }
@@ -450,9 +464,8 @@ int rptf_load_text(const char *text, rpt_file *rf)
     return R_OK;
 }
 
-static char *rpt_read_all(const char *path, size_t *n)
-{
-    FILE *f = fopen(path, "rb");
+static char* rpt_read_all(const char* path, size_t* n) {
+    FILE* f = fopen(path, "rb");
     if (!f) {
         return NULL;
     }
@@ -474,10 +487,9 @@ static char *rpt_read_all(const char *path, size_t *n)
     return sb.buf;
 }
 
-int rptf_load(const char *path, rpt_file *rf)
-{
+int rptf_load(const char* path, rpt_file* rf) {
     size_t n = 0;
-    char *text = rpt_read_all(path, &n);
+    char* text = rpt_read_all(path, &n);
     if (!text) {
         return R_ERR_IO_NOTFOUND;
     }
@@ -486,12 +498,11 @@ int rptf_load(const char *path, rpt_file *rf)
     return rc;
 }
 
-int rptf_save(const char *path, const rpt_file *rf)
-{
+int rptf_save(const char* path, const rpt_file* rf) {
     strbuf sb;
     sb_init(&sb);
     rptf_serialize(rf, &sb);
-    FILE *f = fopen(path, "w");
+    FILE* f = fopen(path, "w");
     if (!f) {
         sb_free(&sb);
         return R_ERR_IO_OPEN;

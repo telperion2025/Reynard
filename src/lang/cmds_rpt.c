@@ -22,8 +22,7 @@
 #include "util/rptfmt.h"
 #include "util/util.h"
 
-static int emit_kind_for_path(const char *path)
-{
+static int emit_kind_for_path(const char* path) {
     size_t l = strlen(path);
     if (l > 4 && rx_strcasecmp(path + l - 4, ".pdf") == 0) {
         return 2;
@@ -43,9 +42,8 @@ static int emit_kind_for_path(const char *path)
     return 0; /* text */
 }
 
-static int write_out(rx_ctx *ctx, const char *path, const char *data, size_t n)
-{
-    FILE *f = fopen(path, "wb");
+static int write_out(rx_ctx* ctx, const char* path, const char* data, size_t n) {
+    FILE* f = fopen(path, "wb");
     if (!f) {
         return R_ERR_IO_OPEN;
     }
@@ -55,12 +53,11 @@ static int write_out(rx_ctx *ctx, const char *path, const char *data, size_t n)
     return rc;
 }
 
-int rx_cmd_report(rx_ctx *ctx, rx_stmt *s, int is_label)
-{
+int rx_cmd_report(rx_ctx* ctx, rx_stmt* s, int is_label) {
     if (s->nstrs < 1 || !s->strs[0] || !s->strs[0][0]) {
         return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "Expected form name");
     }
-    const char *name = s->strs[0];
+    const char* name = s->strs[0];
 
     rpt_doc doc;
     int rc = rx_rpt_build(ctx, name, s, is_label, &doc);
@@ -76,11 +73,11 @@ int rx_cmd_report(rx_ctx *ctx, rx_stmt *s, int is_label)
     }
 
     /* destination */
-    const char *tofile = rpt_clause_word(s, "TOFILE");
+    const char* tofile = rpt_clause_word(s, "TOFILE");
     int toprinter = rpt_has(s, "TOPRINTER");
     int topreview = rpt_has(s, "TOPREVIEW");
     int kind = 0;
-    const char *outpath = NULL;
+    const char* outpath = NULL;
     char prnpath[600] = "reynard.prn";
     if (tofile) {
         outpath = tofile;
@@ -122,12 +119,11 @@ int rx_cmd_report(rx_ctx *ctx, rx_stmt *s, int is_label)
 
 /* ---------------- CREATE/MODIFY REPORT/LABEL ---------------- */
 
-int rx_cmd_rptb(rx_ctx *ctx, rx_stmt *s)
-{
+int rx_cmd_rptb(rx_ctx* ctx, rx_stmt* s) {
     if (s->nstrs < 1 || !s->strs[0] || !s->strs[0][0]) {
         return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "Expected form name");
     }
-    const char *name = s->strs[0];
+    const char* name = s->strs[0];
     int is_label = (s->kind == ST_CREATE_LABEL || s->kind == ST_MODIFY_LABEL);
     int create = (s->kind == ST_CREATE_REPORT || s->kind == ST_CREATE_LABEL);
     if (ctx->rptb_fn) {
@@ -140,7 +136,7 @@ int rx_cmd_rptb(rx_ctx *ctx, rx_stmt *s)
     if (create) {
         rptf_init(&rf, name, is_label);
         if (!is_label) {
-            rpt_band *d = rptf_band_add(&rf, RB_DETAIL, 1);
+            rpt_band* d = rptf_band_add(&rf, RB_DETAIL, 1);
             (void)d;
             rptf_band_add(&rf, RB_TITLE, 1);
             rptf_band_add(&rf, RB_PAGEHEADER, 1);

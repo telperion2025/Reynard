@@ -17,8 +17,7 @@
 static uint32_t crc_tab[256];
 static int crc_ready = 0;
 
-static void crc_init(void)
-{
+static void crc_init(void) {
     for (uint32_t i = 0; i < 256; i++) {
         uint32_t c = i;
         for (int k = 0; k < 8; k++) {
@@ -29,13 +28,12 @@ static void crc_init(void)
     crc_ready = 1;
 }
 
-uint32_t rx_crc32(const void *data, size_t n)
-{
+uint32_t rx_crc32(const void* data, size_t n) {
     if (!crc_ready) {
         crc_init();
     }
     uint32_t c = 0xFFFFFFFFu;
-    const uint8_t *p = data;
+    const uint8_t* p = data;
     for (size_t i = 0; i < n; i++) {
         c = crc_tab[(c ^ p[i]) & 0xFF] ^ (c >> 8);
     }
@@ -44,29 +42,24 @@ uint32_t rx_crc32(const void *data, size_t n)
 
 /* ---------------- little-endian helpers ---------------- */
 
-static void put16(strbuf *b, uint16_t v)
-{
+static void put16(strbuf* b, uint16_t v) {
     sb_putc(b, (char)(v & 0xFF));
     sb_putc(b, (char)((v >> 8) & 0xFF));
 }
 
-static void put32(strbuf *b, uint32_t v)
-{
+static void put32(strbuf* b, uint32_t v) {
     sb_putc(b, (char)(v & 0xFF));
     sb_putc(b, (char)((v >> 8) & 0xFF));
     sb_putc(b, (char)((v >> 16) & 0xFF));
     sb_putc(b, (char)((v >> 24) & 0xFF));
 }
 
-static uint16_t get16(const uint8_t *p)
-{
+static uint16_t get16(const uint8_t* p) {
     return (uint16_t)(p[0] | (p[1] << 8));
 }
 
-static uint32_t get32(const uint8_t *p)
-{
-    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
-           ((uint32_t)p[3] << 24);
+static uint32_t get32(const uint8_t* p) {
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
 /* ---------------- writer ---------------- */
@@ -76,30 +69,28 @@ typedef struct zip_ent {
     uint32_t crc;
     uint32_t size;
     uint32_t lho;
-    const uint8_t *data; /* borrowed during build */
+    const uint8_t* data; /* borrowed during build */
 } zip_ent;
 
 struct rx_zipw {
-    zip_ent *ents;
+    zip_ent* ents;
     size_t n, cap;
-    uint8_t **blobs; /* owned copies: callers may free their buffers early */
+    uint8_t** blobs; /* owned copies: callers may free their buffers early */
 };
 
-rx_zipw *rx_zipw_new(void)
-{
-    rx_zipw *w = calloc(1, sizeof(*w));
+rx_zipw* rx_zipw_new(void) {
+    rx_zipw* w = calloc(1, sizeof(*w));
     return w;
 }
 
-int rx_zipw_add(rx_zipw *w, const char *name, const void *data, size_t n)
-{
+int rx_zipw_add(rx_zipw* w, const char* name, const void* data, size_t n) {
     if (!w || !name || n > 0xFFFFFFF0u) {
         return R_ERR_RANGE;
     }
     if (w->n == w->cap) {
         size_t nc = w->cap ? w->cap * 2 : 16;
-        zip_ent *ne = realloc(w->ents, nc * sizeof(zip_ent));
-        uint8_t **nb = realloc(w->blobs, nc * sizeof(uint8_t *));
+        zip_ent* ne = realloc(w->ents, nc * sizeof(zip_ent));
+        uint8_t** nb = realloc(w->blobs, nc * sizeof(uint8_t*));
         if (!ne || !nb) {
             RX_FATAL("out of memory");
         }
@@ -107,10 +98,10 @@ int rx_zipw_add(rx_zipw *w, const char *name, const void *data, size_t n)
         w->blobs = nb;
         w->cap = nc;
     }
-    zip_ent *e = &w->ents[w->n];
+    zip_ent* e = &w->ents[w->n];
     memset(e, 0, sizeof(*e));
     snprintf(e->name, sizeof(e->name), "%.*s", 127, name);
-    uint8_t *copy = malloc(n ? n : 1);
+    uint8_t* copy = malloc(n ? n : 1);
     if (!copy) {
         RX_FATAL("out of memory");
     }
@@ -124,43 +115,41 @@ int rx_zipw_add(rx_zipw *w, const char *name, const void *data, size_t n)
     return R_OK;
 }
 
-size_t rx_zipw_count(const rx_zipw *w)
-{
+size_t rx_zipw_count(const rx_zipw* w) {
     return w ? w->n : 0;
 }
 
-int rx_zipw_finish(rx_zipw *w, char **out, size_t *outn)
-{
+int rx_zipw_finish(rx_zipw* w, char** out, size_t* outn) {
     if (!w || !out || !outn) {
         return R_ERR_RANGE;
     }
     strbuf b;
     sb_init(&b);
     for (size_t i = 0; i < w->n; i++) {
-        zip_ent *e = &w->ents[i];
+        zip_ent* e = &w->ents[i];
         e->lho = (uint32_t)b.len;
-        put32(&b, 0x04034b50u);       /* local header sig */
-        put16(&b, 20);                /* version needed */
-        put16(&b, 0);                 /* flags */
-        put16(&b, 0);                 /* method: stored */
-        put16(&b, 0);                 /* mod time (fixed) */
-        put16(&b, 0x21);              /* mod date: 1980-01-01 */
+        put32(&b, 0x04034b50u); /* local header sig */
+        put16(&b, 20);          /* version needed */
+        put16(&b, 0);           /* flags */
+        put16(&b, 0);           /* method: stored */
+        put16(&b, 0);           /* mod time (fixed) */
+        put16(&b, 0x21);        /* mod date: 1980-01-01 */
         put32(&b, e->crc);
         put32(&b, e->size);
         put32(&b, e->size);
         put16(&b, (uint16_t)strlen(e->name));
-        put16(&b, 0);                 /* extra len */
+        put16(&b, 0); /* extra len */
         sb_put(&b, e->name, strlen(e->name));
         if (e->size) {
-            sb_put(&b, (const char *)w->blobs[i], e->size);
+            sb_put(&b, (const char*)w->blobs[i], e->size);
         }
     }
     uint32_t cd_off = (uint32_t)b.len;
     for (size_t i = 0; i < w->n; i++) {
-        zip_ent *e = &w->ents[i];
-        put32(&b, 0x02014b50u);       /* central dir sig */
-        put16(&b, 20);                /* version made by */
-        put16(&b, 20);                /* version needed */
+        zip_ent* e = &w->ents[i];
+        put32(&b, 0x02014b50u); /* central dir sig */
+        put16(&b, 20);          /* version made by */
+        put16(&b, 20);          /* version needed */
         put16(&b, 0);
         put16(&b, 0);
         put16(&b, 0);
@@ -173,12 +162,12 @@ int rx_zipw_finish(rx_zipw *w, char **out, size_t *outn)
         put16(&b, 0);
         put16(&b, 0);
         put16(&b, 0);
-        put32(&b, 0);                 /* external attrs */
+        put32(&b, 0); /* external attrs */
         put32(&b, e->lho);
         sb_put(&b, e->name, strlen(e->name));
     }
     uint32_t cd_size = (uint32_t)b.len - cd_off;
-    put32(&b, 0x06054b50u);           /* EOCD */
+    put32(&b, 0x06054b50u); /* EOCD */
     put16(&b, 0);
     put16(&b, 0);
     put16(&b, (uint16_t)w->n);
@@ -195,8 +184,7 @@ int rx_zipw_finish(rx_zipw *w, char **out, size_t *outn)
     return R_OK;
 }
 
-void rx_zipw_free(rx_zipw *w)
-{
+void rx_zipw_free(rx_zipw* w) {
     if (!w) {
         return;
     }
@@ -210,13 +198,12 @@ void rx_zipw_free(rx_zipw *w)
 
 /* ---------------- reader ---------------- */
 
-int rx_rpp_open_mem(const void *data, size_t n, rx_rpp *out)
-{
+int rx_rpp_open_mem(const void* data, size_t n, rx_rpp* out) {
     if (!data || n < 22 || !out) {
         return R_ERR_RANGE;
     }
     memset(out, 0, sizeof(*out));
-    const uint8_t *b = data;
+    const uint8_t* b = data;
     /* locate EOCD (scan backwards, allowing a 64k comment) */
     size_t eocd = n;
     int found = 0;
@@ -268,7 +255,7 @@ int rx_rpp_open_mem(const void *data, size_t n, rx_rpp *out)
             out->ents = NULL;
             return R_ERR_DBF_UNSUPPORTED; /* compressed entry: diagnostic */
         }
-        rx_rpp_ent *e = &out->ents[i];
+        rx_rpp_ent* e = &out->ents[i];
         if (nlen >= sizeof(e->name)) {
             nlen = sizeof(e->name) - 1;
         }
@@ -288,9 +275,8 @@ int rx_rpp_open_mem(const void *data, size_t n, rx_rpp *out)
     return R_OK;
 }
 
-int rx_rpp_open(const char *path, rx_rpp *out)
-{
-    FILE *f = fopen(path, "rb");
+int rx_rpp_open(const char* path, rx_rpp* out) {
+    FILE* f = fopen(path, "rb");
     if (!f) {
         return R_ERR_IO_NOTFOUND;
     }
@@ -311,8 +297,7 @@ int rx_rpp_open(const char *path, rx_rpp *out)
     return rc;
 }
 
-const rx_rpp_ent *rx_rpp_find(const rx_rpp *r, const char *name)
-{
+const rx_rpp_ent* rx_rpp_find(const rx_rpp* r, const char* name) {
     if (!r || !name) {
         return NULL;
     }
@@ -324,8 +309,7 @@ const rx_rpp_ent *rx_rpp_find(const rx_rpp *r, const char *name)
     return NULL;
 }
 
-int rx_rpp_read(const rx_rpp *r, const rx_rpp_ent *e, uint8_t **out, size_t *outn)
-{
+int rx_rpp_read(const rx_rpp* r, const rx_rpp_ent* e, uint8_t** out, size_t* outn) {
     if (!r || !e || !out || !outn) {
         return R_ERR_RANGE;
     }
@@ -339,7 +323,7 @@ int rx_rpp_read(const rx_rpp *r, const rx_rpp_ent *e, uint8_t **out, size_t *out
     if (off + e->size > r->len) {
         return R_ERR_DBF_TRUNCATED;
     }
-    uint8_t *buf = malloc(e->size ? e->size : 1);
+    uint8_t* buf = malloc(e->size ? e->size : 1);
     if (!buf) {
         RX_FATAL("out of memory");
     }
@@ -353,8 +337,7 @@ int rx_rpp_read(const rx_rpp *r, const rx_rpp_ent *e, uint8_t **out, size_t *out
     return R_OK;
 }
 
-void rx_rpp_close(rx_rpp *r)
-{
+void rx_rpp_close(rx_rpp* r) {
     if (!r) {
         return;
     }

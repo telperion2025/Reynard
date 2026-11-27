@@ -11,19 +11,18 @@
 #include <stdlib.h>
 #include <string.h>
 
-int rx_cfg_default_path(char *out, size_t outsz)
-{
-    const char *env = getenv("REYNARD_CFG");
+int rx_cfg_default_path(char* out, size_t outsz) {
+    const char* env = getenv("REYNARD_CFG");
     if (env && *env) {
         snprintf(out, outsz, "%s", env);
         return R_OK;
     }
-    const char *xdg = getenv("XDG_CONFIG_HOME");
+    const char* xdg = getenv("XDG_CONFIG_HOME");
     if (xdg && *xdg) {
         snprintf(out, outsz, "%s/reynard/reynard.cfg", xdg);
         return R_OK;
     }
-    const char *home = getenv("HOME");
+    const char* home = getenv("HOME");
     if (!home || !*home) {
         return R_ERR_IO_NOTFOUND;
     }
@@ -31,9 +30,8 @@ int rx_cfg_default_path(char *out, size_t outsz)
     return R_OK;
 }
 
-static void add_line(char ***arr, size_t *n, const char *s)
-{
-    char **na = realloc(*arr, (*n + 1) * sizeof(char *));
+static void add_line(char*** arr, size_t* n, const char* s) {
+    char** na = realloc(*arr, (*n + 1) * sizeof(char*));
     if (!na) {
         RX_FATAL("out of memory");
     }
@@ -42,8 +40,7 @@ static void add_line(char ***arr, size_t *n, const char *s)
     (*n)++;
 }
 
-static void warn(rx_cfg *cfg, int lineno, const char *text)
-{
+static void warn(rx_cfg* cfg, int lineno, const char* text) {
     strbuf sb;
     sb_init(&sb);
     sb_printf(&sb, "%s:%d: %s", cfg->path, lineno, text);
@@ -51,8 +48,7 @@ static void warn(rx_cfg *cfg, int lineno, const char *text)
     sb_free(&sb);
 }
 
-int rx_cfg_load(rx_cfg *cfg, const char *override_path)
-{
+int rx_cfg_load(rx_cfg* cfg, const char* override_path) {
     memset(cfg, 0, sizeof(*cfg));
     cfg->history = 1000;
     cfg->codepage = 0;
@@ -72,7 +68,7 @@ int rx_cfg_load(rx_cfg *cfg, const char *override_path)
     }
     snprintf(cfg->path, sizeof(cfg->path), "%s", path);
 
-    FILE *f = fopen(path, "r");
+    FILE* f = fopen(path, "r");
     if (!f) {
         return R_OK; /* missing config file is not an error */
     }
@@ -80,7 +76,7 @@ int rx_cfg_load(rx_cfg *cfg, const char *override_path)
     int lineno = 0;
     while (fgets(line, sizeof(line), f)) {
         lineno++;
-        char *s = line;
+        char* s = line;
         while (*s == ' ' || *s == '\t') {
             s++;
         }
@@ -91,14 +87,14 @@ int rx_cfg_load(rx_cfg *cfg, const char *override_path)
         if (n == 0 || s[0] == '#') {
             continue;
         }
-        char *eq = strchr(s, '=');
+        char* eq = strchr(s, '=');
         if (!eq) {
             warn(cfg, lineno, "expected KEY = value");
             continue;
         }
         *eq = '\0';
-        char *key = s;
-        char *val = eq + 1;
+        char* key = s;
+        char* val = eq + 1;
         while (*key == ' ' || *key == '\t') {
             key++;
         }
@@ -136,8 +132,7 @@ int rx_cfg_load(rx_cfg *cfg, const char *override_path)
     return R_OK;
 }
 
-void rx_cfg_free(rx_cfg *cfg)
-{
+void rx_cfg_free(rx_cfg* cfg) {
     for (size_t i = 0; i < cfg->n_set; i++) {
         free(cfg->set_lines[i]);
     }

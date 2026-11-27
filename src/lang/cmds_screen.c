@@ -18,9 +18,8 @@
 #include "util/scrfmt.h"
 #include "util/util.h"
 
-static void make_paths(const char *name, const char *to, char *scrpath, size_t s1, char *rsopath,
-                       size_t s2, char *prgpath, size_t s3)
-{
+static void make_paths(const char* name, const char* to, char* scrpath, size_t s1, char* rsopath,
+                       size_t s2, char* prgpath, size_t s3) {
     snprintf(scrpath, s1, "%s.scr", name);
     snprintf(rsopath, s2, "%s.rso", name);
     if (to && *to) {
@@ -30,15 +29,15 @@ static void make_paths(const char *name, const char *to, char *scrpath, size_t s
     }
 }
 
-int rx_cmd_screen(rx_ctx *ctx, rx_stmt *s)
-{
+int rx_cmd_screen(rx_ctx* ctx, rx_stmt* s) {
     if (s->nstrs < 1 || !s->strs[0] || !s->strs[0][0]) {
         return rx_raise(ctx, R_ERR_SYNTAX, s->line, s->col, "Expected screen name");
     }
-    const char *name = s->strs[0];
-    const char *to = s->nstrs > 1 ? s->strs[1] : NULL;
+    const char* name = s->strs[0];
+    const char* to = s->nstrs > 1 ? s->strs[1] : NULL;
     char scrpath[600], rsopath[600], prgpath[600];
-    make_paths(name, to, scrpath, sizeof(scrpath), rsopath, sizeof(rsopath), prgpath, sizeof(prgpath));
+    make_paths(name, to, scrpath, sizeof(scrpath), rsopath, sizeof(rsopath), prgpath,
+               sizeof(prgpath));
     /* M9 9.6: .SCR may come from SET PATH (packed .rpp res/ cache) */
     rx_resolve_res(ctx, name, "scr", scrpath, sizeof(scrpath));
 
@@ -76,8 +75,8 @@ int rx_cmd_screen(rx_ctx *ctx, rx_stmt *s)
                 rc = scrf_load_rso(rsopath, &sf);
             }
             if (rc != R_OK) {
-                return rx_raise(ctx, R_ERR_IO_NOTFOUND, s->line, s->col, "Screen file not found: %s",
-                                name);
+                return rx_raise(ctx, R_ERR_IO_NOTFOUND, s->line, s->col,
+                                "Screen file not found: %s", name);
             }
             rc = scrf_compile(rsopath, &sf);
             scrf_free(&sf);
@@ -96,7 +95,8 @@ int rx_cmd_screen(rx_ctx *ctx, rx_stmt *s)
             rc = scrf_load_rso(rsopath, &sf);
         }
         if (rc != R_OK) {
-            return rx_raise(ctx, R_ERR_IO_NOTFOUND, s->line, s->col, "Screen file not found: %s", name);
+            return rx_raise(ctx, R_ERR_IO_NOTFOUND, s->line, s->col, "Screen file not found: %s",
+                            name);
         }
         strbuf sb;
         sb_init(&sb);
@@ -106,7 +106,7 @@ int rx_cmd_screen(rx_ctx *ctx, rx_stmt *s)
             sb_free(&sb);
             return rx_raise(ctx, rc, s->line, s->col, "Code generation failed");
         }
-        FILE *f = fopen(prgpath, "w");
+        FILE* f = fopen(prgpath, "w");
         if (!f) {
             sb_free(&sb);
             return rx_raise(ctx, R_ERR_IO_OPEN, s->line, s->col, "Cannot open %s", prgpath);

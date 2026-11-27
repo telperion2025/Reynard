@@ -16,9 +16,8 @@
 
 #include "util/util.h"
 
-int rx_raise(rx_ctx *ctx, int code, int line, int col, const char *fmt, ...)
-{
-    r_err *e = &ctx->err;
+int rx_raise(rx_ctx* ctx, int code, int line, int col, const char* fmt, ...) {
+    r_err* e = &ctx->err;
     e->code = code;
     e->line = line;
     e->col = col;
@@ -40,7 +39,7 @@ int rx_raise(rx_ctx *ctx, int code, int line, int col, const char *fmt, ...)
     if (ctx->msg_line && !ctx->out) {
         char buf[1200];
         if (ctx->src && line > 0) {
-            const char *p = ctx->src;
+            const char* p = ctx->src;
             int cur = 1;
             while (*p && cur < line) {
                 if (*p == '\n') {
@@ -48,12 +47,12 @@ int rx_raise(rx_ctx *ctx, int code, int line, int col, const char *fmt, ...)
                 }
                 p++;
             }
-            const char *eol = p;
+            const char* eol = p;
             while (*eol && *eol != '\n') {
                 eol++;
             }
             size_t n = (size_t)(eol - p);
-            char *srcline = malloc(n + 1);
+            char* srcline = malloc(n + 1);
             if (!srcline) {
                 RX_FATAL("out of memory");
             }
@@ -67,7 +66,7 @@ int rx_raise(rx_ctx *ctx, int code, int line, int col, const char *fmt, ...)
         if (!ctx->err_printed) {
             char first[1200];
             snprintf(first, sizeof(first), "%s", buf);
-            char *nl = strchr(first, '\n');
+            char* nl = strchr(first, '\n');
             if (nl) {
                 *nl = '\0';
             }
@@ -81,7 +80,7 @@ int rx_raise(rx_ctx *ctx, int code, int line, int col, const char *fmt, ...)
     char buf[1200];
     if (ctx->src && line > 0) {
         /* extract source line `line` from ctx->src */
-        const char *p = ctx->src;
+        const char* p = ctx->src;
         int cur = 1;
         while (*p && cur < line) {
             if (*p == '\n') {
@@ -89,12 +88,12 @@ int rx_raise(rx_ctx *ctx, int code, int line, int col, const char *fmt, ...)
             }
             p++;
         }
-        const char *eol = p;
+        const char* eol = p;
         while (*eol && *eol != '\n') {
             eol++;
         }
         size_t n = (size_t)(eol - p);
-        char *srcline = malloc(n + 1);
+        char* srcline = malloc(n + 1);
         if (!srcline) {
             RX_FATAL("out of memory");
         }
@@ -112,9 +111,8 @@ int rx_raise(rx_ctx *ctx, int code, int line, int col, const char *fmt, ...)
     return code;
 }
 
-void rx_format_error(const r_err *err, const char *srcline, char *out, size_t outsz)
-{
-    const char *file = err->src_file[0] ? err->src_file : "<command>";
+void rx_format_error(const r_err* err, const char* srcline, char* out, size_t outsz) {
+    const char* file = err->src_file[0] ? err->src_file : "<command>";
     if (err->line > 0) {
         snprintf(out, outsz, "Error in line %d col %d of %s: %s", err->line, err->col, file,
                  err->msg);

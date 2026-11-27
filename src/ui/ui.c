@@ -10,22 +10,20 @@
  */
 #include "ui/ui_internal.h"
 
+#include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <ctype.h>
 #include <string.h>
 #include <time.h>
 
-static rx_ui *g_ui;
+static rx_ui* g_ui;
 
-rx_ui *rx_ui_current(void)
-{
+rx_ui* rx_ui_current(void) {
     return g_ui;
 }
 
-void ui_set_msg(rx_ui *ui, const char *fmt, ...)
-{
+void ui_set_msg(rx_ui* ui, const char* fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(ui->msg, sizeof(ui->msg), fmt, ap);
@@ -33,22 +31,19 @@ void ui_set_msg(rx_ui *ui, const char *fmt, ...)
     ui->dirty = 1;
 }
 
-void ui_msgline_hook(void *ud, const char *s)
-{
-    rx_ui *ui = (rx_ui *)ud;
+void ui_msgline_hook(void* ud, const char* s) {
+    rx_ui* ui = (rx_ui*)ud;
     ui_set_msg(ui, "%s", s);
     ui->tb->bell(); /* §7.4: message line comes with a beep */
 }
 
-static void pal_trampoline(int idx, uint8_t fg, uint8_t bg)
-{
+static void pal_trampoline(int idx, uint8_t fg, uint8_t bg) {
     if (g_ui) {
         scr_set_pair(&g_ui->scr, idx, fg, bg);
     }
 }
 
-static void render_stack_rec(rx_ui *ui, rx_win *w)
-{
+static void render_stack_rec(rx_ui* ui, rx_win* w) {
     if (!w) {
         return;
     }
@@ -58,8 +53,7 @@ static void render_stack_rec(rx_ui *ui, rx_win *w)
     }
 }
 
-void ui_render(rx_ui *ui)
-{
+void ui_render(rx_ui* ui) {
     scr_fill(&ui->scr, 0, 1, ui->scr.w, ui->scr.h - 2, ' ', RXA_DESKTOP);
     ui_says_render(ui); /* M7: @ SAY labels on the desktop */
     ui_gets_render(ui); /* M7: GET values stay visible after READ */
@@ -68,11 +62,10 @@ void ui_render(rx_ui *ui)
     statusbar_render(ui);
 }
 
-static void sweep_closed(rx_ui *ui)
-{
-    rx_win *w = ui->wins;
+static void sweep_closed(rx_ui* ui) {
+    rx_win* w = ui->wins;
     while (w) {
-        rx_win *next = w->next;
+        rx_win* next = w->next;
         if (w->want_close) {
             if (ui->mouse_cap == w) {
                 ui->mouse_cap = NULL;
@@ -86,8 +79,7 @@ static void sweep_closed(rx_ui *ui)
     }
 }
 
-static void handle_key(rx_ui *ui, const rkey *k)
-{
+static void handle_key(rx_ui* ui, const rkey* k) {
     if (ui->menu_open >= 0 || ui->menu_kb) {
         if (menubar_key(ui, k)) {
             return;
@@ -97,7 +89,7 @@ static void handle_key(rx_ui *ui, const rkey *k)
             return;
         }
     }
-    rx_win *top = win_top(ui);
+    rx_win* top = win_top(ui);
     if (top && top->key && top->key(ui, top, k)) {
         return;
     }
@@ -111,7 +103,7 @@ static void handle_key(rx_ui *ui, const rkey *k)
     }
     if (k->sym == RXK_F1) {
         /* M9 9.7: ON KEY LABEL F1 <cmd> overrides the built-in help browser */
-        const char *cmd = rx_on_key_cmd(ui->ctx, "F1");
+        const char* cmd = rx_on_key_cmd(ui->ctx, "F1");
         if (cmd) {
             rx_run_source(ui->ctx, cmd, "<onkey F1>");
             ui->dirty = 1;
@@ -144,8 +136,7 @@ static void handle_key(rx_ui *ui, const rkey *k)
     }
 }
 
-static void handle_mouse(rx_ui *ui, const rmouse *m)
-{
+static void handle_mouse(rx_ui* ui, const rmouse* m) {
     /* row 0 always belongs to the menubar (click-open / drag-sweep, §5.4) */
     if (m->y == 0 || ui->menu_open >= 0) {
         if (menubar_mouse(ui, m)) {
@@ -154,7 +145,7 @@ static void handle_mouse(rx_ui *ui, const rmouse *m)
     }
     if (m->kind == RM_PRESS) {
         ui->mouse_cap = NULL;
-        rx_win *w = win_at(ui, m->x, m->y);
+        rx_win* w = win_at(ui, m->x, m->y);
         if (w && w->mouse && w->mouse(ui, w, m)) {
             ui->mouse_cap = w; /* capture: drags keep routing here (§6.2) */
             return;
@@ -163,7 +154,7 @@ static void handle_mouse(rx_ui *ui, const rmouse *m)
         return;
     }
     if (ui->mouse_cap) {
-        rx_win *w = ui->mouse_cap;
+        rx_win* w = ui->mouse_cap;
         if (m->kind == RM_RELEASE) {
             ui->mouse_cap = NULL;
         }
@@ -173,8 +164,7 @@ static void handle_mouse(rx_ui *ui, const rmouse *m)
     }
 }
 
-static void handle_resize(rx_ui *ui)
-{
+static void handle_resize(rx_ui* ui) {
     int w, h;
     ui->tb->size(&w, &h);
     if (w < 20) {
@@ -188,7 +178,7 @@ static void handle_resize(rx_ui *ui)
         if (ui->cmd) {
             cmdwin_layout(ui, ui->cmd);
         }
-        for (rx_win *win = ui->wins; win; win = win->next) {
+        for (rx_win* win = ui->wins; win; win = win->next) {
             if (win->fullscreen) { /* M4 browse grids track the workspace */
                 win->x = 0;
                 win->y = 1;
@@ -201,18 +191,17 @@ static void handle_resize(rx_ui *ui)
     }
 }
 
-static void ui_menu_sync(void *ud)
-{
-    rx_ui *ui = ud;
-    rx_ctx *ctx = ui->ctx;
+static void ui_menu_sync(void* ud) {
+    rx_ui* ui = ud;
+    rx_ctx* ctx = ui->ctx;
     if (ctx->active_menu[0]) {
         /* find the active app menu and push it as the menubar's app pad */
         for (size_t i = 0; i < ctx->nmenus; i++) {
             if (strcmp(ctx->menus[i].name, ctx->active_menu) == 0 && !ctx->menus[i].is_popup) {
-                rx_menu_def *m = &ctx->menus[i];
-                const char *labels[32];
+                rx_menu_def* m = &ctx->menus[i];
+                const char* labels[32];
                 int hks[32];
-                const char *cmds[32];
+                const char* cmds[32];
                 int seps[32];
                 size_t n = m->nitems > 32 ? 32 : m->nitems;
                 for (size_t j = 0; j < n; j++) {
@@ -230,8 +219,7 @@ static void ui_menu_sync(void *ud)
     menudef_clear_app();
 }
 
-int rx_ui_run(rx_ctx *ctx, const term_backend *tb)
-{
+int rx_ui_run(rx_ctx* ctx, const term_backend* tb) {
     if (tb->init() != R_OK) {
         return R_ERR_NOUI;
     }
@@ -268,7 +256,7 @@ int rx_ui_run(rx_ctx *ctx, const term_backend *tb)
     ctx->say_fn = ui_say; /* M7 §9.2: @ SAY paints on the desktop */
 
     ctx->screen_fn = ui_screen_designer; /* M7 9.2: CREATE/MODIFY SCREEN designer */
-    ctx->rptb_fn = ui_rptb_designer; /* M8 9.3/9.4: CREATE/MODIFY REPORT/LABEL */
+    ctx->rptb_fn = ui_rptb_designer;     /* M8 9.3/9.4: CREATE/MODIFY REPORT/LABEL */
     ctx->rptb_ud = &ui;
     ctx->preview_fn = ui_preview; /* M8 9.3: REPORT FORM ... TO PREVIEW */
     ctx->preview_ud = &ui;
@@ -287,7 +275,7 @@ int rx_ui_run(rx_ctx *ctx, const term_backend *tb)
     scr_blit(&ui.scr, tb);
 
     /* RX_PERF=<file>: time each event's handle+render (M4 §11.3 browse gate) */
-    const char *perf_path = getenv("RX_PERF");
+    const char* perf_path = getenv("RX_PERF");
     unsigned long perf_n = 0;
     double perf_sum = 0, perf_max = 0;
 
@@ -344,7 +332,7 @@ int rx_ui_run(rx_ctx *ctx, const term_backend *tb)
     }
 done:
     if (perf_path && perf_n) {
-        FILE *pf = fopen(perf_path, "w");
+        FILE* pf = fopen(perf_path, "w");
         if (pf) {
             fprintf(pf, "n=%lu avg=%.3f max=%.3f\n", perf_n, perf_sum / (double)perf_n, perf_max);
             fclose(pf);
@@ -370,7 +358,7 @@ done:
     ctx->menu_sync_ud = NULL;
     ui_says_free(&ui);
     while (ui.wins) {
-        rx_win *w = ui.wins;
+        rx_win* w = ui.wins;
         win_remove(&ui, w);
         if (w->free_fn) {
             w->free_fn(w);
