@@ -776,7 +776,7 @@ static int fast_num(const uint8_t* raw, size_t len, int dec, char* out, size_t o
 
 /* append n spaces in bulk (padding is hot on the LIST perf path, M10) */
 static void sb_spaces(strbuf* sb, size_t n) {
-    static const char sp[64] = "                                                                ";
+    static const char sp[] = "                                                                ";
     while (n > 0) {
         size_t c = n > sizeof(sp) ? sizeof(sp) : n;
         sb_put(sb, sp, c);

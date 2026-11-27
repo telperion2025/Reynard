@@ -299,6 +299,7 @@ include(CPack)
 find_package(Doxygen QUIET)
 if(DOXYGEN_FOUND)
     add_custom_target(docs
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_SOURCE_DIR}/build/docs
         COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         COMMENT "Generating Doxygen API docs into build/docs/html")

@@ -320,7 +320,9 @@ int rx_rollback(rx_dbf* dbf) {
     uint8_t hdr[32];
     if (pread(dbf->fd, hdr, sizeof(hdr), 0) == (ssize_t)sizeof(hdr) && hdr[30] != 0) {
         hdr[30] = 0;
-        pwrite(dbf->fd, hdr, sizeof(hdr), 0);
+        if (pwrite(dbf->fd, hdr, sizeof(hdr), 0) != (ssize_t)sizeof(hdr)) {
+            /* non-fatal: the stamp is cleared on the next header write */
+        }
     }
     return rc;
 }

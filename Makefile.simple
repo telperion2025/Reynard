@@ -107,7 +107,7 @@ install: reynard
 # build/docs/html to the `docs` branch. Falls back to the cmake target.
 docs:
 	@if command -v doxygen >/dev/null 2>&1; then \
-		doxygen Doxyfile && echo "docs in build/docs/html"; \
+		mkdir -p build/docs && doxygen Doxyfile && echo "docs in build/docs/html"; \
 	elif [ -d build ]; then \
 		cmake --build build --target docs; \
 	else \

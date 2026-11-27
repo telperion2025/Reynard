@@ -268,8 +268,10 @@ int rx_ui_run(rx_ctx* ctx, const term_backend* tb) {
 
     {
         char banner[64];
-        snprintf(banner, sizeof(banner), "Reynard %s — the clever fox "
-                 "of terminals\n", RX_VERSION);
+        snprintf(banner, sizeof(banner),
+                 "Reynard %s — the clever fox "
+                 "of terminals\n",
+                 RX_VERSION);
         cmdwin_out(ui.cmd, banner, strlen(banner));
     }
     cmdwin_out(ui.cmd, "F10 or Alt opens the menubar. Type a command below.\n",

@@ -89,7 +89,9 @@ jobs:
       - name: Public API documentation gate
         run: python3 scripts/check_doxygen_public.py
       - name: Build API docs (make docs equivalent)
-        run: doxygen Doxyfile
+        run: |
+          mkdir -p build/docs
+          doxygen Doxyfile
       - name: Publish to docs branch (best effort)
         continue-on-error: true
         run: |
