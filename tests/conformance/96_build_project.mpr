@@ -1,0 +1,3 @@
+PROCEDURE hello
+? "hello from packed mpr"
+RETURN

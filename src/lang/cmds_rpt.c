@@ -69,7 +69,7 @@ int rx_cmd_report(rx_ctx *ctx, rx_stmt *s, int is_label)
     }
     /* reload the form for the emitter (name + a few fields) */
     char path[600];
-    snprintf(path, sizeof(path), "%s.%s", name, is_label ? "rlb" : "frm");
+    rx_resolve_res(ctx, name, is_label ? "rlb" : "frm", path, sizeof(path));
     rpt_file rf;
     if (rptf_load(path, &rf) != R_OK) {
         rptf_init(&rf, name, is_label);
@@ -135,7 +135,7 @@ int rx_cmd_rptb(rx_ctx *ctx, rx_stmt *s)
     }
     /* batch: CREATE writes an empty form; MODIFY round-trips load/save */
     char path[600];
-    snprintf(path, sizeof(path), "%s.%s", name, is_label ? "rlb" : "frm");
+    rx_resolve_res(ctx, name, is_label ? "rlb" : "frm", path, sizeof(path));
     rpt_file rf;
     if (create) {
         rptf_init(&rf, name, is_label);

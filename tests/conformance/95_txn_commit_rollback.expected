@@ -1,0 +1,10 @@
+orig=Alice               
+Transaction started.
+1 replacement.
+inside=Temp                
+Transaction rolled back.
+after rollback=Alice               
+Transaction started.
+1 replacement.
+Transaction committed.
+after commit=Kept                

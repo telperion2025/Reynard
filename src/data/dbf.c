@@ -417,6 +417,7 @@ int rx_dbf_close(rx_dbf *dbf)
     free(dbf->foff);
     free(dbf->recbuf);
     free(dbf->locks);
+    free(dbf->jrecs); /* M9 8.6: transaction before-image index */
         rx_index_close_all(dbf);
     free(dbf);
     return R_OK;

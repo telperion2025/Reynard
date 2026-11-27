@@ -103,10 +103,17 @@ ON ERROR DO + ERROR()/MESSAGE(), TEXT...ENDTEXT, INPUT, ACCEPT, WAIT
 `CREATE|MODIFY|GENERATE SCREEN name [TO f.prg]` (designer + .SCR/.RSO +
 .PRG codegen, docs/formats.md {U}6), `DO file.prg` file fallback.
 
-\u23f3 remaining (later milestones): DEFINE WINDOW/MENU/POPUP/BAR,
-ACTIVATE/DEACTIVATE/SHOW/HIDE, ON KEY LABEL dispatch, ON ESCAPE,
-PUSH/POP, READ EVENTS, CLEAR EVENTS, SET PRINTER, SET ALTERNATE, EVALUATE(), GETEXPR, SUSPEND/
-RESUME interactive (batch: note only).
+\u2705 M9 menu generator + transactions + packaging (spec {U}8.6/9.5/9.6):
+`DEFINE MENU/PAD/POPUP/BAR ... [PROMPT p] [KEY k]`, `ON PAD p OF m <cmd>`,
+`ON SELECTION PAD p | BAR n OF pop <cmd>`, `ACTIVATE MENU m [PAD p]`,
+`SHOW|DEACTIVATE|RELEASE MENU [m]`, `BEGIN|END TRANSACTION`, `ROLLBACK`,
+`BUILD PROJECT name FROM file.rpj`, `SET PROCEDURE TO file.prg|app.rpp`,
+`ON KEY LABEL key <cmd>|DO proc`, `SET HELP TO file.dbf`; `reynard --run
+app.rpp` (see docs/formats.md {U}8).
+
+\u23f3 remaining (later milestones): DEFINE WINDOW, ACTIVATE/DEACTIVATE/SHOW/HIDE
+WINDOW, ON ESCAPE, PUSH/POP, READ EVENTS, CLEAR EVENTS, SET PRINTER,
+SET ALTERNATE, EVALUATE(), GETEXPR, SUSPEND/RESUME interactive (batch: note only).
 
 \u2705 M8 reports/labels (spec {U}9.3/9.4/7.7): `REPORT FORM x [ENVIRONMENT]
 [scope] [FOR/WHILE] [PLAIN|HEADING c] [NOEJECT] [TO PRINTER|FILE f|PREVIEW]

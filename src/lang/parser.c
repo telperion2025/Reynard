@@ -717,6 +717,10 @@ static const kw keywords[] = {
     { "MODIFY", ST_MODIFY_SCREEN }, { "GENERATE", ST_GENERATE_SCREEN },
     /* M8 9.3/9.4 reports and labels */
     { "REPORT", ST_REPORT_FORM }, { "LABEL", ST_LABEL_FORM },
+    /* M9 8.6/9.5/9.6: transactions, menu generator, project manager */
+    { "BEGIN", ST_BEGIN_TXN }, { "ROLLBACK", ST_ROLLBACK }, { "END", ST_ENDMARK },
+    { "DEFINE", ST_DEFINE_MENU }, { "BUILD", ST_BUILD_PROJECT },
+    { "ACTIVATE", ST_ACTIVATE_MENU }, { "SHOW", ST_SHOW_MENU }, { "DEACTIVATE", ST_DEACTIVATE_MENU },
 };
 
 const char *const *rx_keyword_list(size_t *n)
@@ -753,6 +757,75 @@ static int kw_match(const char *w, st_kind *kind)
 }
 
 /* parse scope clause: ALL | REST | NEXT expr | RECORD expr */
+
+static int end_of_line(parser *p);
+
+/* operator tokens carry their code in ival with empty text; map back to the
+   source symbol for raw command capture (ON PAD ... cmd) */
+static const char *op_text(int op)
+{
+    switch (op) {
+    case OP_PLUS: return "+";
+    case OP_MINUS: return "-";
+    case OP_MUL: return "*";
+    case OP_DIV: return "/";
+    case OP_MOD: return "%";
+    case OP_POW: return "^";
+    case OP_EQ: return "=";
+    case OP_EEQ: return "==";
+    case OP_NE: return "<>";
+    case OP_LT: return "<";
+    case OP_LE: return "<=";
+    case OP_GT: return ">";
+    case OP_GE: return ">=";
+    case OP_IN: return "$";
+    case OP_LP: return "(";
+    case OP_RP: return ")";
+    case OP_COMMA: return ",";
+    case OP_DOT: return ".";
+    case OP_AMP: return "&";
+    case OP_ARROW: return "->";
+    case OP_LB: return "[";
+    case OP_RB: return "]";
+    case OP_COLON: return ":";
+    case OP_SEMI: return ";";
+    case OP_Q: return "?";
+    case OP_AT: return "@";
+    case OP_AND_LOGICAL: return ".AND.";
+    case OP_OR_LOGICAL: return ".OR.";
+    case OP_NOT_LOGICAL: return ".NOT.";
+    default: return "";
+    }
+}
+
+/* capture the remaining tokens of the line as one raw command string (ON PAD
+   / ON SELECTION / menu commands run through rx_run_source) */
+static void parse_cmd_rest(parser *p, rx_stmt *s)
+{
+    strbuf sb;
+    sb_init(&sb);
+    int first = 1;
+    while (!end_of_line(p)) {
+        if (!first) {
+            sb_putc(&sb, ' ');
+        }
+        first = 0;
+        rx_tok *t = pk_cur(p);
+        if (t->kind == TK_STR) {
+            sb_putc(&sb, '"');
+            sb_put(&sb, t->text, strlen(t->text));
+            sb_putc(&sb, '"');
+        } else if (t->kind == TK_OP) {
+            sb_puts(&sb, op_text(t->ival));
+        } else {
+            sb_put(&sb, t->text, strlen(t->text));
+        }
+        pk_adv(p);
+    }
+    st_add_clause(s, "CMD", sb.buf ? sb.buf : "", NULL);
+    sb_free(&sb);
+}
+
 static int parse_scope(parser *p, rx_stmt *s)
 {
     if (pk_word_is(p, "ALL")) {
@@ -2113,6 +2186,34 @@ static int parse_stmt(parser *p)
                     }
                     break;
                 }
+                if (pk_word_is(p, "PROCEDURE") || pk_word_is(p, "HELP")) {
+                    /* SET PROCEDURE TO <file.prg|app.rpp> | SET HELP TO <help.dbf>
+                       (M9 9.6/9.7); paths may contain dots, so gather with
+                       parse_path_until instead of the generic word loop */
+                    char optw[16];
+                    snprintf(optw, sizeof(optw), "%s", pk_cur(p)->text);
+                    st_add_str(&s, optw);
+                    pk_adv(p);
+                    if (pk_word_is(p, "TO")) {
+                        pk_adv(p);
+                        st_add_str(&s, "TO");
+                        if (!end_of_line(p)) {
+                            char *path = parse_path_until(p, NULL);
+                            st_add_str(&s, path);
+                            free(path);
+                        }
+                    } else {
+                        while (!end_of_line(p)) {
+                            st_add_str(&s, pk_cur(p)->text);
+                            pk_adv(p);
+                        }
+                    }
+                    if (!end_of_line(p)) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col,
+                                       "Syntax error in SET option");
+                    }
+                    break;
+                }
                 if (pk_word_is(p, "FILTER")) {
                     /* SET FILTER TO [expr] — the expr is compiled at runtime */
                     pk_adv(p);
@@ -2850,7 +2951,155 @@ static int parse_stmt(parser *p)
                 break;
             }
             /* ---- M5 single-line statements ---- */
+            case ST_DEFINE_MENU: {
+                if (pk_word_is(p, "MENU")) {
+                    pk_adv(p);
+                    if (pk_cur(p)->kind != TK_WORD) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected menu name");
+                    }
+                    st_add_str(&s, pk_cur(p)->text);
+                    pk_adv(p);
+                    if (pk_word_is(p, "BAR")) {
+                        st_add_clause(&s, "BAR", "1", NULL);
+                        pk_adv(p);
+                    }
+                    skip_to_eol(p);
+                } else if (pk_word_is(p, "PAD")) {
+                    s.kind = ST_DEFINE_PAD;
+                    pk_adv(p);
+                    if (pk_cur(p)->kind != TK_WORD) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected pad name");
+                    }
+                    st_add_str(&s, pk_cur(p)->text);
+                    pk_adv(p);
+                    if (!pk_word_is(p, "OF")) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected OF");
+                    }
+                    pk_adv(p);
+                    if (pk_cur(p)->kind != TK_WORD) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected menu name");
+                    }
+                    st_add_str(&s, pk_cur(p)->text);
+                    pk_adv(p);
+                    if (pk_word_is(p, "PROMPT")) {
+                        pk_adv(p);
+                        if (pk_cur(p)->kind == TK_STR || pk_cur(p)->kind == TK_WORD) {
+                            st_add_str(&s, pk_cur(p)->text);
+                            pk_adv(p);
+                        }
+                    }
+                    if (pk_word_is(p, "KEY")) {
+                        pk_adv(p);
+                        if (pk_cur(p)->kind == TK_WORD || pk_is(p, TK_STR)) {
+                            st_add_clause(&s, "KEY", pk_cur(p)->text, NULL);
+                            pk_adv(p);
+                        }
+                    }
+                    skip_to_eol(p);
+                } else if (pk_word_is(p, "POPUP")) {
+                    s.kind = ST_DEFINE_POPUP;
+                    pk_adv(p);
+                    if (pk_cur(p)->kind != TK_WORD) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected popup name");
+                    }
+                    st_add_str(&s, pk_cur(p)->text);
+                    pk_adv(p);
+                    skip_to_eol(p);
+                } else if (pk_word_is(p, "BAR")) {
+                    s.kind = ST_DEFINE_BAR;
+                    pk_adv(p);
+                    if (pk_cur(p)->kind != TK_WORD && !pk_is(p, TK_NUM)) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected bar number");
+                    }
+                    st_add_str(&s, pk_cur(p)->text);
+                    pk_adv(p);
+                    if (!pk_word_is(p, "OF")) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected OF");
+                    }
+                    pk_adv(p);
+                    if (pk_cur(p)->kind != TK_WORD) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected popup name");
+                    }
+                    st_add_str(&s, pk_cur(p)->text);
+                    pk_adv(p);
+                    if (pk_word_is(p, "PROMPT")) {
+                        pk_adv(p);
+                        if (pk_cur(p)->kind == TK_STR || pk_cur(p)->kind == TK_WORD) {
+                            st_add_str(&s, pk_cur(p)->text);
+                            pk_adv(p);
+                        }
+                    }
+                    skip_to_eol(p);
+                } else {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected MENU, PAD, POPUP or BAR");
+                }
+                break;
+            }
+            case ST_BEGIN_TXN:
+                if (pk_word_is(p, "TRANSACTION")) {
+                    pk_adv(p);
+                }
+                skip_to_eol(p);
+                break;
+            case ST_ROLLBACK:
+                skip_to_eol(p);
+                break;
+            case ST_ACTIVATE_MENU:
+                if (!pk_word_is(p, "MENU")) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected MENU");
+                }
+                pk_adv(p);
+                if (pk_cur(p)->kind != TK_WORD) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected menu name");
+                }
+                st_add_str(&s, pk_cur(p)->text);
+                pk_adv(p);
+                if (pk_word_is(p, "PAD")) {
+                    pk_adv(p);
+                    if (pk_cur(p)->kind == TK_WORD) {
+                        st_add_clause(&s, "PAD", pk_cur(p)->text, NULL);
+                        pk_adv(p);
+                    }
+                }
+                skip_to_eol(p);
+                break;
+            case ST_SHOW_MENU:
+            case ST_DEACTIVATE_MENU:
+                if (pk_word_is(p, "MENU")) {
+                    pk_adv(p);
+                    if (pk_cur(p)->kind == TK_WORD) {
+                        st_add_str(&s, pk_cur(p)->text);
+                        pk_adv(p);
+                    }
+                }
+                skip_to_eol(p);
+                break;
+            case ST_BUILD_PROJECT: {
+                if (!pk_word_is(p, "PROJECT")) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected PROJECT");
+                }
+                pk_adv(p);
+                if (pk_cur(p)->kind != TK_WORD) {
+                    return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected project name");
+                }
+                st_add_str(&s, pk_cur(p)->text);
+                pk_adv(p);
+                if (pk_word_is(p, "FROM")) {
+                    pk_adv(p);
+                    char *fp = parse_path_until(p, NULL);
+                    st_add_str(&s, fp);
+                    free(fp);
+                }
+                skip_to_eol(p);
+                break;
+            }
             case ST_ENDMARK:
+                if (pk_word_is(p, "TRANSACTION")) {
+                    s.kind = ST_COMMIT_TXN;
+                    pk_adv(p);
+                    skip_to_eol(p);
+                    break;
+                }
                 return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Unexpected END keyword");
             case ST_DO:
                 if (pk_cur(p)->kind != TK_WORD) {
@@ -2965,6 +3214,21 @@ static int parse_stmt(parser *p)
                 break;
             }
             case ST_RELEASE:
+                if (pk_word_is(p, "MENU")) {
+                    s.kind = ST_RELEASE_MENU;
+                    pk_adv(p);
+                    if (pk_cur(p)->kind == TK_WORD) {
+                        st_add_str(&s, pk_cur(p)->text);
+                        pk_adv(p);
+                    }
+                    if (pk_word_is(p, "EXTENDED")) {
+                        pk_adv(p);
+                    }
+                    if (!end_of_line(p)) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Syntax error in RELEASE MENU");
+                    }
+                    break;
+                }
                 if (pk_word_is(p, "MEMVAR") || pk_word_is(p, "MEMORY")) {
                     pk_adv(p);
                 }
@@ -2998,7 +3262,59 @@ static int parse_stmt(parser *p)
                 }
                 break;
             case ST_ON:
-                /* ON ERROR|ESCAPE [DO proc] | ON KEY LABEL key [DO proc] */
+                /* ON ERROR|ESCAPE [DO proc] | ON KEY LABEL key [DO proc]
+                   | ON PAD p OF m cmd | ON SELECTION PAD p OF m cmd / BAR n OF p cmd / ALL cmd */
+                if (pk_word_is(p, "PAD")) {
+                    s.kind = ST_ON_PAD;
+                    pk_adv(p);
+                    if (pk_cur(p)->kind != TK_WORD) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected pad name");
+                    }
+                    st_add_str(&s, pk_cur(p)->text);
+                    pk_adv(p);
+                    if (!pk_word_is(p, "OF")) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected OF");
+                    }
+                    pk_adv(p);
+                    if (pk_cur(p)->kind != TK_WORD) {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected menu name");
+                    }
+                    st_add_str(&s, pk_cur(p)->text);
+                    pk_adv(p);
+                    parse_cmd_rest(p, &s);
+                    break;
+                }
+                if (pk_word_is(p, "SELECTION")) {
+                    s.kind = ST_ON_SELECTION;
+                    pk_adv(p);
+                    if (pk_word_is(p, "PAD") || pk_word_is(p, "BAR")) {
+                        st_add_str(&s, pk_cur(p)->text);
+                        pk_adv(p);
+                        if (pk_cur(p)->kind != TK_WORD && !pk_is(p, TK_NUM)) {
+                            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected name/number");
+                        }
+                        st_add_str(&s, pk_cur(p)->text);
+                        pk_adv(p);
+                        if (!pk_word_is(p, "OF")) {
+                            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected OF");
+                        }
+                        pk_adv(p);
+                        if (pk_cur(p)->kind != TK_WORD) {
+                            return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected menu name");
+                        }
+                        st_add_str(&s, pk_cur(p)->text);
+                        pk_adv(p);
+                    } else if (pk_word_is(p, "ALL")) {
+                        st_add_str(&s, "ALL");
+                        st_add_str(&s, "");
+                        st_add_str(&s, "");
+                        pk_adv(p);
+                    } else {
+                        return pk_fail(p, pk_cur(p)->line, pk_cur(p)->col, "Expected PAD, BAR or ALL");
+                    }
+                    parse_cmd_rest(p, &s);
+                    break;
+                }
                 if (pk_word_is(p, "KEY")) {
                     pk_adv(p);
                     if (!pk_word_is(p, "LABEL")) {
@@ -3015,6 +3331,9 @@ static int parse_stmt(parser *p)
                             st_add_str(&s, pk_cur(p)->text);
                             pk_adv(p);
                         }
+                    } else if (!end_of_line(p)) {
+                        /* ON KEY LABEL F1 <cmd> — raw command tail (M9 9.7) */
+                        parse_cmd_rest(p, &s);
                     }
                 } else if (pk_word_is(p, "ERROR") || pk_word_is(p, "ESCAPE")) {
                     st_add_clause(&s, pk_cur(p)->text, "1", NULL);

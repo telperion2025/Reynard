@@ -13,6 +13,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include <string.h>
 #include <time.h>
 
@@ -108,10 +109,21 @@ static void handle_key(rx_ui *ui, const rkey *k)
         ui->dirty = 1;
         return;
     }
+    if (k->sym == RXK_F1) {
+        /* M9 9.7: ON KEY LABEL F1 <cmd> overrides the built-in help browser */
+        const char *cmd = rx_on_key_cmd(ui->ctx, "F1");
+        if (cmd) {
+            rx_run_source(ui->ctx, cmd, "<onkey F1>");
+            ui->dirty = 1;
+            return;
+        }
+        dlg_help(ui);
+        return;
+    }
     if (k->sym >= RXK_ALT('A') && k->sym <= RXK_ALT('Z')) {
         int c = k->sym - RXK_ALT('A') + 'A';
-        for (int i = 0; i < (int)rx_menus_n; i++) {
-            if (rx_menus[i].hotkey == c) {
+        for (int i = 0; i < (int)g_menus_n; i++) {
+            if (g_menus[i].hotkey == c) {
                 ui->menu_kb = 1;
                 ui->menu_open = i;
                 ui->menu_sel = 0;
@@ -189,6 +201,35 @@ static void handle_resize(rx_ui *ui)
     }
 }
 
+static void ui_menu_sync(void *ud)
+{
+    rx_ui *ui = ud;
+    rx_ctx *ctx = ui->ctx;
+    if (ctx->active_menu[0]) {
+        /* find the active app menu and push it as the menubar's app pad */
+        for (size_t i = 0; i < ctx->nmenus; i++) {
+            if (strcmp(ctx->menus[i].name, ctx->active_menu) == 0 && !ctx->menus[i].is_popup) {
+                rx_menu_def *m = &ctx->menus[i];
+                const char *labels[32];
+                int hks[32];
+                const char *cmds[32];
+                int seps[32];
+                size_t n = m->nitems > 32 ? 32 : m->nitems;
+                for (size_t j = 0; j < n; j++) {
+                    labels[j] = m->items[j].label;
+                    hks[j] = m->items[j].hotkey;
+                    cmds[j] = m->items[j].cmd;
+                    seps[j] = m->items[j].sep;
+                }
+                menudef_set_app(m->name, m->name[0] ? (char)toupper((unsigned char)m->name[0]) : 0,
+                                labels, hks, cmds, seps, n);
+                return;
+            }
+        }
+    }
+    menudef_clear_app();
+}
+
 int rx_ui_run(rx_ctx *ctx, const term_backend *tb)
 {
     if (tb->init() != R_OK) {
@@ -225,11 +266,14 @@ int rx_ui_run(rx_ctx *ctx, const term_backend *tb)
     ctx->read_fn = ui_read; /* M7 §9.2: READ modal loop */
     ctx->read_ud = &ui;
     ctx->say_fn = ui_say; /* M7 §9.2: @ SAY paints on the desktop */
+
     ctx->screen_fn = ui_screen_designer; /* M7 9.2: CREATE/MODIFY SCREEN designer */
     ctx->rptb_fn = ui_rptb_designer; /* M8 9.3/9.4: CREATE/MODIFY REPORT/LABEL */
     ctx->rptb_ud = &ui;
     ctx->preview_fn = ui_preview; /* M8 9.3: REPORT FORM ... TO PREVIEW */
     ctx->preview_ud = &ui;
+    ctx->menu_sync_fn = ui_menu_sync; /* M9 9.5: app menu pad on the menubar */
+    ctx->menu_sync_ud = &ui;
     ctx->say_ud = &ui;
     ctx->screen_ud = &ui;
 
@@ -322,6 +366,8 @@ done:
     ctx->rptb_ud = NULL;
     ctx->preview_fn = NULL;
     ctx->preview_ud = NULL;
+    ctx->menu_sync_fn = NULL;
+    ctx->menu_sync_ud = NULL;
     ui_says_free(&ui);
     while (ui.wins) {
         rx_win *w = ui.wins;

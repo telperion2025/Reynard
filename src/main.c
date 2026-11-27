@@ -118,12 +118,6 @@ int main(int argc, char **argv)
         setenv("REYNARD_NO_MOUSE", "1", 1);
     }
 
-    if (runapp) {
-        fprintf(stderr, "reynard: --run <app.rpp> lands at milestone M9 (project manager)\n");
-        rx_cfg_free(&cfg);
-        return 2;
-    }
-
     FILE *out = stdout;
     if (ofile) {
         out = fopen(ofile, "w");
@@ -153,7 +147,15 @@ int main(int argc, char **argv)
     }
 
     int rc = 0;
-    if (carg) {
+    if (runapp) {
+        /* M9 9.6: run a packaged application built by BUILD PROJECT */
+        if (access(runapp, R_OK) != 0) {
+            fprintf(stderr, "reynard: cannot open %s\n", runapp);
+            rc = 2;
+        } else if (rx_run_rpp(&ctx, runapp) != R_OK && !ctx.quit) {
+            rc = 1;
+        }
+    } else if (carg) {
         /* -c: semicolons split commands (spec §6.4) */
         char *copy = rx_strdup(carg);
         char *save = NULL;

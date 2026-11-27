@@ -98,3 +98,7 @@ by CI (`.github/workflows/ci.yml` conformance-index job).
 | 91_report_form | §9.3 M8 REPORT FORM TO FILE (text emitter: title/page header/groups/vars), PLAIN+HEADING+FOR+RANGE, SUMMARY |
 | 92_label_form | §9.4 M8 LABEL FORM TO FILE (one label per page), FOR clause |
 | 93_create_modify | §9.3 M8 CREATE/MODIFY REPORT+LABEL in batch (empty form write + canonical re-save round-trip), TYPE snapshot | §9.2 M7 GENERATE SCREEN case TO out.prg (codegen from .SCR sibling), TYPE out.prg snapshot, MODIFY SCREEN recompiles .RSO (builder round-trip) | §9.2 M7 READ with pending GETs and no UI → error 601 (App. D) |
+| 94_menu_batch | \u00a79.5 M9 DEFINE MENU/PAD/POPUP/BAR + ON PAD/ON SELECTION, ACTIVATE MENU m PAD p fires the pad command in batch, SHOW/DEACTIVATE/RELEASE |
+| 95_txn_commit_rollback | \u00a78.6 M9 BEGIN TRANSACTION/REPLACE/ROLLBACK restores the before-image; END TRANSACTION commits it (people.dbf fixture) |
+| 96_build_project | \u00a79.6 M9 BUILD PROJECT mini FROM case.rpj -> mini.rpp + launcher; SET PROCEDURE TO mini.rpp; DO hello finds the procedure packed in the .rpp |
+| 97_on_key_label | \u00a79.7 M9 ON KEY LABEL F1 <cmd> / DO proc binds, bare ON KEY LABEL F1 clears (stored for the UI dispatcher) |

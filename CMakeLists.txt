@@ -28,6 +28,7 @@ set(RX_CORE_SOURCES
     src/util/strbuf.c
     src/util/scrfmt.c
     src/util/rptfmt.c
+    src/util/rpp.c
     src/util/str.c
     src/util/utf8.c
     src/util/cp_tables.c
@@ -81,6 +82,10 @@ set(RX_CORE_SOURCES
     src/lang/cmds_form.c
     src/lang/cmds_screen.c
     src/lang/cmds_rpt.c
+    src/lang/cmds_menu.c
+    src/lang/cmds_txn.c
+    src/lang/cmds_proj.c
+    src/lang/help.c
     src/lang/rpt.c
     src/lang/rpt_emit.c
     src/lang/picture.c
@@ -245,6 +250,12 @@ add_test(NAME scr_roundtrip
 add_test(NAME cdx_engine
     COMMAND reynard-harness cdx
         ${CMAKE_CURRENT_BINARY_DIR}/test-work-cdx)
+add_test(NAME proj_engine
+    COMMAND reynard-harness projcheck
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/proj
+        $<TARGET_FILE:reynard>
+        ${CMAKE_CURRENT_SOURCE_DIR}/testdata/gen
+        ${CMAKE_CURRENT_BINARY_DIR}/test-work-proj)
 
 if(ENABLE_FUZZ)
     add_subdirectory(tests/fuzz)

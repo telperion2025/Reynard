@@ -82,7 +82,25 @@ int rx_journal_rec(rx_dbf *dbf, uint32_t recno)
     if (rc != R_OK) {
         return rc;
     }
-    return jwrite(dbf, dbf->recbuf, dbf->rec_size);
+    /* The before-image is the record as it sits on disk right now: callers
+       (rx_flush) journal AFTER rx_dbf_put has already encoded the new value
+       into recbuf, so journaling recbuf would capture the after-image.
+       The jrecs dedup above guarantees this runs only on the record's first
+       flush inside the transaction, when disk still holds the pre-transaction
+       image (any earlier change to this record was flushed -- and thus
+       journaled -- already). Fall back to recbuf if the pread comes up short
+       (e.g. record not yet on disk). */
+    uint8_t *img = malloc(dbf->rec_size);
+    if (!img) {
+        RX_FATAL("out of memory");
+    }
+    off_t off = (off_t)dbf->header_size + (off_t)(recno - 1) * dbf->rec_size;
+    if (pread(dbf->fd, img, dbf->rec_size, off) != (ssize_t)dbf->rec_size) {
+        memcpy(img, dbf->recbuf, dbf->rec_size);
+    }
+    rc = jwrite(dbf, img, dbf->rec_size);
+    free(img);
+    return rc;
 }
 
 int rx_journal_header(rx_dbf *dbf)

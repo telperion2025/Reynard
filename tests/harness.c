@@ -18,6 +18,7 @@
    defines R_OK for access(2), and reynard/status.h must own R_OK (=0). */
 #include <dirent.h>
 #include <fcntl.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <time.h>
 #include <stdlib.h>
@@ -378,8 +379,8 @@ static int conformance(const char *dir, const char *bin, const char *fixtures, c
         snprintf(caseprg, sizeof(caseprg), "%s/case.prg", wd);
         copy_file(prg, caseprg);
         /* per-case form siblings ship as case.scr / case.frm / case.rlb */
-        static const char *exts3[3] = { "scr", "frm", "rlb" };
-        for (int ei = 0; ei < 3; ei++) {
+        static const char *exts3[5] = { "scr", "frm", "rlb", "rpj", "mpr" }; /* M9: project + menu siblings */
+        for (int ei = 0; ei < 5; ei++) {
             char srcf[1200], dstf[1200];
             snprintf(srcf, sizeof(srcf), "%s.%s", base, exts3[ei]);
             if (access(srcf, F_OK) == 0) {
@@ -2307,6 +2308,252 @@ static int rptcheck(const char *dir, const char *bin, const char *fixtures, cons
     return failures ? 1 : 0;
 }
 
+
+/* ---------------- projcheck (M9 9.6 gate: .RPJ -> .RPP -> --run) ---------------- */
+
+static int filter_rpj(const struct dirent *d)
+{
+    size_t n = strlen(d->d_name);
+    return n > 4 && strcmp(d->d_name + n - 4, ".rpj") == 0;
+}
+
+static int run_child(const char *bin, const char *wd, const char *home,
+                     const char *outp, const char *errp, char *const argv[])
+{
+    pid_t pid = fork();
+    if (pid == 0) {
+        if (chdir(wd) != 0) {
+            _exit(99);
+        }
+        setenv("HOME", home, 1);
+        char xdg[1400];
+        snprintf(xdg, sizeof(xdg), "%s/.cache", home);
+        setenv("XDG_CACHE_HOME", xdg, 1);
+        FILE *fo = freopen(outp, "w", stdout);
+        FILE *fe = freopen(errp, "w", stderr);
+        (void)fo;
+        (void)fe;
+        execv(bin, argv);
+        _exit(127);
+    }
+    int status = 0;
+    waitpid(pid, &status, 0);
+    if (!WIFEXITED(status)) {
+        return -1;
+    }
+    return WEXITSTATUS(status);
+}
+
+static void sha256_file_hex(const char *path, char out[65])
+{
+    size_t n;
+    char *b = read_file(path, &n);
+    uint8_t h[32];
+    if (b) {
+        rx_sha256(b, n, h);
+        free(b);
+    } else {
+        memset(h, 0, sizeof(h));
+    }
+    for (int i = 0; i < 32; i++) {
+        snprintf(out + i * 2, 3, "%02x", h[i]);
+    }
+}
+
+static int projcheck(const char *dir, const char *bin, const char *fixtures, const char *workroot)
+{
+    char absbin[1200], absroot[1000];
+    abs_path(bin, absbin, sizeof(absbin));
+    abs_path(workroot, absroot, sizeof(absroot));
+    mkdir(absroot, 0755);
+    struct dirent **names = NULL;
+    int n = scandir(dir, &names, filter_rpj, NULL);
+    if (n < 0) {
+        perror("scandir");
+        return 1;
+    }
+    for (int i = 0; i < n; i++) {
+        for (int j = i + 1; j < n; j++) {
+            if (strcmp(names[i]->d_name, names[j]->d_name) > 0) {
+                struct dirent *t = names[i];
+                names[i] = names[j];
+                names[j] = t;
+            }
+        }
+    }
+    int ran = 0;
+    for (int i = 0; i < n; i++) {
+        char base[1100];
+        snprintf(base, sizeof(base), "%s/%s", dir, names[i]->d_name);
+        size_t bl = strlen(base);
+        base[bl - 4] = '\0'; /* strip .rpj */
+        char casename[64];
+        const char *slash = strrchr(base, '/');
+        snprintf(casename, sizeof(casename), "%.63s", slash ? slash + 1 : base);
+        char wd[1100];
+        snprintf(wd, sizeof(wd), "%s/proj-XXXXXX", absroot);
+        if (rx_mkdtemp(wd) != 0) {
+            perror("mkdtemp");
+            failures++;
+            continue;
+        }
+        ran++;
+        /* copy fixtures + all regular files from the case dir (skip goldens) */
+        struct dirent **fx = NULL;
+        int nf = scandir(fixtures, &fx, NULL, alphasort);
+        if (nf > 0) {
+            for (int k = 0; k < nf; k++) {
+                char sp[1400], dp[1400];
+                snprintf(sp, sizeof(sp), "%s/%s", fixtures, fx[k]->d_name);
+                snprintf(dp, sizeof(dp), "%s/%s", wd, fx[k]->d_name);
+                struct stat st;
+                if (fx[k]->d_name[0] != '.' && stat(sp, &st) == 0 && S_ISREG(st.st_mode)) {
+                    copy_file(sp, dp);
+                }
+                free(fx[k]);
+            }
+            free(fx);
+        }
+        struct dirent **cs = NULL;
+        int nc = scandir(dir, &cs, NULL, alphasort);
+        if (nc > 0) {
+            for (int k = 0; k < nc; k++) {
+                const char *nm = cs[k]->d_name;
+                size_t l = strlen(nm);
+                int skip = (l > 7 && strcmp(nm + l - 7, ".golden") == 0) ||
+                           (l > 8 && strcmp(nm + l - 8, ".sha256") == 0);
+                char sp[1400], dp[1400];
+                snprintf(sp, sizeof(sp), "%s/%s", dir, nm);
+                snprintf(dp, sizeof(dp), "%s/%s", wd, nm);
+                struct stat st;
+                if (!skip && nm[0] != '.' && stat(sp, &st) == 0 && S_ISREG(st.st_mode)) {
+                    copy_file(sp, dp);
+                }
+                free(cs[k]);
+            }
+            free(cs);
+        }
+        char home[1200];
+        snprintf(home, sizeof(home), "%s/home", wd);
+        mkdir(home, 0755);
+        char buildout[1200], builderr[1200], runout[1200], runerr[1200], rbout[1200], rberr[1200];
+        snprintf(buildout, sizeof(buildout), "%s/build.txt", wd);
+        snprintf(builderr, sizeof(builderr), "%s/build.err", wd);
+        snprintf(runout, sizeof(runout), "%s/run.txt", wd);
+        snprintf(runerr, sizeof(runerr), "%s/run.err", wd);
+        snprintf(rbout, sizeof(rbout), "%s/rebuild.txt", wd);
+        snprintf(rberr, sizeof(rberr), "%s/rebuild.err", wd);
+        char rpp[1400], sh[1400];
+        snprintf(rpp, sizeof(rpp), "%s/%.63s.rpp", wd, casename);
+        snprintf(sh, sizeof(sh), "%s/%.58s-app.sh", wd, casename);
+
+        int bad = 0;
+        char diff[300] = "";
+        /* 1. BUILD PROJECT */
+        char bcmd[600];
+        snprintf(bcmd, sizeof(bcmd), "BUILD PROJECT %s FROM %s.rpj", casename, casename);
+        char *bargv[] = { (char *)"reynard", (char *)"-t", (char *)"-o", (char *)"build.txt",
+                         (char *)"-c", bcmd, NULL };
+        int rc = run_child(absbin, wd, home, buildout, builderr, bargv);
+        if (rc != 0) {
+            size_t ne;
+            char *e = read_file(builderr, &ne);
+            snprintf(diff, sizeof(diff), "build failed rc=%d; stderr: %.200s", rc, e ? e : "(none)");
+            free(e);
+            bad = 1;
+        }
+        /* build stdout golden */
+        char gp[1300];
+        snprintf(gp, sizeof(gp), "%s.build.golden", base);
+        if (!bad && access(gp, F_OK) == 0) {
+            if (cmp_files(buildout, gp, diff, sizeof(diff)) != 0) {
+                bad = 1;
+            }
+        }
+        /* 2. .rpp exists + deterministic sha256 golden */
+        if (!bad && access(rpp, F_OK) != 0) {
+            snprintf(diff, sizeof(diff), "no %.63s.rpp produced", casename);
+            bad = 1;
+        }
+        snprintf(gp, sizeof(gp), "%s.rpp.sha256", base);
+        if (!bad && access(gp, F_OK) == 0) {
+            char hex[65];
+            sha256_file_hex(rpp, hex);
+            size_t gn;
+            char *g = read_file(gp, &gn);
+            char want[80];
+            snprintf(want, sizeof(want), "%s", hex);
+            if (!g || strncmp(g, want, 64) != 0) {
+                snprintf(diff, sizeof(diff), "rpp sha mismatch: got %.64s want %.64s", hex,
+                         g ? g : "(none)");
+                bad = 1;
+            }
+            free(g);
+        }
+        /* 3. launcher golden */
+        snprintf(gp, sizeof(gp), "%s.sh.golden", base);
+        if (!bad && access(gp, F_OK) == 0) {
+            if (cmp_files(sh, gp, diff, sizeof(diff)) != 0) {
+                if (!diff[0]) {
+                    snprintf(diff, sizeof(diff), "launcher mismatch");
+                }
+                bad = 1;
+            }
+        }
+        /* 4. rebuild is a no-op (content-based up-to-date) + same bytes */
+        if (!bad) {
+            char hex1[65];
+            sha256_file_hex(rpp, hex1);
+            char rcmd[600];
+            snprintf(rcmd, sizeof(rcmd), "BUILD PROJECT %s FROM %s.rpj", casename, casename);
+            char *rargv[] = { (char *)"reynard", (char *)"-t", (char *)"-o", (char *)"rebuild.txt",
+                             (char *)"-c", rcmd, NULL };
+            rc = run_child(absbin, wd, home, rbout, rberr, rargv);
+            char hex2[65];
+            sha256_file_hex(rpp, hex2);
+            if (rc != 0 || strcmp(hex1, hex2) != 0) {
+                snprintf(diff, sizeof(diff), "rebuild not stable rc=%d", rc);
+                bad = 1;
+            }
+            snprintf(gp, sizeof(gp), "%s.rebuild.golden", base);
+            if (!bad && access(gp, F_OK) == 0 && cmp_files(rbout, gp, diff, sizeof(diff)) != 0) {
+                bad = 1;
+            }
+        }
+        /* 5. --run executes the packed app */
+        if (!bad) {
+            char rpparg[400];
+            snprintf(rpparg, sizeof(rpparg), "%s.rpp", casename);
+            char *runargv[] = { (char *)"reynard", (char *)"-t", (char *)"-o", (char *)"run.txt",
+                               (char *)"--run", rpparg, NULL };
+            rc = run_child(absbin, wd, home, runout, runerr, runargv);
+            if (rc != 0) {
+                size_t ne;
+                char *e = read_file(runerr, &ne);
+                snprintf(diff, sizeof(diff), "run failed rc=%d; stderr: %.200s", rc, e ? e : "(none)");
+                free(e);
+                bad = 1;
+            } else {
+                snprintf(gp, sizeof(gp), "%s.run.golden", base);
+                if (access(gp, F_OK) == 0 && cmp_files(runout, gp, diff, sizeof(diff)) != 0) {
+                    bad = 1;
+                }
+            }
+        }
+        if (bad) {
+            printf("FAIL %s: %s\n", names[i]->d_name, diff);
+            failures++;
+        } else {
+            printf("PASS %s\n", names[i]->d_name);
+        }
+        rm_rf(wd);
+        free(names[i]);
+    }
+    free(names);
+    printf("projcheck: %d cases, %d failures\n", ran, failures);
+    return failures ? 1 : 0;
+}
+
 int main(int argc, char **argv)
 {
     rx_log_init();
@@ -2349,12 +2596,16 @@ int main(int argc, char **argv)
     if (argc >= 6 && strcmp(argv[1], "rptcheck") == 0) {
         return rptcheck(argv[2], argv[3], argv[4], argv[5]);
     }
+    if (argc >= 6 && strcmp(argv[1], "projcheck") == 0) {
+        return projcheck(argv[2], argv[3], argv[4], argv[5]);
+    }
     fprintf(stderr, "usage: %s selftest | conformance <dir> <reynard> <fixtures> <workroot>"
                     " | rxp <dir> <reynard> <fixtures> <workroot>"
                     " | roundtrip <fixtures> <workroot> | lockrace <workroot>"
                     " | golden <dir> <reynard> <fixtures> <workroot> [update]"
                     " | browseperf <workroot> <reynard> | cdx <workroot> | scrcheck <dir> <workroot>\n"
-                    " | rptcheck <dir> <reynard> <fixtures> <workroot>\n",
+                    " | rptcheck <dir> <reynard> <fixtures> <workroot>"
+                    " | projcheck <dir> <reynard> <fixtures> <workroot>\n",
             argv[0]);
     return 2;
 }

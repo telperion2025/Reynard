@@ -47,6 +47,7 @@ void rx_ctx_init(rx_ctx *ctx, FILE *out, int test_mode)
     ctx->set.reprocess = 0;
     ctx->set.multilocks = 0;
     ctx->set.unique = 0;    /* SET UNIQUE OFF (M6) */
+    ctx->help_area = -1;    /* M9 9.7: no help DBF open */
     char cwd[260];
     if (getcwd(cwd, sizeof(cwd))) {
         snprintf(ctx->set.defdir, sizeof(ctx->set.defdir), "%s", cwd);
@@ -72,6 +73,15 @@ void rx_ctx_free(rx_ctx *ctx)
     free(ctx->idxexprs);
     free(ctx->filter_text);
     rx_form_free_ctx(ctx); /* M7: pending GETs */
+    rx_help_close(ctx);     /* M9 9.7: help DBF work area */
+    /* M9 9.5/9.6: menu model + packed .rpp sources */
+    free(ctx->menus);
+    for (size_t i = 0; i < ctx->npacked; i++) {
+        free(ctx->packed_names[i]);
+        free(ctx->packed_srcs[i]);
+    }
+    free(ctx->packed_names);
+    free(ctx->packed_srcs);
     for (size_t i = 0; i < ctx->nprocs; i++) {
         for (size_t j = 0; j < ctx->procs[i].nbody; j++) {
             rx_stmt_free(ctx->procs[i].body[j]);
@@ -1152,6 +1162,80 @@ static void register_proc(rx_ctx *ctx, rx_stmt *s)
     }
 }
 
+/* M9 9.6: register every top-level PROCEDURE/FUNCTION without executing
+   (SET PROCEDURE TO loads packed sources this way) */
+void rx_register_procs(rx_ctx *ctx, rx_stmt *stmts, size_t n)
+{
+    for (size_t i = 0; i < n; i++) {
+        if (stmts[i].kind == ST_PROC) {
+            register_proc(ctx, &stmts[i]);
+        }
+    }
+}
+
+/* M9 9.6: lex+parse without executing (BUILD PROJECT compiles to RXP blobs) */
+int rx_compile_source(const char *src, const char *name, rx_stmt **out, size_t *nout,
+                      r_err *err)
+{
+    rx_tok *toks;
+    size_t ntok;
+    if (rx_lex(src, name, &toks, &ntok, err) != R_OK) {
+        return err->code;
+    }
+    rx_stmt *stmts = NULL;
+    size_t nstmt = 0;
+    if (rx_parse_src(toks, ntok, src, &stmts, &nstmt, err) != R_OK) {
+        rx_lex_free(toks, ntok);
+        return err->code;
+    }
+    rx_lex_free(toks, ntok);
+    *out = stmts;
+    *nout = nstmt;
+    return R_OK;
+}
+
+/* M9 9.6: packed source lookup by stem (uppercased) inside the running .rpp */
+const char *rx_packed_source(rx_ctx *ctx, const char *stem)
+{
+    if (!stem) {
+        return NULL;
+    }
+    char up[300];
+    snprintf(up, sizeof(up), "%s", stem);
+    char *dot = strrchr(up, '.');
+    if (dot) {
+        *dot = '\0';
+    }
+    for (char *c = up; *c; c++) {
+        *c = (char)toupper((unsigned char)*c);
+    }
+    for (size_t i = 0; i < ctx->npacked; i++) {
+        if (strcmp(ctx->packed_names[i], up) == 0) {
+            return ctx->packed_srcs[i];
+        }
+    }
+    return NULL;
+}
+
+/* M9 9.7: ON KEY LABEL command lookup (key name matched case-insensitively) */
+const char *rx_on_key_cmd(rx_ctx *ctx, const char *key)
+{
+    if (!key) {
+        return NULL;
+    }
+    char up[16];
+    snprintf(up, sizeof(up), "%s", key);
+    for (char *c = up; *c; c++) {
+        *c = (char)toupper((unsigned char)*c);
+    }
+    for (size_t i = 0; i < ctx->non_key; i++) {
+        if (strcmp(ctx->on_key_name[i], up) == 0) {
+            return ctx->on_key_cmd[i][0] ? ctx->on_key_cmd[i] : NULL;
+        }
+    }
+    return NULL;
+}
+
 static rx_proc *find_proc(rx_ctx *ctx, const char *name)
 {
     char up[64];
@@ -1265,8 +1349,19 @@ int rx_call_proc(rx_ctx *ctx, const char *name, size_t argc, const rval *argv, r
 int rx_cmd_do(rx_ctx *ctx, rx_stmt *s)
 {
     /* FoxPro: DO foo runs procedure foo, or loads and runs foo.prg when no
-       procedure of that name is defined (file fallback, M7 screen gate) */
+       procedure of that name is defined (file fallback, M7 screen gate).
+       M9 9.6: inside a .rpp, packed sources win over the file system. */
     if (!find_proc(ctx, s->target)) {
+        const char *packed = rx_packed_source(ctx, s->target);
+        if (packed) {
+            char nm[320];
+            snprintf(nm, sizeof(nm), "%.250s!%.60s", ctx->rpp_path[0] ? ctx->rpp_path : "app.rpp", s->target);
+            int rc = rx_run_source(ctx, packed, nm);
+            if (rc != R_OK) {
+                return rx_raise(ctx, rc, s->line, s->col, "Cannot run packed %s", s->target);
+            }
+            return R_OK;
+        }
         char path[600];
         if (strchr(s->target, '.') || strchr(s->target, '/')) {
             snprintf(path, sizeof(path), "%s", s->target);
@@ -1453,8 +1548,45 @@ int rx_cmd_on(rx_ctx *ctx, rx_stmt *s)
                 ctx->on_error[0] = '\0'; /* ON ERROR clears */
             }
         }
-        /* ESCAPE / KEY LABEL are accepted and stored for the interactive
-           layer (M5 batch: no dispatch); ON KEY LABEL F1 help at M9 */
+        /* M9 9.7: ON KEY LABEL <key> <cmd> — stored for the interactive layer;
+           the ui dispatches the key to the command (F1 opens the help DBF
+           when no binding exists) */
+        if (strcmp(s->clauses[i].key, "KEYLABEL") == 0 && s->clauses[i].word[0]) {
+            char up[16];
+            snprintf(up, sizeof(up), "%.15s", s->clauses[i].word);
+            for (char *c = up; *c; c++) {
+                *c = (char)toupper((unsigned char)*c);
+            }
+            char cmdbuf[256];
+            cmdbuf[0] = '\0';
+            int from_str = 0;
+            for (size_t j = 0; j < s->nclause; j++) {
+                if (strcmp(s->clauses[j].key, "CMD") == 0) {
+                    snprintf(cmdbuf, sizeof(cmdbuf), "%.*s", (int)sizeof(cmdbuf) - 1, s->clauses[j].word);
+                    from_str = 0;
+                }
+            }
+            if (!cmdbuf[0] && s->nstrs > 0) {
+                /* ON KEY LABEL k DO proc: store as a DO command */
+                snprintf(cmdbuf, sizeof(cmdbuf), "DO %s", s->strs[0]);
+                from_str = 1;
+            }
+            (void)from_str;
+            size_t k;
+            for (k = 0; k < ctx->non_key; k++) {
+                if (strcmp(ctx->on_key_name[k], up) == 0) {
+                    break;
+                }
+            }
+            if (k == ctx->non_key) {
+                if (ctx->non_key >= 24) {
+                    break;
+                }
+                ctx->non_key++;
+            }
+            snprintf(ctx->on_key_name[k], sizeof(ctx->on_key_name[k]), "%s", up);
+            snprintf(ctx->on_key_cmd[k], sizeof(ctx->on_key_cmd[k]), "%.*s", (int)sizeof(ctx->on_key_cmd[k]) - 1, cmdbuf);
+        }
     }
     return R_OK;
 }
@@ -2041,6 +2173,30 @@ static int exec_one(rx_ctx *ctx, rx_stmt *s)
     case ST_CREATE_LABEL:
     case ST_MODIFY_LABEL:
         rc = rx_cmd_rptb(ctx, s);
+        break;
+    /* M9 \u00a79.5 menu generator, \u00a78.6 transactions, \u00a79.6 project manager */
+    case ST_BEGIN_TXN:
+    case ST_COMMIT_TXN:
+    case ST_ROLLBACK:
+        rc = rx_cmd_txn(ctx, s);
+        break;
+    case ST_DEFINE_MENU:
+    case ST_DEFINE_PAD:
+    case ST_DEFINE_POPUP:
+    case ST_DEFINE_BAR:
+    case ST_ON_PAD:
+    case ST_ON_SELECTION:
+    case ST_ACTIVATE_MENU:
+    case ST_SHOW_MENU:
+    case ST_DEACTIVATE_MENU:
+    case ST_RELEASE_MENU:
+        rc = rx_cmd_menu(ctx, s);
+        break;
+    case ST_BUILD_PROJECT:
+        rc = rx_cmd_build_project(ctx, s);
+        break;
+    case ST_SET_PROC:
+        rc = rx_cmd_set_proc(ctx, s);
         break;
     case ST_COPY:
         rc = rx_cmd_copy(ctx, s);

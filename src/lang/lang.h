@@ -166,6 +166,14 @@ typedef enum {
     ST_MODIFY_REPORT,
     ST_CREATE_LABEL,
     ST_MODIFY_LABEL,
+    /* M9 8.6 transactions + 9.5 menu generator + 9.6 project manager */
+    ST_BEGIN_TXN,
+    ST_COMMIT_TXN,   /* END TRANSACTION */
+    ST_ROLLBACK,
+    ST_DEFINE_MENU, ST_DEFINE_PAD, ST_DEFINE_POPUP, ST_DEFINE_BAR,
+    ST_ON_PAD, ST_ON_SELECTION,
+    ST_ACTIVATE_MENU, ST_SHOW_MENU, ST_DEACTIVATE_MENU, ST_RELEASE_MENU,
+    ST_BUILD_PROJECT, ST_SET_PROC,
     ST_ENDMARK   /**< stray ENDIF/ENDDO/... at top level: syntax error */
 } st_kind;
 
@@ -335,6 +343,7 @@ typedef struct rx_set {
     int unique;     /**< SET UNIQUE, default OFF (M6: UNIQUE index builds) */
     char defdir[260];
     char path[1024];
+    char helpfile[600]; /**< SET HELP TO (M9 9.7); empty = built-in help.dbf */
 } rx_set;
 
 /* ============================ M7 §9.2 GET objects ============================ */
@@ -358,6 +367,25 @@ typedef struct rx_get {
     int has_default;
     int enabled;        /**< WHEN() currently true */
 } rx_get;
+
+/* M9 9.5 menu-generator model (DEFINE MENU/PAD/POPUP/BAR ...) */
+typedef struct rx_menu_item_def {
+    char name[64];  /**< pad name or bar number (uppercased) — lookup key */
+    char label[64]; /**< PROMPT text (display) */
+    int hotkey;
+    char cmd[256]; /**< ON PAD / ON SELECTION command (raw source) */
+    int sep;
+} rx_menu_item_def;
+
+typedef struct rx_menu_def {
+    char name[64];
+    int is_popup; /**< DEFINE POPUP vs DEFINE MENU */
+    rx_menu_item_def items[32];
+    size_t nitems;
+    char pad_cmd[256]; /**< ON PAD ... OF menu command */
+    int active;
+    int shown;
+} rx_menu_def;
 
 struct rx_ctx {
     FILE *out;          /**< batch stdout (or -o file); NULL in interactive */
@@ -423,6 +451,25 @@ struct rx_ctx {
     void *rptb_ud;
     int (*preview_fn)(void *ud, const char *title, const char *text); /**< report preview window */
     void *preview_ud;
+    /* M9 9.5 app menus: model lives here; the ui re-syncs the menubar through
+       this hook after ACTIVATE/DEACTIVATE/RELEASE (NULL in batch) */
+    void (*menu_sync_fn)(void *ud);
+    void *menu_sync_ud;
+    struct rx_menu_def *menus;
+    size_t nmenus, capmenus;
+    char active_menu[64];
+    /* M9 9.6 packed application: sources inside a .RPP (--run / SET PROCEDURE
+       TO app.rpp) registered here so DO finds procedures and files inside */
+    char rpp_path[600];  /**< .rpp being run (empty when running from disk) */
+    char **packed_names; /**< stem (uppercased, no ext) per packed source */
+    char **packed_srcs;  /**< owned source text per packed source */
+    size_t npacked, cappacked;
+    /* M9 9.7: ON KEY LABEL <key> <cmd> bindings (key name uppercased) */
+    char on_key_name[24][16];
+    char on_key_cmd[24][256];
+    size_t non_key;
+    /* M9 9.7: help browser session (work area holding the help DBF) */
+    int help_area; /**< -1 when closed */
 };
 
 /** One SET RELATION (spec §8.1, M4): moving the driver work area
@@ -572,6 +619,38 @@ int rx_cmd_read(rx_ctx *ctx, rx_stmt *s);
 int rx_cmd_screen(rx_ctx *ctx, rx_stmt *s); /**< CREATE/MODIFY/GENERATE SCREEN (M7 \u00a79.2) */
 int rx_cmd_report(rx_ctx *ctx, rx_stmt *s, int is_label); /**< REPORT/LABEL FORM (M8 9.3/9.4) */
 int rx_cmd_rptb(rx_ctx *ctx, rx_stmt *s); /**< CREATE/MODIFY REPORT/LABEL designer (M8) */
+int rx_cmd_txn(rx_ctx *ctx, rx_stmt *s);      /**< BEGIN/END TRANSACTION, ROLLBACK (M9 8.6) */
+int rx_cmd_menu(rx_ctx *ctx, rx_stmt *s);     /**< DEFINE/ON/ACTIVATE/... MENU (M9 9.5) */
+int rx_cmd_build_project(rx_ctx *ctx, rx_stmt *s); /**< BUILD PROJECT (M9 9.6) */
+int rx_cmd_set_proc(rx_ctx *ctx, rx_stmt *s);     /**< SET PROCEDURE TO (M9 9.6, .prg/.rpp) */
+int rx_run_rpp(rx_ctx *ctx, const char *path); /**< reynard --run app.rpp (M9 9.6) */
+/** Lex+parse one source buffer into statements (compile only). */
+int rx_compile_source(const char *src, const char *name, rx_stmt **out, size_t *nout,
+                      r_err *err);
+/** Register all top-level PROCEDURE/FUNCTION in stmts (SET PROCEDURE TO). */
+void rx_register_procs(rx_ctx *ctx, rx_stmt *stmts, size_t n);
+/** Look up a packed source by stem inside the running .rpp (NULL if none). */
+const char *rx_packed_source(rx_ctx *ctx, const char *stem);
+/** ON KEY LABEL command for key (uppercased match), or NULL. */
+const char *rx_on_key_cmd(rx_ctx *ctx, const char *key);
+/** Help DBF session (spec 9.7): open a help table in a private work area. */
+int rx_help_open(rx_ctx *ctx, const char *path);
+size_t rx_help_count(rx_ctx *ctx);
+int rx_help_topic(rx_ctx *ctx, size_t idx, char *out, size_t outsz);
+int rx_help_search(rx_ctx *ctx, const char *needle, size_t *out_idx);
+int rx_help_body(rx_ctx *ctx, size_t idx, struct strbuf *out);
+int rx_help_seealso(rx_ctx *ctx, size_t idx, char *out, size_t outsz);
+int rx_help_keywords(rx_ctx *ctx, size_t idx, char *out, size_t outsz);
+void rx_help_close(rx_ctx *ctx);
+/** Resolve a resource file (screen/report/label/table): <name>[.ext] in cwd,
+    then SET DEFAULT dir, then each SET PATH dir (M9 9.6 packed res/ live in a
+    cache dir on SET PATH). *out gets the best candidate; R_OK when found. */
+int rx_resolve_res(rx_ctx *ctx, const char *name, const char *ext, char *out, size_t outsz);
+/** Serialize/deserialize RXP1 blobs in memory (for .RPP bin/ entries). */
+int rx_rxp_pack(const uint8_t hash[32], const rx_stmt *stmts, size_t n, char **out,
+                size_t *outn);
+int rx_rxp_unpack(const char *buf, size_t n, const uint8_t hash[32], rx_stmt **out,
+                  size_t *nout);
 void rx_form_free_ctx(rx_ctx *ctx);
 int rx_form_store(rx_ctx *ctx, rx_get *g);
 

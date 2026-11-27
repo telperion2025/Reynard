@@ -454,6 +454,12 @@ int rx_cmd_set(rx_ctx *ctx, rx_stmt *s)
         }
         ctx->set.reprocess = (int)v;
         rx_data_set_reprocess((int)v);
+    } else if (rx_strcasecmp(opt, "HELP") == 0 && toval) {
+        /* M9 9.7: SET HELP TO <help.dbf>; SET HELP ON/OFF accepted, ignored */
+        snprintf(ctx->set.helpfile, sizeof(ctx->set.helpfile), "%s", toval);
+    } else if (rx_strcasecmp(opt, "PROCEDURE") == 0) {
+        /* M9 9.6: SET PROCEDURE TO <file.prg|app.rpp> */
+        return rx_cmd_set_proc(ctx, s);
     }
     /* other Appendix B options are accepted and stored for their milestone */
     return R_OK;

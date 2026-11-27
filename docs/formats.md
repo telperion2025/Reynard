@@ -212,3 +212,41 @@ with OBJ lines, `END`. One label per page at runtime (DEVIATIONS #51).
 Emitters: TO FILE extension picks text (.txt) / PostScript (.ps) / PDF (.pdf,
 minimal writer, base-14 Helvetica, content-hash /ID) / HTML (.html, tables) /
 CSV (.csv, detail-band field rows). TO PRINTER spools text to reynard.prn.
+
+## 8. Project files: .RPJ text and .RPP package (spec 9.6, M9)
+
+.RPJ is a line-based text file (keywords case-insensitive, `#` or `*` start a
+comment line, values may be "quoted"):
+
+    REYNARD PROJECT 1
+    NAME demo
+    MAIN main.prg
+    PRG main.prg
+    MENU app.mpr          # menu-generator source (.mpr = program source)
+    SCREEN cust.scr
+    REPORT rep.frm
+    LABEL tags.rlb
+    DBF people.dbf
+    END
+
+Paths resolve against the .RPJ's directory. BUILD PROJECT name FROM f.rpj
+checks every listed file exists (all missing ones are reported in one
+diagnostic), then writes <name>.rpp plus a <name>-app.sh launcher.
+
+.RPP is a ZIP archive with STORED (uncompressed) entries only, written
+byte-deterministically: fixed DOS date 1980-01-01, no extra fields, entries
+in project order, CRC32 per entry (src/util/rpp.c). Layout:
+
+    manifest.json          {"format":"RPP1","name":...,"main":...,
+                           "files":[{"path","kind","sha256","size"},...]}
+    src/<rel>              raw program/menu source (.prg/.mpr)
+    bin/<stem>.rxp         RXP1 compiled blob (sha256 of its source as hash)
+    res/<rel>              raw .scr/.frm/.rlb
+    data/<rel>             raw .dbf
+    data/dictionary.json   {"databases":[{"file","sha256","fields":[...]}]}
+
+`reynard --run app.rpp` runs bin/<main-stem>.rxp (source fallback), registers
+all src/ entries as packed sources (DO finds them), and extracts res/ and data/
+into $XDG_CACHE_HOME/reynard/rpp/<sha256-of-rpp>/ which is prepended to
+SET PATH. Rebuilds skip when every source sha256 in manifest.json matches
+(content-based recompile; keeps builds byte-reproducible).

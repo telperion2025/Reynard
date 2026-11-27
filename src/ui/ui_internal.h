@@ -188,6 +188,7 @@ typedef struct menu_item {
     int (*disabled)(rx_ctx *ctx);
     int (*checked)(rx_ctx *ctx);
     int sep; /**< separator line */
+    const char *cmd; /**< M9 9.5 app menus: run this command string instead of action */
 } menu_item;
 
 typedef struct menu_def {
@@ -199,6 +200,12 @@ typedef struct menu_def {
 
 extern const menu_def rx_menus[];
 extern const size_t rx_menus_n;
+/* M9 9.5: g_menus is rx_menus plus at most one active app menu (the Run pad) */
+extern const menu_def *g_menus;
+extern size_t g_menus_n;
+void menudef_set_app(const char *title, int hotkey, const char *const *labels, const int *hks,
+                     const char *const *cmds, const int *seps, size_t n);
+void menudef_clear_app(void);
 
 void menubar_render(struct rx_ui *ui);
 int menubar_key(struct rx_ui *ui, const rkey *k);

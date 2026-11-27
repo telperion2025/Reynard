@@ -593,6 +593,72 @@ static int rxp_save(const char *path, const uint8_t hash[32], const rx_stmt *stm
     return R_OK;
 }
 
+/* M9 9.6: in-memory variants used to pack compiled blobs into .RPP files */
+int rx_rxp_pack(const uint8_t hash[32], const rx_stmt *stmts, size_t n, char **out,
+                size_t *outn)
+{
+    if (!hash || !out || !outn) {
+        return R_ERR_RANGE;
+    }
+    strbuf b;
+    sb_init(&b);
+    sb_put(&b, RXP_MAGIC, 4);
+    w32(&b, RXP_VERSION);
+    sb_put(&b, (const char *)hash, 32);
+    w64(&b, (uint64_t)n);
+    for (size_t i = 0; i < n; i++) {
+        w_stmt(&b, &stmts[i]);
+    }
+    if (!b.buf) {
+        sb_putc(&b, '\0');
+        b.len = 0;
+    }
+    *out = b.buf;
+    *outn = b.len;
+    return R_OK;
+}
+
+int rx_rxp_unpack(const char *buf, size_t n, const uint8_t hash[32], rx_stmt **out,
+                  size_t *nout)
+{
+    if (!buf || !hash || !out || !nout) {
+        return R_ERR_RANGE;
+    }
+    rd r = { (const uint8_t *)buf, (const uint8_t *)buf + n, 0 };
+    if (n < 4 + 4 + 32 || memcmp(buf, RXP_MAGIC, 4) != 0 || r32(&r) != RXP_VERSION ||
+        memcmp(r.p, hash, 32) != 0) {
+        return R_ERR_DBF_BADRXP;
+    }
+    r.p += 32;
+    uint64_t ns = r64(&r);
+    if (r.bad || ns > (1u << 20)) {
+        return R_ERR_DBF_BADRXP;
+    }
+    rx_stmt *stmts = calloc(ns ? ns : 1, sizeof(rx_stmt));
+    if (!stmts) {
+        RX_FATAL("out of memory");
+    }
+    for (size_t i = 0; i < (size_t)ns; i++) {
+        if (r_stmt(&r, &stmts[i]) != R_OK) {
+            for (size_t j = 0; j <= i; j++) {
+                rx_stmt_free(&stmts[j]);
+            }
+            free(stmts);
+            return R_ERR_DBF_BADRXP;
+        }
+    }
+    if (r.bad || r.p != r.end) {
+        for (size_t i = 0; i < (size_t)ns; i++) {
+            rx_stmt_free(&stmts[i]);
+        }
+        free(stmts);
+        return R_ERR_DBF_BADRXP;
+    }
+    *out = stmts;
+    *nout = (size_t)ns;
+    return R_OK;
+}
+
 static int rxp_load(const char *path, const uint8_t hash[32], rx_stmt **out, size_t *nout)
 {
     FILE *f = fopen(path, "rb");
@@ -610,43 +676,9 @@ static int rxp_load(const char *path, const uint8_t hash[32], rx_stmt **out, siz
     if (!b.buf) {
         return R_ERR_IO_READ;
     }
-    rd r = { (const uint8_t *)b.buf, (const uint8_t *)b.buf + b.len, 0 };
-    if (b.len < 4 + 4 + 32 || memcmp(b.buf, RXP_MAGIC, 4) != 0 || r32(&r) != RXP_VERSION ||
-        memcmp(r.p, hash, 32) != 0) {
-        sb_free(&b);
-        return R_ERR_DBF_BADRXP;
-    }
-    r.p += 32;
-    uint64_t n = r64(&r);
-    if (r.bad || n > (1u << 20)) {
-        sb_free(&b);
-        return R_ERR_DBF_BADRXP;
-    }
-    rx_stmt *stmts = calloc(n ? n : 1, sizeof(rx_stmt));
-    if (!stmts) {
-        RX_FATAL("out of memory");
-    }
-    for (size_t i = 0; i < (size_t)n; i++) {
-        if (r_stmt(&r, &stmts[i]) != R_OK) {
-            for (size_t j = 0; j <= i; j++) {
-                rx_stmt_free(&stmts[j]);
-            }
-            free(stmts);
-            sb_free(&b);
-            return R_ERR_DBF_BADRXP;
-        }
-    }
+    int rc = rx_rxp_unpack(b.buf, b.len, hash, out, nout);
     sb_free(&b);
-    if (r.bad || r.p != r.end) {
-        for (size_t i = 0; i < (size_t)n; i++) {
-            rx_stmt_free(&stmts[i]);
-        }
-        free(stmts);
-        return R_ERR_DBF_BADRXP;
-    }
-    *out = stmts;
-    *nout = (size_t)n;
-    return R_OK;
+    return rc;
 }
 
 /* ============================ paths ============================ */

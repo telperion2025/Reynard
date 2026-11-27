@@ -308,114 +308,114 @@ static int dis_no_db(rx_ctx *ctx)
 }
 
 static const menu_item system_items[] = {
-    { "About Reynard...", 'A', act_about, NULL, NULL, 0 },
-    { NULL, 0, NULL, NULL, NULL, 1 },
-    { "Macros...", 'M', act_macros, NULL, NULL, 0 },
-    { "Filer", 'F', act_filer, NULL, NULL, 0 },
-    { "Calculator", 'C', act_calc, NULL, NULL, 0 },
-    { "Calendar/Diary", 'D', act_calendar, NULL, NULL, 0 },
-    { NULL, 0, NULL, NULL, NULL, 1 },
-    { "ASCII Chart", 'S', act_ascii, NULL, NULL, 0 },
-    { NULL, 0, NULL, NULL, NULL, 1 },
-    { "Help", 'H', act_help, NULL, NULL, 0 },
+    { "About Reynard...", 'A', act_about, NULL, NULL, 0, NULL },
+    { NULL, 0, NULL, NULL, NULL, 1, NULL },
+    { "Macros...", 'M', act_macros, NULL, NULL, 0, NULL },
+    { "Filer", 'F', act_filer, NULL, NULL, 0, NULL },
+    { "Calculator", 'C', act_calc, NULL, NULL, 0, NULL },
+    { "Calendar/Diary", 'D', act_calendar, NULL, NULL, 0, NULL },
+    { NULL, 0, NULL, NULL, NULL, 1, NULL },
+    { "ASCII Chart", 'S', act_ascii, NULL, NULL, 0, NULL },
+    { NULL, 0, NULL, NULL, NULL, 1, NULL },
+    { "Help", 'H', act_help, NULL, NULL, 0, NULL },
 };
 
 static const menu_item file_items[] = {
-    { "New...", 'N', act_file_new, dis_no_db, NULL, 0 },
-    { "Open...", 'O', act_file_open, NULL, NULL, 0 },
-    { "Close", 'C', act_file_close, dis_no_db, NULL, 0 },
-    { NULL, 0, NULL, NULL, NULL, 1 },
-    { "Save", 'S', act_file_save, dis_no_db, NULL, 0 },
-    { "Save As...", 'A', act_file_saveas, dis_no_db, NULL, 0 },
-    { "Revert", 'R', act_file_revert, dis_no_db, NULL, 0 },
-    { NULL, 0, NULL, NULL, NULL, 1 },
-    { "Printer Setup...", 'P', act_file_printer, NULL, NULL, 0 },
-    { "Print...", 'P', act_file_print, NULL, NULL, 0 },
-    { NULL, 0, NULL, NULL, NULL, 1 },
-    { "Quit", 'Q', act_quit, NULL, NULL, 0 },
+    { "New...", 'N', act_file_new, dis_no_db, NULL, 0, NULL },
+    { "Open...", 'O', act_file_open, NULL, NULL, 0, NULL },
+    { "Close", 'C', act_file_close, dis_no_db, NULL, 0, NULL },
+    { NULL, 0, NULL, NULL, NULL, 1, NULL },
+    { "Save", 'S', act_file_save, dis_no_db, NULL, 0, NULL },
+    { "Save As...", 'A', act_file_saveas, dis_no_db, NULL, 0, NULL },
+    { "Revert", 'R', act_file_revert, dis_no_db, NULL, 0, NULL },
+    { NULL, 0, NULL, NULL, NULL, 1, NULL },
+    { "Printer Setup...", 'P', act_file_printer, NULL, NULL, 0, NULL },
+    { "Print...", 'P', act_file_print, NULL, NULL, 0, NULL },
+    { NULL, 0, NULL, NULL, NULL, 1, NULL },
+    { "Quit", 'Q', act_quit, NULL, NULL, 0, NULL },
 };
 
 static const menu_item edit_items[] = {
-    { "Undo", 'U', act_edit_undo, NULL, NULL, 0 },
-    { "Redo", 'R', act_edit_redo, NULL, NULL, 0 },
-    { NULL, 0, NULL, NULL, NULL, 1 },
-    { "Cut", 'T', act_edit_cut, NULL, NULL, 0 },
-    { "Copy", 'C', act_edit_copy, NULL, NULL, 0 },
-    { "Paste", 'P', act_edit_paste, NULL, NULL, 0 },
-    { "Clear", 'L', act_edit_clear, NULL, NULL, 0 },
-    { NULL, 0, NULL, NULL, NULL, 1 },
-    { "Select All", 'A', act_edit_selall, NULL, NULL, 0 },
-    { NULL, 0, NULL, NULL, NULL, 1 },
-    { "Find...", 'F', act_edit_find, NULL, NULL, 0 },
-    { "Find Again", 'G', act_edit_findagain, NULL, NULL, 0 },
-    { "Replace...", 'E', act_edit_replace, NULL, NULL, 0 },
+    { "Undo", 'U', act_edit_undo, NULL, NULL, 0, NULL },
+    { "Redo", 'R', act_edit_redo, NULL, NULL, 0, NULL },
+    { NULL, 0, NULL, NULL, NULL, 1, NULL },
+    { "Cut", 'T', act_edit_cut, NULL, NULL, 0, NULL },
+    { "Copy", 'C', act_edit_copy, NULL, NULL, 0, NULL },
+    { "Paste", 'P', act_edit_paste, NULL, NULL, 0, NULL },
+    { "Clear", 'L', act_edit_clear, NULL, NULL, 0, NULL },
+    { NULL, 0, NULL, NULL, NULL, 1, NULL },
+    { "Select All", 'A', act_edit_selall, NULL, NULL, 0, NULL },
+    { NULL, 0, NULL, NULL, NULL, 1, NULL },
+    { "Find...", 'F', act_edit_find, NULL, NULL, 0, NULL },
+    { "Find Again", 'G', act_edit_findagain, NULL, NULL, 0, NULL },
+    { "Replace...", 'E', act_edit_replace, NULL, NULL, 0, NULL },
 };
 
 static const menu_item database_items[] = {
-    { "Setup...", 'S', act_db_setup, dis_no_db, NULL, 0 },
-    { "Browse", 'B', act_db_browse, dis_no_db, NULL, 0 },
-    { NULL, 0, NULL, NULL, NULL, 1 },
-    { "Append From...", 'A', act_db_append, NULL, NULL, 0 },
-    { "Copy To...", 'C', act_db_copy, dis_no_db, NULL, 0 },
-    { "Sort...", 'O', act_db_sort, dis_no_db, NULL, 0 },
-    { "Total...", 'T', act_db_total, dis_no_db, NULL, 0 },
-    { NULL, 0, NULL, NULL, NULL, 1 },
-    { "Average...", 'V', act_db_avg, dis_no_db, NULL, 0 },
-    { "Count", 'N', act_db_count, dis_no_db, NULL, 0 },
-    { "Sum...", 'U', act_db_sum, dis_no_db, NULL, 0 },
-    { "Calculate...", 'K', act_db_calc, dis_no_db, NULL, 0 },
-    { NULL, 0, NULL, NULL, NULL, 1 },
-    { "Report...", 'R', act_db_report, dis_no_db, NULL, 0 },
-    { "Label...", 'L', act_db_label, dis_no_db, NULL, 0 },
-    { NULL, 0, NULL, NULL, NULL, 1 },
-    { "Pack", 'P', act_db_pack, dis_no_db, NULL, 0 },
-    { "Reindex", 'I', act_db_reindex, dis_no_db, NULL, 0 },
+    { "Setup...", 'S', act_db_setup, dis_no_db, NULL, 0, NULL },
+    { "Browse", 'B', act_db_browse, dis_no_db, NULL, 0, NULL },
+    { NULL, 0, NULL, NULL, NULL, 1, NULL },
+    { "Append From...", 'A', act_db_append, NULL, NULL, 0, NULL },
+    { "Copy To...", 'C', act_db_copy, dis_no_db, NULL, 0, NULL },
+    { "Sort...", 'O', act_db_sort, dis_no_db, NULL, 0, NULL },
+    { "Total...", 'T', act_db_total, dis_no_db, NULL, 0, NULL },
+    { NULL, 0, NULL, NULL, NULL, 1, NULL },
+    { "Average...", 'V', act_db_avg, dis_no_db, NULL, 0, NULL },
+    { "Count", 'N', act_db_count, dis_no_db, NULL, 0, NULL },
+    { "Sum...", 'U', act_db_sum, dis_no_db, NULL, 0, NULL },
+    { "Calculate...", 'K', act_db_calc, dis_no_db, NULL, 0, NULL },
+    { NULL, 0, NULL, NULL, NULL, 1, NULL },
+    { "Report...", 'R', act_db_report, dis_no_db, NULL, 0, NULL },
+    { "Label...", 'L', act_db_label, dis_no_db, NULL, 0, NULL },
+    { NULL, 0, NULL, NULL, NULL, 1, NULL },
+    { "Pack", 'P', act_db_pack, dis_no_db, NULL, 0, NULL },
+    { "Reindex", 'I', act_db_reindex, dis_no_db, NULL, 0, NULL },
 };
 
 static const menu_item record_items[] = {
-    { "Append", 'A', act_rec_append, dis_no_db, NULL, 0 },
-    { "Change", 'C', act_rec_change, dis_no_db, NULL, 0 },
-    { NULL, 0, NULL, NULL, NULL, 1 },
-    { "Goto...", 'G', act_rec_goto, dis_no_db, NULL, 0 },
-    { "Locate...", 'L', act_rec_locate, dis_no_db, NULL, 0 },
-    { "Continue", 'K', act_rec_cont, dis_no_db, NULL, 0 },
-    { "Seek...", 'S', act_rec_seek, dis_no_db, NULL, 0 },
-    { NULL, 0, NULL, NULL, NULL, 1 },
-    { "Replace...", 'R', act_rec_replace, dis_no_db, NULL, 0 },
-    { NULL, 0, NULL, NULL, NULL, 1 },
-    { "Delete...", 'D', act_rec_delete, dis_no_db, NULL, 0 },
-    { "Recall...", 'E', act_rec_recall, dis_no_db, NULL, 0 },
+    { "Append", 'A', act_rec_append, dis_no_db, NULL, 0, NULL },
+    { "Change", 'C', act_rec_change, dis_no_db, NULL, 0, NULL },
+    { NULL, 0, NULL, NULL, NULL, 1, NULL },
+    { "Goto...", 'G', act_rec_goto, dis_no_db, NULL, 0, NULL },
+    { "Locate...", 'L', act_rec_locate, dis_no_db, NULL, 0, NULL },
+    { "Continue", 'K', act_rec_cont, dis_no_db, NULL, 0, NULL },
+    { "Seek...", 'S', act_rec_seek, dis_no_db, NULL, 0, NULL },
+    { NULL, 0, NULL, NULL, NULL, 1, NULL },
+    { "Replace...", 'R', act_rec_replace, dis_no_db, NULL, 0, NULL },
+    { NULL, 0, NULL, NULL, NULL, 1, NULL },
+    { "Delete...", 'D', act_rec_delete, dis_no_db, NULL, 0, NULL },
+    { "Recall...", 'E', act_rec_recall, dis_no_db, NULL, 0, NULL },
 };
 
 static const menu_item program_items[] = {
-    { "Do...", 'D', act_prog_do, NULL, NULL, 0 },
-    { "Cancel", 'C', act_prog_cancel, NULL, NULL, 0 },
-    { "Resume", 'R', act_prog_resume, NULL, NULL, 0 },
-    { NULL, 0, NULL, NULL, NULL, 1 },
-    { "Compile...", 'P', act_prog_compile, NULL, NULL, 0 },
-    { "Generate...", 'G', act_prog_generate, NULL, NULL, 0 },
-    { NULL, 0, NULL, NULL, NULL, 1 },
-    { "Filer", 'F', act_prog_filer, NULL, NULL, 0 },
+    { "Do...", 'D', act_prog_do, NULL, NULL, 0, NULL },
+    { "Cancel", 'C', act_prog_cancel, NULL, NULL, 0, NULL },
+    { "Resume", 'R', act_prog_resume, NULL, NULL, 0, NULL },
+    { NULL, 0, NULL, NULL, NULL, 1, NULL },
+    { "Compile...", 'P', act_prog_compile, NULL, NULL, 0, NULL },
+    { "Generate...", 'G', act_prog_generate, NULL, NULL, 0, NULL },
+    { NULL, 0, NULL, NULL, NULL, 1, NULL },
+    { "Filer", 'F', act_prog_filer, NULL, NULL, 0, NULL },
 };
 
 static const menu_item window_items[] = {
-    { "Hide", 'H', act_win_hide, NULL, NULL, 0 },
-    { "Clear", 'C', act_win_clear, NULL, NULL, 0 },
-    { "Cycle", 'Y', act_win_cycle, NULL, NULL, 0 },
-    { "Command ^F2", 'O', act_win_command, NULL, NULL, 0 },
-    { NULL, 0, NULL, NULL, NULL, 1 },
-    { "View...", 'V', act_win_view, NULL, NULL, 0 },
-    { NULL, 0, NULL, NULL, NULL, 1 },
-    { "Zoom ^F10", 'Z', act_win_zoom, NULL, NULL, 0 },
-    { "Minimize ^F9", 'M', act_win_min, NULL, NULL, 0 },
+    { "Hide", 'H', act_win_hide, NULL, NULL, 0, NULL },
+    { "Clear", 'C', act_win_clear, NULL, NULL, 0, NULL },
+    { "Cycle", 'Y', act_win_cycle, NULL, NULL, 0, NULL },
+    { "Command ^F2", 'O', act_win_command, NULL, NULL, 0, NULL },
+    { NULL, 0, NULL, NULL, NULL, 1, NULL },
+    { "View...", 'V', act_win_view, NULL, NULL, 0, NULL },
+    { NULL, 0, NULL, NULL, NULL, 1, NULL },
+    { "Zoom ^F10", 'Z', act_win_zoom, NULL, NULL, 0, NULL },
+    { "Minimize ^F9", 'M', act_win_min, NULL, NULL, 0, NULL },
 };
 
 static const menu_item help_items[] = {
-    { "Contents", 'C', act_help_contents, NULL, NULL, 0 },
-    { "Search for Help On...", 'S', act_help_search, NULL, NULL, 0 },
-    { "How to Use Help", 'H', act_help_how, NULL, NULL, 0 },
-    { NULL, 0, NULL, NULL, NULL, 1 },
-    { "About Reynard...", 'A', act_about, NULL, NULL, 0 },
+    { "Contents", 'C', act_help_contents, NULL, NULL, 0, NULL },
+    { "Search for Help On...", 'S', act_help_search, NULL, NULL, 0, NULL },
+    { "How to Use Help", 'H', act_help_how, NULL, NULL, 0, NULL },
+    { NULL, 0, NULL, NULL, NULL, 1, NULL },
+    { "About Reynard...", 'A', act_about, NULL, NULL, 0, NULL },
 };
 
 const menu_def rx_menus[] = {
@@ -430,3 +430,49 @@ const menu_def rx_menus[] = {
 };
 
 const size_t rx_menus_n = sizeof(rx_menus) / sizeof(rx_menus[0]);
+
+/* M9 9.5: dynamic app menu appended after the system menus (the Run pad) */
+const menu_def *g_menus = rx_menus;
+size_t g_menus_n;
+static void init_gmenus(void) __attribute__((constructor));
+static void init_gmenus(void) { g_menus_n = rx_menus_n; }
+static menu_def g_app_def;
+static menu_item g_app_items[64];
+static char g_app_label_buf[64][64];
+static char g_app_cmd_buf[64][256];
+
+void menudef_set_app(const char *title, int hotkey, const char *const *labels, const int *hks,
+                     const char *const *cmds, const int *seps, size_t n)
+{
+    if (n > 64) {
+        n = 64;
+    }
+    g_app_def.title = title;
+    g_app_def.hotkey = hotkey;
+    g_app_def.items = g_app_items;
+    g_app_def.nitems = n;
+    for (size_t i = 0; i < n; i++) {
+        snprintf(g_app_label_buf[i], sizeof(g_app_label_buf[i]), "%s", labels[i] ? labels[i] : "");
+        snprintf(g_app_cmd_buf[i], sizeof(g_app_cmd_buf[i]), "%s", cmds[i] ? cmds[i] : "");
+        g_app_items[i].label = g_app_label_buf[i];
+        g_app_items[i].hotkey = hks[i];
+        g_app_items[i].action = NULL;
+        g_app_items[i].disabled = NULL;
+        g_app_items[i].checked = NULL;
+        g_app_items[i].sep = seps[i];
+        g_app_items[i].cmd = g_app_cmd_buf[i];
+    }
+    static menu_def all[16];
+    for (size_t i = 0; i < rx_menus_n && i < 15; i++) {
+        all[i] = rx_menus[i];
+    }
+    all[rx_menus_n] = g_app_def;
+    g_menus = all;
+    g_menus_n = rx_menus_n + 1;
+}
+
+void menudef_clear_app(void)
+{
+    g_menus = rx_menus;
+    g_menus_n = rx_menus_n;
+}

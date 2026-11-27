@@ -1,0 +1,16 @@
+# M9 9.5 gate: a program-defined menu becomes the menubar app pad;
+# Alt+A opens the pad, Down+Enter picks the File pad whose ON PAD command
+# runs into the Command window.
+text DEFINE MENU app
+key enter
+text DEFINE PAD file OF app PROMPT "\<File"
+key enter
+text ON PAD file OF app ? "app pad fired"
+key enter
+text ACTIVATE MENU app
+key enter
+key alt-a
+key down
+key enter
+key esc
+eof

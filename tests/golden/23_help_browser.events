@@ -1,0 +1,11 @@
+# M9 9.7 gate: F1 opens the DBF-backed help browser (help.dbf fixture),
+# typing filters topics case-insensitively, Enter opens the topic body,
+# Esc backs out and closes; the Command window then proves the round trip.
+key f1
+text rep
+key enter
+key esc
+key esc
+text ? "help round trip ok"
+key enter
+eof

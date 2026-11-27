@@ -15,6 +15,13 @@ it runs the same interpreter in batch mode; with
 .B \-t
 the batch is deterministic (DATE(), TIME(), RAND() frozen to a session
 seed) for use in test harnesses.
+Commands worth knowing beyond the language docs (docs/language.md):
+BUILD PROJECT name FROM file.rpj builds a .RPP package + launcher;
+SET PROCEDURE TO file.prg|app.rpp loads procedure sources; ON KEY LABEL key
+cmd binds a key (F1 opens the help DBF browser otherwise); SET HELP TO
+file.dbf selects the help table; BEGIN/END TRANSACTION and ROLLBACK provide
+journaling (see docs/DEVIATIONS.md).
+
 .SH OPTIONS
 .TP
 .BR \-c " \fIcmd; cmd\fR"
@@ -29,7 +36,9 @@ Redirect batch stdout to
 .IR file .
 .TP
 .BI --run " app.rpp"
-Run a packaged application (milestone M9).
+Run a packaged application built by BUILD PROJECT (spec 9.6): executes the
+packed main program from its compiled blob, with packed sources available to
+DO and packed res/ and data/ extracted onto SET PATH. See docs/formats.md 8.
 .TP
 .BI --cfg " file"
 Use an alternate config file.

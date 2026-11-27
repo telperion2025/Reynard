@@ -39,6 +39,8 @@ int rx_cmd_screen(rx_ctx *ctx, rx_stmt *s)
     const char *to = s->nstrs > 1 ? s->strs[1] : NULL;
     char scrpath[600], rsopath[600], prgpath[600];
     make_paths(name, to, scrpath, sizeof(scrpath), rsopath, sizeof(rsopath), prgpath, sizeof(prgpath));
+    /* M9 9.6: .SCR may come from SET PATH (packed .rpp res/ cache) */
+    rx_resolve_res(ctx, name, "scr", scrpath, sizeof(scrpath));
 
     switch (s->kind) {
     case ST_CREATE_SCREEN:

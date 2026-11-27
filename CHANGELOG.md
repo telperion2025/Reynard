@@ -340,3 +340,49 @@ Reynard is pre-1.0, versions are milestone tags M0..M10 then v1.0.0.
   91\u201393 (REPORT FORM clauses, LABEL FORM, CREATE/MODIFY round-trip);
   golden 22 (preview window). 93 conformance cases, 22 goldens, 10 ctest
   targets \u2014 all green under -Werror and ASan/UBSan, plus Makefile.simple.
+
+### M9 - Project manager, menu generator, help browser, transactions (8.6/9.5/9.6/9.7)
+- Menu generator (spec 9.5, src/lang/cmds_menu.c): DEFINE MENU/PAD/POPUP/BAR
+  with PROMPT/KEY, ON PAD, ON SELECTION PAD/BAR, ACTIVATE/SHOW/DEACTIVATE/
+  RELEASE MENU. The model lives in rx_ctx->menus; ACTIVATE pushes the app pad
+  onto the menubar through menu_sync_fn (ui/menudef.c) and the menubar's
+  run_item executes the ON PAD/ON SELECTION command strings. In batch,
+  `ACTIVATE MENU m PAD p` selects pad p immediately and runs its command
+  (deterministic gate). Golden 24.
+- Transactions (spec 8.6, src/data/journal.c + src/lang/cmds_txn.c):
+  BEGIN/END TRANSACTION, ROLLBACK per work area; before-image journal in
+  <dbfstem>.RJN covering record writes, header changes, appends and memo
+  writes; header byte-30 stamp forces complete-or-rollback on next open
+  after a fatal mid-commit error (rx_journal_recover). PACK/ZAP refused
+  inside a transaction. Fixed at M9: the 'R' entry journals the on-disk
+  before-image (rx_dbf_put has already encoded the new value into recbuf by
+  flush time). Conformance 95.
+- Project manager (spec 9.6, src/util/rpp.c + src/lang/cmds_proj.c):
+  .RPJ text project files (NAME/MAIN/PRG/MENU/SCREEN/REPORT/LABEL/DBF/END),
+  BUILD PROJECT name FROM f.rpj compiles to a .RPP - a deterministic
+  stored-ZIP (fixed DOS date, CRC32, no compression) with manifest.json,
+  src/ raw sources, bin/ RXP1 compiled blobs, res/ screens/reports/labels,
+  data/ tables + data/dictionary.json generated from the DBF headers, plus a
+  <name>-app.sh launcher. Content-hash (sha256) up-to-date check skips
+  rebuilds and yields byte-identical .RPPs; missing dependencies are all
+  reported in one diagnostic. `reynard --run app.rpp` runs the packed main
+  from its RXP blob (source fallback), registers every packed source so DO
+  finds procedures inside, extracts res/ and data/ to a per-app cache dir put on
+  SET PATH (so GENERATE SCREEN / REPORT FORM / USE see packed files), and
+  SET PROCEDURE TO app.rpp loads packed sources without running them
+  (SET PROCEDURE TO also accepts plain .prg procedure files).
+- Help browser (spec 9.7, src/lang/help.c + src/ui/helpwin.c): topics in a
+  DBF with TOPIC C(30), KEYWORDS M, BODY M, SEEALSO M (shipped fixture
+  testdata/gen/help.dbf/.dbt, regenerate with testdata/gen/gen_help.py);
+  SET HELP TO targets a custom DBF; F1 opens the browser (ON KEY LABEL F1
+  overrides), type-to-filter is a case-insensitive substring over TOPIC +
+  KEYWORDS, Enter shows the body, Esc backs out. Falls back to a built-in
+  contents page when no help DBF is found. Golden 23.
+- Gates: new `projcheck` harness mode (ctest proj_engine) - sample tests/proj
+  demo.rpj builds to demo.rpp with byte-stable sha256 golden, launcher
+  golden, build/rebuild/run stdout goldens, and `reynard -t --run demo.rpp`
+  exercises menus (ON PAD fires), forms (GENERATE SCREEN + DO of the packed
+  .scr codegen) and report-to-file plus a committed transaction; conformance
+  94-97 (menus batch, txn commit/rollback, BUILD PROJECT + SET PROCEDURE TO
+  packed procs, ON KEY LABEL). 97 conformance cases, 24 goldens, 11 ctest
+  targets - all green under -Werror and ASan/UBSan, plus Makefile.simple.

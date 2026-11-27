@@ -1,0 +1,9 @@
+REYNARD PROJECT 1
+NAME demo
+MAIN main.prg
+PRG main.prg
+MENU app.mpr
+SCREEN cust.scr
+REPORT rep.frm
+DBF people.dbf
+END

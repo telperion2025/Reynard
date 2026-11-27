@@ -483,7 +483,7 @@ static int rpt_rec_cb(rx_ctx *ctx, rx_dbf *dbf, uint32_t recno, void *ud)
 int rx_rpt_build(rx_ctx *ctx, const char *name, rx_stmt *s, int is_label, rpt_doc *doc)
 {
     char path[600];
-    snprintf(path, sizeof(path), "%s.%s", name, is_label ? "rlb" : "frm");
+    rx_resolve_res(ctx, name, is_label ? "rlb" : "frm", path, sizeof(path));
     rpt_file rf;
     int rc = rptf_load(path, &rf);
     if (rc != R_OK) {
@@ -596,6 +596,7 @@ int rx_rpt_build(rx_ctx *ctx, const char *name, rx_stmt *s, int is_label, rpt_do
         free(e.v_max);
         free(e.v_set);
         free(e.heading);
+        rx_expr_free(e.group_e);
         rx_rval_free(&e.group_key);
         rptf_free(&rf);
         return rc;
@@ -642,6 +643,7 @@ int rx_rpt_build(rx_ctx *ctx, const char *name, rx_stmt *s, int is_label, rpt_do
     free(e.v_max);
     free(e.v_set);
     free(e.heading);
+    rx_expr_free(e.group_e);
     rx_rval_free(&e.group_key);
     rptf_free(&rf);
     return rc;
